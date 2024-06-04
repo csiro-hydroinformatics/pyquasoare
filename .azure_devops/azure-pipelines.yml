@@ -46,11 +46,11 @@ steps:
 - task: Cache@2
   displayName: Use cached Anaconda environment
   inputs:
-    key: conda | $(BUILD_DIR)/reservoir_equation/env_mini_v2.yml
+    key: conda | $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
     path: $(CONDA_HOME)
     cacheHitVar: CONDA_CACHE_RESTORED
 
-- bash: conda env create --file  $(BUILD_DIR)/reservoir_equation/env_mini_v2.yml
+- bash: conda env create --file  $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
   displayName: Create Anaconda environment (if not restored from cache)
   condition: eq(variables.CONDA_CACHE_RESTORED, 'false')
 
@@ -62,13 +62,13 @@ steps:
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/reservoir_equation
+    cd $(BUILD_DIR)/pyrezeq
     python setup.py develop
   displayName: package_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/reservoir_equation
+    cd $(BUILD_DIR)/pyrezeq
     pytest --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
   displayName: test
   timeoutInMinutes: 30
