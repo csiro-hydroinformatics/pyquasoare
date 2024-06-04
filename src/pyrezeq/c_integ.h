@@ -13,6 +13,8 @@
 /* Define small number */
 #define REZEQ_EPS 1e-10
 
+double c_get_eps();
+
 double c_integrate_forward(double t0, double u0, double a, double b, double t);
 
 double c_integrate_inverse(double t0, double u0, double a, double b, double u);

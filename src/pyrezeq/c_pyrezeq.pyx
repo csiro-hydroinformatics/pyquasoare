@@ -5,6 +5,8 @@ np.import_array()
 
 # -- HEADERS --
 cdef extern from 'c_integ.h':
+    double c_get_eps()
+
     double c_integrate_forward(double t0, double u0, double a, double b, double t)
 
     double c_integrate_inverse(double t0, double u0, double a, double b, double u)
@@ -51,6 +53,9 @@ def __cinit__(self):
     pass
 
 
+def get_eps():
+    return c_get_eps()
+
 def integrate_forward(double t0, double u0, double a, double b, double t):
     return c_integrate_forward(t0, u0, a, b, t)
 
@@ -73,13 +78,13 @@ def increment_fluxes(int jalpha, double aoj, double boj, \
                         np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
     cdef int nalphas = a_matrix_noscaling.shape[0]+1
-    cdef int nfluxes = a_matrix_noscaling.shape[1]+1
+    cdef int nfluxes = a_matrix_noscaling.shape[1]
 
     if scalings.shape[0] != nfluxes:
         raise ValueError("scalings.shape[0] != nfluxes")
 
-    if b_matrix_noscaling.shape[0] != nalphas+1:
-        raise ValueError("b_matrix_noscaling.shape[0] != nalphas+1")
+    if b_matrix_noscaling.shape[0] != nalphas-1:
+        raise ValueError("b_matrix_noscaling.shape[0] != nalphas-1")
 
     if b_matrix_noscaling.shape[1] != nfluxes:
         raise ValueError("b_matrix_noscaling.shape[1] != nfluxes")

@@ -131,8 +131,10 @@ def test_integrate_power(allclose):
         a_matrix_noscaling = coefs[:, [0]]
         b_matrix_noscaling = coefs[:, [1]]
 
+        # test C engine
         u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings,
                                         a_matrix_noscaling, b_matrix_noscaling)
+
         expected = (u0**(1-lam)+(lam-1)*delta)**(1./(1-lam))
         if not np.isnan(expected):
             err = math.asinh(expected)-math.asinh(u1)
@@ -140,6 +142,14 @@ def test_integrate_power(allclose):
 
             ff = (u1-u0)/delta
             assert allclose(fluxes[0], ff)
+
+            # test python engine
+            if lam in lams[[0, 3, -3, -1]]:
+                u1p, fluxesp = rezeq.integrate_python(delta, u0, alphas, scalings,
+                                                a_matrix_noscaling, b_matrix_noscaling)
+                assert allclose(u1, u1p)
+                assert allclose(fluxes, fluxesp)
+
 
 
 def test_integrate_linres(allclose):
@@ -158,6 +168,7 @@ def test_integrate_linres(allclose):
         a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
         b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
 
+        # Test C engine
         u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings, \
                             a_matrix_noscaling, b_matrix_noscaling)
 
@@ -168,6 +179,14 @@ def test_integrate_linres(allclose):
 
             ff = (u1-u0)/delta
             assert allclose(fluxes.sum(), ff)
+
+            # test python engine
+            if tau in taus[[0, 3, -3, -1]] and u0 in u0s[[0, 3, -3, -1]]:
+                u1p, fluxesp = rezeq.integrate_python(delta, u0, alphas, scalings,
+                                                a_matrix_noscaling, b_matrix_noscaling)
+                assert allclose(u1, u1p)
+                assert allclose(fluxes, fluxesp)
+
 
 
 def test_run_linres(allclose):
@@ -187,21 +206,29 @@ def test_run_linres(allclose):
     a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
     b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
 
+    # Test C engine
     u1, fluxes = rezeq.run(delta, u0, alphas, scalings, \
                             a_matrix_noscaling, b_matrix_noscaling)
-
     assert allclose(fluxes[:, 0], inflows)
 
+    u0c = u0
     for t in range(nval):
-        expected = inflows[t]/tau+(u0-inflows[t]/tau)*math.exp(-delta*tau)
+        expected = inflows[t]/tau+(u0c-inflows[t]/tau)*math.exp(-delta*tau)
         if not np.isnan(expected):
             err = math.asinh(expected)-math.asinh(u1[t])
             assert abs(err)<5e-3
 
-            ff = (u1[t]-u0)/delta
+            ff = (u1[t]-u0c)/delta
             assert allclose(fluxes[t].sum(), ff)
 
-        u0 = u1[t]
+        u0c = u1[t]
+
+    # Test python engine
+    u1p, fluxesp = rezeq.run(delta, u0, alphas, scalings, \
+                            a_matrix_noscaling, b_matrix_noscaling)
+    assert allclose(u1, u1p)
+    assert allclose(fluxes, fluxesp)
+
 
 
 def test_integrate_linquad(allclose):
@@ -220,6 +247,7 @@ def test_integrate_linquad(allclose):
         a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
         b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
 
+        # Test C engine
         u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings, \
                             a_matrix_noscaling, b_matrix_noscaling)
 
@@ -232,6 +260,14 @@ def test_integrate_linquad(allclose):
 
             ff = (u1-u0)/delta
             assert allclose(fluxes.sum(), ff)
+
+            # Test python engine
+            if theta in thetas[[0, 3, -3, -1]] and u0 in u0s[[0, 3, -3, -1]]:
+                u1p, fluxesp = rezeq.integrate_python(delta, u0, alphas, scalings,
+                                                a_matrix_noscaling, b_matrix_noscaling)
+                assert allclose(u1, u1p)
+                assert allclose(fluxes, fluxesp)
+
 
 
 def test_integrate_mass_balance(allclose):
@@ -355,3 +391,4 @@ def test_integrate_continuity(allclose):
     with pytest.raises(ValueError, match="integrate returns"):
         u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings, \
                         a_matrix_noscaling, b_matrix_noscaling)
+

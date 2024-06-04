@@ -1,5 +1,9 @@
 #include "c_integ.h"
 
+double c_get_eps() {
+    return REZEQ_EPS;
+}
+
 double c_integrate_forward(double t0, double u0, double a, double b, double t){
     if(fabs(b)>REZEQ_EPS){
         return -a/b+(u0+a/b)*exp(b*(t-t0));
@@ -133,7 +137,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         if(niter>1){
             du1 = aoj_prev+boj_prev*u0;
             du2 = aoj+boj*u0;
-            if(fabs(du1-du2)>1e-10)
+            if(abs(du1-du2)>1e-10)
                 return REZEQ_ERROR + __LINE__;
         }
 
