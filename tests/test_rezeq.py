@@ -7,7 +7,6 @@ import pandas as pd
 
 from itertools import product as prod
 
-from timeit import Timer
 import time
 
 import warnings
@@ -207,8 +206,11 @@ def test_run_linres(allclose):
     b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
 
     # Test C engine
+    t0 = time.time()
     u1, fluxes = rezeq.run(delta, u0, alphas, scalings, \
                             a_matrix_noscaling, b_matrix_noscaling)
+    t1 = time.time()
+    print(f"\n\nLinres run - C engine = {t1-t0:3.3e} sec")
     assert allclose(fluxes[:, 0], inflows)
 
     u0c = u0
@@ -224,8 +226,11 @@ def test_run_linres(allclose):
         u0c = u1[t]
 
     # Test python engine
-    u1p, fluxesp = rezeq.run(delta, u0, alphas, scalings, \
+    t0 = time.time()
+    u1p, fluxesp = rezeq.run_python(delta, u0, alphas, scalings, \
                             a_matrix_noscaling, b_matrix_noscaling)
+    t1 = time.time()
+    print(f"Linres run - python engine = {t1-t0:3.3e} sec\n")
     assert allclose(u1, u1p)
     assert allclose(fluxes, fluxesp)
 

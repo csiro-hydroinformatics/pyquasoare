@@ -243,6 +243,7 @@ def run_python(delta, u0, alphas, scalings, \
                 a_matrix_noscaling, b_matrix_noscaling):
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
     u1 = np.zeros(scalings.shape[0], dtype=np.float64)
+    nval = len(scalings)
 
     for t in range(nval):
         u1[t], fluxes[t] = integrate_python(delta, u0, \
