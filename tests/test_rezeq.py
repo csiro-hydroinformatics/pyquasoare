@@ -320,7 +320,7 @@ def test_integrate_non_linear_reservoir(allclose):
 
     a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
     b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
-    scalings = [0.316, 1.]
+    scalings = np.array([0.316, 1.])
 
     # Impact of s0 on solution
     s0 = 0.
