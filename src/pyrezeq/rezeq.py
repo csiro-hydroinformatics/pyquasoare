@@ -16,33 +16,22 @@ def check_alphas(alphas):
     assert np.all(np.diff(alphas)>0), errmess
 
 
-def piecewise_linear_approximation(fun, alphas):
-    """ Approximate a function with piecewise linear """
-    check_alphas(alphas)
-    yi = np.array([fun(u) for u in alphas])
-    b = np.diff(yi)/np.diff(alphas)
-    a = yi[:-1]-b*alphas[:-1]
-    return np.column_stack([a, b])
+def approx_fun(nu, a, b, c, s):
+    if isinstance(s, np.ndarray):
+        ds = np.zeros_like(s)
+        ierr = c_pyrezeq.approx_fun_vect(nu, a, b, c, s, ds)
+        return ds
+    else:
+        return c_pyrezeq.approx_fun(nu, a, b, c, s)
 
 
-#def get_piecewise_basis(x, alphas):
+#def piecewise_linear_approximation(fun, alphas):
+#    """ Approximate a function with piecewise linear """
 #    check_alphas(alphas)
-#    nalphas = len(alphas)
-#    X = np.zeros((len(x), nalphas))
-#    for i in range(nalphas):
-#        a1 = alphas[max(0, i-1)]
-#        a2 = alphas[i]
-#        a3 = alphas[min(i+1, nalphas-1)]
-#
-#        u = np.zeros_like(x)
-#        kk = (x>=a1)&(x<a2)
-#        u[kk] = (x[kk]-a1)/(a2-a1)
-#        kk = (x>=a2)&(x<a3)
-#        u[kk] = (x[kk]-a3)/(a2-a3)
-#
-#        X[:, i] = u
-#
-#    return X
+#    yi = np.array([fun(u) for u in alphas])
+#    b = np.diff(yi)/np.diff(alphas)
+#    a = yi[:-1]-b*alphas[:-1]
+#    return np.column_stack([a, b])
 
 
 def get_alphas(fun, alpha_min, alpha_max, nalphas, ninterp=1000):
@@ -91,12 +80,12 @@ def run_piecewise_approximation(x, alphas, coefs):
     return y
 
 
-def integrate_forward(t0, u0, a, b, t):
-    return c_pyrezeq.integrate_forward(t0, u0, a, b, t)
+def integrate_forward(t0, s0, nu, a, b, c, t):
+    return c_pyrezeq.integrate_forward(t0, s0, nu, a, b, c, t)
 
 
-def integrate_inverse(t0, u0, a, b, u):
-    return c_pyrezeq.integrate_inverse(t0, u0, a, b, u)
+def integrate_inverse(t0, s0, nu, a, b, c, s1):
+    return c_pyrezeq.integrate_inverse(t0, s0, nu, a, b, c, s1)
 
 
 def find_alpha(u0, alphas):
@@ -104,22 +93,33 @@ def find_alpha(u0, alphas):
     return c_pyrezeq.find_alpha(u0, alphas)
 
 
-def increment_fluxes(i_alpha, aoj, boj, t0, t1, u0, u1, scalings, \
-                        a_matrix_noscaling, b_matrix_noscaling, \
-                        fluxes):
-    ierr = c_pyrezeq.increment_fluxes(i_alpha, aoj, boj, \
-                        t0, t1, u0, u1, scalings, \
-                        a_matrix_noscaling, b_matrix_noscaling, fluxes)
+def increment_fluxes(scalings, \
+                        a_vector_noscaling, \
+                        b_vector_noscaling, \
+                        c_vector_noscaling, \
+                        aoj, boj, coj, \
+                        t0, t1, s0, s1, fluxes):
+
+    ierr = c_pyrezeq.increment_fluxes(scalings, \
+                            a_vector_noscaling, \
+                            b_vector_noscaling, \
+                            c_vector_noscaling, \
+                            aoj, boj, coj, \
+                            t0, t1, s0, s1, fluxes)
     if ierr>0:
         raise ValueError(f"c_pyrezeq.integrate returns {ierr}")
 
 
-def integrate(delta, u0, alphas, scalings, \
-                a_matrix_noscaling, b_matrix_noscaling):
+def integrate(delta, alphas, scalings, nu_vector, \
+                a_matrix_noscaling, \
+                b_matrix_noscaling, \
+                c_matrix_noscaling, \
+                s0):
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
-    u1 = np.zeros(1, dtype=np.float64)
-    ierr = c_pyrezeq.integrate(delta, u0, alphas, scalings, \
-                    a_matrix_noscaling, b_matrix_noscaling, u1, fluxes)
+    s1 = np.zeros(1, dtype=np.float64)
+    ierr = c_pyrezeq.integrate(delta, scalings, nu_vector, \
+                    a_matrix_noscaling, b_matrix_noscaling, \
+                    c_matrix_noscaling, s0, s1, fluxes)
     if ierr>0:
         raise ValueError(f"c_pyrezeq.integrate returns {ierr}")
 
@@ -128,6 +128,7 @@ def integrate(delta, u0, alphas, scalings, \
 
 def integrate_python(delta, u0, alphas, scalings, \
                 a_matrix_noscaling, b_matrix_noscaling):
+    raise ValueError("TODO")
     # Dimensions
     nalphas = len(alphas)
     nfluxes = a_matrix_noscaling.shape[1]
@@ -222,16 +223,21 @@ def integrate_python(delta, u0, alphas, scalings, \
 
 
 
-def run(delta, u0, alphas, scalings, \
-                a_matrix_noscaling, b_matrix_noscaling):
-    a_matrix_noscaling = np.array(a_matrix_noscaling).astype(np.float64)
-    b_matrix_noscaling = np.array(b_matrix_noscaling).astype(np.float64)
-    scalings = np.array(scalings).astype(np.float64)
+def run(delta, alphas, scalings, \
+                nu_vector, \
+                a_matrix_noscaling, \
+                b_matrix_noscaling, \
+                c_matrix_noscaling, \
+                s0):
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
-    u1 = np.zeros(scalings.shape[0], dtype=np.float64)
+    s1 = np.zeros(scalings.shape[0], dtype=np.float64)
 
-    ierr = c_pyrezeq.run(delta, u0, alphas, scalings, \
-                    a_matrix_noscaling, b_matrix_noscaling, u1, fluxes)
+    ierr = c_pyrezeq.run(delta, alphas, scalings, \
+                    nu_vector, \
+                    a_matrix_noscaling, \
+                    b_matrix_noscaling, \
+                    c_matrix_noscaling, \
+                    s0, s1, fluxes)
     if ierr>0:
         raise ValueError(f"c_pyrezeq.run returns {ierr}")
 
@@ -241,6 +247,7 @@ def run(delta, u0, alphas, scalings, \
 
 def run_python(delta, u0, alphas, scalings, \
                 a_matrix_noscaling, b_matrix_noscaling):
+    raise ValueError("TODO")
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
     u1 = np.zeros(scalings.shape[0], dtype=np.float64)
     nval = len(scalings)
