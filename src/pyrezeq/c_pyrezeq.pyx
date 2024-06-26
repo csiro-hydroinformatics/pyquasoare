@@ -9,8 +9,12 @@ cdef extern from 'c_integ.h':
 
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
+    double c_approx_jac(double nu, double a, double b, double c, double s);
+
     double c_integrate_forward(double nu, double a, double b, double c,
                                     double t0, double s0, double t);
+
+    double c_integrate_tmax(double nu, double a, double b, double c, double s0);
 
     double c_integrate_inverse(double nu, double a, double b, double c,
                                         double s0, double s1);
@@ -71,6 +75,10 @@ def approx_fun(double nu, double a, double b, double c, double s):
     return c_approx_fun(nu, a, b, c, s)
 
 
+def approx_jac(double nu, double a, double b, double c, double s):
+    return c_approx_jac(nu, a, b, c, s)
+
+
 def approx_fun_vect(double nu, double a, double b, double c, \
                 np.ndarray[double, ndim=1, mode='c'] s not None,\
                 np.ndarray[double, ndim=1, mode='c'] ds not None):
@@ -82,15 +90,55 @@ def approx_fun_vect(double nu, double a, double b, double c, \
 
     return 0
 
+def approx_jac_vect(double nu, double a, double b, double c, \
+                np.ndarray[double, ndim=1, mode='c'] s not None,\
+                np.ndarray[double, ndim=1, mode='c'] ds not None):
+    cdef int nval = s.shape[0]
+    cdef int i
+    assert ds.shape[0] == nval
+    for i in range(nval):
+        ds[i] = c_approx_jac(nu, a, b, c, s[i])
+
+    return 0
+
+
 
 def integrate_forward(double nu, double a, double b, double c, \
                         double t0, double s0, double t):
     return c_integrate_forward(nu, a, b, c, t0, s0, t)
 
 
+def integrate_tmax(double nu, double a, double b, double c, double s0):
+    return c_integrate_tmax(nu, a, b, c, s0)
+
+
+def integrate_forward_vect(double nu, double a, double b, double c, \
+                        double t0, double s0, \
+                        np.ndarray[double, ndim=1, mode='c'] t not None,\
+                        np.ndarray[double, ndim=1, mode='c'] s not None):
+    cdef int nval = t.shape[0]
+    cdef int i
+    assert s.shape[0] == nval
+    for i in range(nval):
+        s[i] = c_integrate_forward(nu, a, b, c, t0, s0, t[i])
+    return 0
+
+
 def integrate_inverse(double nu, double a, double b, double c, \
                             double s0, double s1):
     return c_integrate_inverse(nu, a, b, c, s0, s1)
+
+
+def integrate_inverse_vect(double nu, double a, double b, double c, \
+                            double s0, \
+                            np.ndarray[double, ndim=1, mode='c'] s1 not None,\
+                            np.ndarray[double, ndim=1, mode='c'] t not None):
+    cdef int nval = s1.shape[0]
+    cdef int i
+    assert t.shape[0] == nval
+    for i in range(nval):
+            t[i] = c_integrate_inverse(nu, a, b, c, s0, s1[i])
+    return 0
 
 
 def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\

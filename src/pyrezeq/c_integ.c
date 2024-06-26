@@ -6,13 +6,24 @@ double c_get_eps() {
 
 double c_get_nan() {
     static double zero=0.;
-    double nan=1/zero;
+    double nan=zero/zero;
     return nan;
+}
+
+double c_get_inf() {
+    static double zero=0.;
+    double inf=1./zero;
+    return inf;
 }
 
 double c_approx_fun(double nu, double a, double b, double c, double s){
     return a+b*exp(-nu*s)+c*exp(nu*s);
 }
+
+double c_approx_jac(double nu, double a, double b, double c, double s){
+    return -nu*b*exp(-nu*s)+nu*c*exp(nu*s);
+}
+
 
 int isnull(double x){
     return fabs(x)<REZEQ_EPS ? 1 : 0;
@@ -27,6 +38,8 @@ double c_integrate_forward(double nu, double a, double b, double c,
     double sgn=1,omeg=0, lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
     double s1;
+
+    // TODO integrate Tmax in this code s1=nan if t>Tmax
 
     if(isnull(b) && isnull(c)){
         s1 = s0+a*(t-t0);
@@ -60,14 +73,50 @@ double c_integrate_forward(double nu, double a, double b, double c,
     return s1;
 }
 
+double c_integrate_tmax(double nu, double a, double b, double c,
+                                double s0){
+    double e0 = exp(-nu*s0);
+    double sgn=1,omeg=0, lam0=0, sqD=0;
+    double Delta = a*a-4*b*c;
+    double tmax;
+
+    if(isnull(b) && isnull(c)){
+        tmax = c_get_inf();
+    }
+    else if(isnull(a) && isnull(b) && notnull(c)){
+        tmax = nu*c<0 ? c_get_inf() : e0/nu/c;
+    }
+    else if(isnull(a) && notnull(b) && isnull(c)){
+        tmax = c_get_inf();
+    }
+    else if(notnull(a) && isnull(b) && notnull(c)){
+        tmax = c_get_inf();
+    }
+    else if(notnull(a) && notnull(b) && isnull(c)){
+        tmax = c_get_inf();
+    }
+    else if(notnull(b) && notnull(c)){
+        if(isnull(Delta)){
+            /* Determinant is zero */
+            tmax = c_get_inf();
+        }
+        else {
+            /* Non zero determinant */
+            tmax = c_get_inf();
+        }
+    }
+    return tmax;
+}
+
+
 double c_integrate_inverse(double nu, double a, double b, double c,
                                 double s0, double s1){
     double e0 = exp(-nu*s0);
     double e1 = exp(-nu*s1);
-    double sqD, lam0, lam1, omeginv1, omeginv0;
+    double sqD=0., lam0=0., lam1=0., omeginv1=0., omeginv0=0.;
     double Delta = a*a-4*b*c;
     double sgn = Delta<0 ? -1 : 1;
-    double tau0, tau1;
+    double tau0=0., tau1=0.;
 
     if(isnull(b) && isnull(c)){
         return (s1-s0)/a;
@@ -79,21 +128,17 @@ double c_integrate_inverse(double nu, double a, double b, double c,
         return 1./e1/nu/b-1./e0/nu/b;
     }
     else if(notnull(a) && isnull(b) && notnull(c)){
-        tau0 = -log(c+a*e0)/nu/a;
-        tau1 = -log(c+a*e1)/nu/a;
-        return tau1-tau0;
+        return log((c+a*e0)/(c+a*e1))/nu/a;
     }
     else if(notnull(a) && notnull(b) && isnull(c)){
-        tau0 = log(b+a/e0)/nu/a;
-        tau1 = log(b+a/e1)/nu/a;
-        return tau1-tau0;
+        return log((b+a/e1)/(b+a/e0))/nu/a;
     }
     else if(notnull(b) && notnull(c)){
-        /* Determinant */
-
         if(isnull(Delta)){
             /* Determinant is zero */
-            return log((a+2*b*e0)/(a+2*b*e1))*2/nu;
+            tau0 = 2/(a+2*b*e0)/nu;
+            tau1 = 2/(a+2*b*e1)/nu;
+            return tau1-tau0;
         }
         else {
             /* Non zero determinant */

@@ -25,6 +25,38 @@ def approx_fun(nu, a, b, c, s):
         return c_pyrezeq.approx_fun(nu, a, b, c, s)
 
 
+def approx_jac(nu, a, b, c, s):
+    if isinstance(s, np.ndarray):
+        ds = np.zeros_like(s)
+        ierr = c_pyrezeq.approx_jac_vect(nu, a, b, c, s, ds)
+        return ds
+    else:
+        return c_pyrezeq.approx_jac(nu, a, b, c, s)
+
+
+def integrate_forward(nu, a, b, c, t0, s0, t):
+    if isinstance(t, np.ndarray):
+        s = np.zeros_like(t)
+        ierr = c_pyrezeq.integrate_forward_vect(nu, a, b, c, t0, s0, t, s)
+        return s
+    else:
+        return c_pyrezeq.integrate_forward(nu, a, b, c, t0, s0, t)
+
+
+def integrate_tmax(nu, a, b, c, s0):
+    return c_pyrezeq.integrate_tmax(nu, a, b, c, s0)
+
+
+def integrate_inverse(nu, a, b, c, s0, s1):
+    if isinstance(s1, np.ndarray):
+        t = np.zeros_like(s1)
+        ierr = c_pyrezeq.integrate_inverse_vect(nu, a, b, c, s0, s1, t)
+        return t
+    else:
+        return c_pyrezeq.integrate_inverse(nu, a, b, c, s0, s1)
+
+
+
 #def piecewise_linear_approximation(fun, alphas):
 #    """ Approximate a function with piecewise linear """
 #    check_alphas(alphas)
@@ -78,14 +110,6 @@ def run_piecewise_approximation(x, alphas, coefs):
             y[ii] = coefs[i, 0]+ coefs[i, 1]*x[ii]
 
     return y
-
-
-def integrate_forward(nu, a, b, c, t0, s0, t):
-    return c_pyrezeq.integrate_forward(nu, a, b, c, t0, s0, t)
-
-
-def integrate_inverse(nu, a, b, c, t0, s0, s1):
-    return c_pyrezeq.integrate_inverse(nu, a, b, c, t0, s0, s1)
 
 
 def find_alpha(u0, alphas):
