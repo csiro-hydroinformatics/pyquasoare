@@ -4,6 +4,12 @@ double c_get_eps() {
     return REZEQ_EPS;
 }
 
+double c_get_nan() {
+    static double zero=0.;
+    double nan=1/zero;
+    return nan;
+}
+
 double c_approx_fun(double nu, double a, double b, double c, double s){
     return a+b*exp(-nu*s)+c*exp(nu*s);
 }
@@ -98,6 +104,8 @@ double c_integrate_inverse(double nu, double a, double b, double c,
             return 2*sgn/sqD*(omeginv1-omeginv0);
         }
     }
+
+    return c_get_nan();
 }
 
 

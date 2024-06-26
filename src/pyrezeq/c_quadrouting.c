@@ -3,7 +3,7 @@
 int c_quadrouting(int nval, double delta, double theta, double q0,
                         double s0, double *inflow, double * outflow){
     int i;
-    double s1, t, gamma, qi, qi_prev, qout, C;
+    double s1, t, gamma, qi, qi_prev, qout;
 
     if(s0<0 || s0>theta-1e-5)
         return QUADROUT_ERROR + __LINE__;

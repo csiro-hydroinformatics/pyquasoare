@@ -13,7 +13,7 @@ cdef extern from 'c_integ.h':
                                     double t0, double s0, double t);
 
     double c_integrate_inverse(double nu, double a, double b, double c,
-                                    double t0, double s0, double s1);
+                                        double s0, double s1);
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
@@ -89,8 +89,8 @@ def integrate_forward(double nu, double a, double b, double c, \
 
 
 def integrate_inverse(double nu, double a, double b, double c, \
-                        double t0, double s0, double s1):
-    return c_integrate_inverse(nu, a, b, c, t0, s0, s1)
+                            double s0, double s1):
+    return c_integrate_inverse(nu, a, b, c, s0, s1)
 
 
 def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
