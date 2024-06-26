@@ -8,67 +8,84 @@ double c_approx_fun(double nu, double a, double b, double c, double s){
     return a+b*exp(-nu*s)+c*exp(nu*s);
 }
 
-double c_integrate_forward(double t0, double s0,
-                        double nu, double a, double b, double c,
-                        double t){
+int isnull(double x){
+    return fabs(x)<REZEQ_EPS ? 1 : 0;
+}
+int notnull(double x){
+    return 1-isnull(x);
+}
+
+double c_integrate_forward(double nu, double a, double b, double c,
+                        double t0, double s0, double t){
     double e0 = exp(-nu*s0);
     double sgn=1,omeg=0, lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
+    double s1;
 
-    if(fabs(b)<REZEQ_EPS && fabs(c)<REZEQ_EPS){
-        return s0+a*(t-t0);
+    if(isnull(b) && isnull(c)){
+        s1 = s0+a*(t-t0);
     }
-    else if(fabs(b)<REZEQ_EPS && fabs(c)>REZEQ_EPS){
-        /* b=0 and c!=0 */
-        return s0+a*t+log(a/(a+c/e0*(1-exp(nu*a*t))))/nu;
+    else if(isnull(a) && isnull(b) && notnull(c)){
+        s1 = s0-log(1-nu*c/e0*t)/nu;
     }
-    else if(fabs(c)<REZEQ_EPS && fabs(b)>REZEQ_EPS){
-        /* b!=0 and c=0 */
-        return s0+a*t-log(a/(a+b*e0*(1-exp(-nu*a*t))))/nu;
+    else if(isnull(a) && notnull(b) && isnull(c)){
+        s1 = s0+log(1+nu*b*e0*t)/nu;
     }
-    else if(fabs(c)>REZEQ_EPS && fabs(b)>REZEQ_EPS){
-        /* Determinant */
-
-        if(fabs(Delta)<REZEQ_EPS){
+    else if(notnull(a) && isnull(b) && notnull(c)){
+        s1 = s0+a*t-log(1+c/a/e0*(1-exp(nu*a*t)))/nu;
+    }
+    else if(notnull(a) && notnull(b) && isnull(c)){
+        s1 = s0+a*t+log(1+b/a*e0*(1-exp(-nu*a*t)))/nu;
+    }
+    else if(notnull(b) && notnull(c)){
+        if(isnull(Delta)){
             /* Determinant is zero */
-            return -log((e0+a/2/b)/(1+t*(nu*b*e0+nu*a/2))-a/2/b)/nu;
+            s1 = -log((e0+a/2/b)/(1+t*(nu*b*e0+nu*a/2))-a/2/b)/nu;
         }
         else {
             /* Non zero determinant */
             sgn = Delta<0 ? -1 : 1;
             sqD = sqrt(sgn*Delta);
-            omeg = Delta<0 ? tan(sqD*t/2) : tanh(sqD*t/2);
+            omeg = Delta<0 ? tan(nu*sqD*t/2) : tanh(nu*sqD*t/2);
             lam0 = (2*b*e0+a)/sqD;
-            return -log(sqD/2/b*(lam0+sgn*omeg)/(1+lam0*omeg)-a/2/b)/nu;
+            s1 = -log((lam0+sgn*omeg)/(1+lam0*omeg)*sqD/2/b-a/2/b)/nu;
         }
     }
+    return s1;
 }
 
-double c_integrate_inverse(double t0, double s0,
-                        double nu, double a, double b, double c,
-                        double s1){
-
+double c_integrate_inverse(double nu, double a, double b, double c,
+                                double s0, double s1){
     double e0 = exp(-nu*s0);
     double e1 = exp(-nu*s1);
     double sqD, lam0, lam1, omeginv1, omeginv0;
     double Delta = a*a-4*b*c;
     double sgn = Delta<0 ? -1 : 1;
+    double tau0, tau1;
 
-    if(fabs(b)<REZEQ_EPS && fabs(c)<REZEQ_EPS){
-        return t0+(s1-s0)/a;
+    if(isnull(b) && isnull(c)){
+        return (s1-s0)/a;
     }
-    else if(fabs(b)<REZEQ_EPS && fabs(c)>REZEQ_EPS){
-        /* b=0 and c!=0 */
-        return t0+log((c+a*e0)/(c+a*e1))/nu/a;
+    else if(isnull(a) && isnull(b) && notnull(c)){
+        return -e1/nu/c+e0/nu/c;
     }
-    else if(fabs(c)<REZEQ_EPS && fabs(b)>REZEQ_EPS){
-        /* b!=0 and c=0 */
-        return t0-log((b+a*e0)/(b+a*e1))/nu/a;
+    else if(isnull(a) && notnull(b) && isnull(c)){
+        return 1./e1/nu/b-1./e0/nu/b;
     }
-    else if(fabs(c)>REZEQ_EPS && fabs(b)>REZEQ_EPS){
+    else if(notnull(a) && isnull(b) && notnull(c)){
+        tau0 = -log(c+a*e0)/nu/a;
+        tau1 = -log(c+a*e1)/nu/a;
+        return tau1-tau0;
+    }
+    else if(notnull(a) && notnull(b) && isnull(c)){
+        tau0 = log(b+a/e0)/nu/a;
+        tau1 = log(b+a/e1)/nu/a;
+        return tau1-tau0;
+    }
+    else if(notnull(b) && notnull(c)){
         /* Determinant */
 
-        if(fabs(Delta)<REZEQ_EPS){
+        if(isnull(Delta)){
             /* Determinant is zero */
             return log((a+2*b*e0)/(a+2*b*e1))*2/nu;
         }
@@ -257,7 +274,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
                 }
 
                 /* Find time where we move to the next band */
-                t1 = c_integrate_inverse(t0, s0, nu, aoj, boj, coj, *s1);
+                t1 = t0+c_integrate_inverse(s0, nu, aoj, boj, coj, *s1);
             }
             /* Increment variables */
             c_increment_fluxes(nfluxes, scalings,

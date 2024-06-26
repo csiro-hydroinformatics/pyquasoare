@@ -71,73 +71,130 @@ def test_approx_fun(allclose):
 #    assert allclose(yy, expected)
 
 
-def numerical_integrate(s0, nu, a, b, c, delta):
+def numerical_integrate(nu, a, b, c, s0, delta):
     def f(t, y):
         return [rezeq.approx_fun(nu, a, b, c, y[0])]
+
+    method = "RK45"
 
     res = solve_ivp(\
             fun=f, \
             t_span=[0, delta], \
             y0=[s0], \
-            method="RK45", \
-            max_step=0.1)
+            method=method, \
+            max_step=0.01)
 
-    return np.column_stack([res.t, res.y[0][:]])
+    return res.t, res.y[0]
 
 
-def test_integrate_forward(allclose):
-    ntry = 100
-    vmax = 5.
-    Tmax = 20
-    ts = np.arange(Tmax/0.1)*0.1
+def sample_params(ntry, vmin, vmax, case):
+    eps = np.random.uniform(0, 1, size=(ntry, 3))
+    v0 = vmin.copy()
+    v1 = vmax.copy()
+    if case == 1:
+        # all zeros except a
+        v0[1:] = 0
+        v1[1:] = 0
+    if case == 2:
+        # all zeros except c
+        v0[:2] = 0
+        v1[:2] = 0
+    elif case == 3:
+        # a and c are zero
+        v0[[0, 2]] = 0
+        v1[[0, 2]] = 0
+    elif case == 4:
+        # a and b are zero
+        v0[[0, 1]] = 0
+        v1[[0, 1]] = 0
+    elif case == 5:
+        # b is zero
+        v0[1] = 0
+        v1[1] = 0
+    elif case == 6:
+        # c is zero
+        v0[2] = 0
+        v1[2] = 0
+    elif case in [7, 8]:
+        # General case
+        v0, v1 = vmin, vmax
+
+    params = v0[None, :]+(v1-v0)[None, :]*eps
+
+    if case == 7:
+        # Determinant is null
+        params[:, 2] = params[:, 0]**2/4/params[:, 1]
+
+    return params
+
+
+def test_integrate_forward_and_inverse(allclose):
+    ntry = 500
+
+    # Parameters
+    vmin = np.array([-5., -5., -5.])
+    vmax = np.array([5., 5., 0.5])
     nus = np.random.uniform(-3, 3, ntry)
 
-    for case in range(1, 5):
-        if case == 1:
-            # bounds for a, b, c
-            bounds = np.array([0., 0., vmax])
-            params = bounds[None, :]*np.random.uniform(-1, 1, size=(ntry, 3))
+    # Initial condition
+    s0s = np.random.uniform(-5, 5, ntry)
 
-        elif case == 2:
-            bounds = np.array([vmax, 0., vmax])
-            params = bounds[None, :]*np.random.uniform(-1, 1, size=(ntry, 3))
+    # Simulation period
+    Tmax = 20
 
-        elif case == 3:
-            bounds = np.array([vmax, vmax, vmax])
-            params = bounds[None, :]*np.random.uniform(-1, 1, size=(ntry, 3))
-            params[:, 2] = params[:, 1]**2/4/params[:, 1]
-
-        elif case == 4:
-            bounds = np.array([vmax, vmax, vmax])
-            params = bounds[None, :]*np.random.uniform(-1, 1, size=(ntry, 3))
-            params[:, 2] = params[:, 1]**2/4/params[:, 1]
-
+    print("")
+    for case in range(1, 9):
+        print(" "*4+f"Testing integrate_forward - case {case}")
+        params = sample_params(ntry, vmin, vmax, case)
         t0 = 0
-        for (a, b, c), nu in zip(params, nus):
-            s0 = np.random.uniform(-10, 10)
-            s1 = [rezeq.integrate_forward(t0, s0, nu, a, b, c, t)\
-                        for t in ts]
+        for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
+            if itry%10==0:
+                print(" "*8+f"Try {itry+1:3d}/{ntry:3d}")
+
+            ts, expected = numerical_integrate(nu, a, b, c, s0, Tmax)
+            dsdt = np.diff(expected)/np.diff(ts)
+            dsdt = np.insert(dsdt, 0, 0)
+
+            s1 = [rezeq.integrate_forward(nu, a, b, c, t0, s0, t) for t in ts]
             s1 = np.array(s1)
-            expected = numerical_integrate(s0, nu, a, b, c, ts[-1])
 
-            import matplotlib.pyplot as plt
-            plt.plot(*expected.T)
-            plt.show()
-            import pdb; pdb.set_trace()
+            err = np.arcsinh(s1*1e2)-np.arcsinh(expected*1e2)
+            iok = np.abs(dsdt)<1e3
+            errmax = np.nanmax(np.abs(err[iok]))
+            ck = errmax<1e-2
+            if not ck and itry<10:
+                ts, s1, expected, err = [v[iok] for v in [ts, s1, expected, err]]
 
+                import matplotlib.pyplot as plt
+                plt.close("all")
+                fig, axs = plt.subplots(ncols=2)
 
-    expected = -a/b+(u0+a/b)*np.exp(b*t)
-    assert allclose(u1, expected)
+                ax = axs[0]
+                ax.plot(ts, expected, label="Numerical")
+                ax.plot(ts, s1, label="Analytical")
+                title = f"nu={nu:0.3f} a={a:0.3f} b={b:0.3f} c={c:0.3f}\n"\
+                            +f"s0={s0:0.3f} -> errmax={errmax:3.2e}"
+                ax.set(title=title)
+                ax.legend()
 
-    u1 = rezeq.integrate_forward(t0, u0, a, b, 1e100)
-    expected = -a/b
-    assert allclose(u1, expected)
+                tax = ax.twinx()
+                tax.plot(ts, err, "k:", lw=0.8)
 
-    b = 0.
-    u1 = rezeq.integrate_forward(t0, u0, a, b, t)
-    expected = u0+a*t
-    assert allclose(u1, expected)
+                ax = axs[1]
+                sD = np.sqrt(abs(a**2-4*b*c))
+                if sD>0:
+                    lam = lambda s: (2*b*np.exp(-nu*s)+a)/sD
+                    w = lambda t: np.tanh(t)
+                    winv = lambda t: np.arctanh(t)
+                    check = (winv(lam(expected))-winv(lam(s0)))*2/sD/nu
+                    ax.plot(ts, check)
+                    check = (winv(lam(s1))-winv(lam(s0)))*2/sD/nu
+                    ax.plot(ts, check)
+                    ax.plot(ts, ts, "k--", lw=0.8)
+                plt.show()
+                import pdb; pdb.set_trace()
 
+            #assert ck
 
 #def test_integrate_inverse(allclose):
 #    t0 = 0

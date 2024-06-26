@@ -9,13 +9,11 @@ cdef extern from 'c_integ.h':
 
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
-    double c_integrate_forward(double t0, double s0,
-                            double nu, double a, double b, double c,
-                            double t);
+    double c_integrate_forward(double nu, double a, double b, double c,
+                                    double t0, double s0, double t);
 
-    double c_integrate_inverse(double t0, double s0,
-                            double nu, double a, double b, double c,
-                            double s1);
+    double c_integrate_inverse(double nu, double a, double b, double c,
+                                    double t0, double s0, double s1);
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
@@ -85,16 +83,14 @@ def approx_fun_vect(double nu, double a, double b, double c, \
     return 0
 
 
-def integrate_forward(double t0, double s0, double nu, \
-                        double a, double b, double c, \
-                        double t):
-    return c_integrate_forward(t0, s0, nu, a, b, c, t)
+def integrate_forward(double nu, double a, double b, double c, \
+                        double t0, double s0, double t):
+    return c_integrate_forward(nu, a, b, c, t0, s0, t)
 
 
-def integrate_inverse(double t0, double s0, double nu, \
-                        double a, double b, double c, \
-                        double s1):
-    return c_integrate_inverse(t0, s0, nu, a, b, c, s1)
+def integrate_inverse(double nu, double a, double b, double c, \
+                        double t0, double s0, double s1):
+    return c_integrate_inverse(nu, a, b, c, t0, s0, s1)
 
 
 def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\

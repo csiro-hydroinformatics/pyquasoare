@@ -80,12 +80,12 @@ def run_piecewise_approximation(x, alphas, coefs):
     return y
 
 
-def integrate_forward(t0, s0, nu, a, b, c, t):
-    return c_pyrezeq.integrate_forward(t0, s0, nu, a, b, c, t)
+def integrate_forward(nu, a, b, c, t0, s0, t):
+    return c_pyrezeq.integrate_forward(nu, a, b, c, t0, s0, t)
 
 
-def integrate_inverse(t0, s0, nu, a, b, c, s1):
-    return c_pyrezeq.integrate_inverse(t0, s0, nu, a, b, c, s1)
+def integrate_inverse(nu, a, b, c, t0, s0, s1):
+    return c_pyrezeq.integrate_inverse(nu, a, b, c, t0, s0, s1)
 
 
 def find_alpha(u0, alphas):
