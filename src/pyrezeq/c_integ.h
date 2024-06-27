@@ -13,6 +13,8 @@
 /* Define small number */
 #define REZEQ_EPS 1e-10
 
+#define REZEQ_PI 3.1415926535897936
+
 double c_get_eps();
 
 double c_approx_fun(double nu, double a, double b, double c, double s);
@@ -23,7 +25,7 @@ double c_integrate_forward(double nu, double a, double b, double c,
                         double t0, double s0,
                         double t);
 
-double c_integrate_tmax(double nu, double a, double b, double c, double s0);
+double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
 
 double c_integrate_inverse(double nu, double a, double b, double c,

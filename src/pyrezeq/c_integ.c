@@ -32,80 +32,108 @@ int notnull(double x){
     return 1-isnull(x);
 }
 
+double c_steady_state(nu, a, b, c){
+
+    return c_get_nan();
+}
+
+double c_integrate_delta_t_max(double nu, double a, double b, double c,
+                                double s0){
+    double e0 = exp(-nu*s0);
+    double lam0=0, sqD=0;
+    double Delta = a*a-4*b*c;
+    double tmax, tmp=0;
+
+    if(nu<0)
+        return c_get_nan();
+
+    if(isnull(b) && isnull(c)){
+        /* Constant -> always valid */
+        tmax = c_get_inf();
+    }
+    else if(isnull(a) && isnull(b) && notnull(c)){
+        tmax = c<0 ? c_get_inf() : e0/nu/c;
+    }
+    else if(isnull(a) && notnull(b) && isnull(c)){
+        tmax = b>0 ? c_get_inf() : -1/e0/nu/b;
+    }
+    else if(notnull(a) && isnull(b) && notnull(c)){
+        tmax = c<0 || (c>0 && a<-c/e0) ? c_get_inf() : log(1+a*e0/c)/nu/a;
+    }
+    else if(notnull(a) && notnull(b) && isnull(c)){
+        tmax = b>0 || (b<0 && a<b*e0) ? c_get_inf() : -log(1+a/e0/b)/nu/a;
+    }
+    else if(notnull(b) && notnull(c)){
+        sqD = sqrt(fabs(Delta));
+        lam0 = (2*b*e0+a)/sqD;
+
+        if(isnull(Delta)){
+            /* Determinant is zero */
+            tmax = a<-2*e0*b ? -2/(a+2*b*e0)/nu : c_get_inf();
+            tmax = fmin(tmax, a>-c/e0 ? 4*b*e0/(a+2*b*e0)/nu/a : c_get_inf());
+        }
+        else if (Delta<0){
+            tmax = lam0<0 ? atan(-1./lam0)*2/nu/sqD : c_get_inf();
+            tmp = atan((lam0*sqD-a)/(a*lam0+sqD))*2/nu/sqD;
+            tmp = tmp>0 ? tmp : c_get_inf();
+            tmax = fmin(fmin(tmax, tmp), REZEQ_PI/nu/sqD);
+        }
+        else {
+            tmax = lam0<-1 ? atanh(-1./lam0)*2/nu/sqD : c_get_inf();
+            tmp = atanh((lam0*sqD-a)/(a*lam0-sqD))*2/nu/sqD;
+            tmp = tmp>0 ? tmp : c_get_inf();
+            tmax = fmin(fmin(tmax, tmp), REZEQ_PI/nu/sqD);
+        }
+    }
+    return tmax;
+}
+
+
 double c_integrate_forward(double nu, double a, double b, double c,
                         double t0, double s0, double t){
     double e0 = exp(-nu*s0);
     double sgn=1,omeg=0, lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
+    double rab = a/2/b;
     double s1;
 
-    // TODO integrate Tmax in this code s1=nan if t>Tmax
+    if(nu<0)
+        return c_get_nan();
+
+    double dtmax = c_integrate_delta_t_max(nu, a, b, c, s0);
+    if(t-t0>dtmax)
+        return c_get_nan();
 
     if(isnull(b) && isnull(c)){
         s1 = s0+a*(t-t0);
     }
     else if(isnull(a) && isnull(b) && notnull(c)){
-        s1 = s0-log(1-nu*c/e0*t)/nu;
+        s1 = s0-log(1-nu*c/e0*(t-t0))/nu;
     }
     else if(isnull(a) && notnull(b) && isnull(c)){
-        s1 = s0+log(1+nu*b*e0*t)/nu;
+        s1 = s0+log(1+nu*b*e0*(t-t0))/nu;
     }
     else if(notnull(a) && isnull(b) && notnull(c)){
-        s1 = s0+a*t-log(1+c/a/e0*(1-exp(nu*a*t)))/nu;
+        s1 = s0+a*(t-t0)-log(1+c/a/e0*(1-exp(nu*a*(t-t0))))/nu;
     }
     else if(notnull(a) && notnull(b) && isnull(c)){
-        s1 = s0+a*t+log(1+b/a*e0*(1-exp(-nu*a*t)))/nu;
+        s1 = s0+a*(t-t0)+log(1+b/a*e0*(1-exp(-nu*a*(t-t0))))/nu;
     }
     else if(notnull(b) && notnull(c)){
         if(isnull(Delta)){
             /* Determinant is zero */
-            s1 = -log((e0+a/2/b)/(1+t*(nu*b*e0+nu*a/2))-a/2/b)/nu;
+            s1 = -log((e0+rab)/(1+(e0+rab)*nu*b*(t-t0))-rab)/nu;
         }
         else {
             /* Non zero determinant */
             sgn = Delta<0 ? -1 : 1;
             sqD = sqrt(sgn*Delta);
-            omeg = Delta<0 ? tan(nu*sqD*t/2) : tanh(nu*sqD*t/2);
+            omeg = Delta<0 ? tan(nu*sqD*(t-t0)/2) : tanh(nu*sqD*(t-t0)/2);
             lam0 = (2*b*e0+a)/sqD;
-            s1 = -log((lam0+sgn*omeg)/(1+lam0*omeg)*sqD/2/b-a/2/b)/nu;
+            s1 = -log((lam0+sgn*omeg)/(1+lam0*omeg)*sqD/2/b-rab)/nu;
         }
     }
     return s1;
-}
-
-double c_integrate_tmax(double nu, double a, double b, double c,
-                                double s0){
-    double e0 = exp(-nu*s0);
-    double sgn=1,omeg=0, lam0=0, sqD=0;
-    double Delta = a*a-4*b*c;
-    double tmax;
-
-    if(isnull(b) && isnull(c)){
-        tmax = c_get_inf();
-    }
-    else if(isnull(a) && isnull(b) && notnull(c)){
-        tmax = nu*c<0 ? c_get_inf() : e0/nu/c;
-    }
-    else if(isnull(a) && notnull(b) && isnull(c)){
-        tmax = c_get_inf();
-    }
-    else if(notnull(a) && isnull(b) && notnull(c)){
-        tmax = c_get_inf();
-    }
-    else if(notnull(a) && notnull(b) && isnull(c)){
-        tmax = c_get_inf();
-    }
-    else if(notnull(b) && notnull(c)){
-        if(isnull(Delta)){
-            /* Determinant is zero */
-            tmax = c_get_inf();
-        }
-        else {
-            /* Non zero determinant */
-            tmax = c_get_inf();
-        }
-    }
-    return tmax;
 }
 
 
@@ -117,6 +145,9 @@ double c_integrate_inverse(double nu, double a, double b, double c,
     double Delta = a*a-4*b*c;
     double sgn = Delta<0 ? -1 : 1;
     double tau0=0., tau1=0.;
+
+    if(nu<0)
+        return c_get_nan();
 
     if(isnull(b) && isnull(c)){
         return (s1-s0)/a;
@@ -253,7 +284,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         /* Exponential factor */
         nu = nu_vector[jalpha];
 
-        if(isnan(nu))
+        if(isnan(nu) || nu<0)
             return REZEQ_ERROR + __LINE__;
 
         /* Store previous coefficients */

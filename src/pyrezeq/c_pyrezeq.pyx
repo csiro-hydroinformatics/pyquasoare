@@ -14,7 +14,7 @@ cdef extern from 'c_integ.h':
     double c_integrate_forward(double nu, double a, double b, double c,
                                     double t0, double s0, double t);
 
-    double c_integrate_tmax(double nu, double a, double b, double c, double s0);
+    double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
     double c_integrate_inverse(double nu, double a, double b, double c,
                                         double s0, double s1);
@@ -108,8 +108,8 @@ def integrate_forward(double nu, double a, double b, double c, \
     return c_integrate_forward(nu, a, b, c, t0, s0, t)
 
 
-def integrate_tmax(double nu, double a, double b, double c, double s0):
-    return c_integrate_tmax(nu, a, b, c, s0)
+def integrate_delta_t_max(double nu, double a, double b, double c, double s0):
+    return c_integrate_delta_t_max(nu, a, b, c, s0)
 
 
 def integrate_forward_vect(double nu, double a, double b, double c, \

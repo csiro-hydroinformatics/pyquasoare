@@ -43,8 +43,8 @@ def integrate_forward(nu, a, b, c, t0, s0, t):
         return c_pyrezeq.integrate_forward(nu, a, b, c, t0, s0, t)
 
 
-def integrate_tmax(nu, a, b, c, s0):
-    return c_pyrezeq.integrate_tmax(nu, a, b, c, s0)
+def integrate_delta_t_max(nu, a, b, c, s0):
+    return c_pyrezeq.integrate_delta_t_max(nu, a, b, c, s0)
 
 
 def integrate_inverse(nu, a, b, c, s0, s1):
