@@ -82,7 +82,7 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c,
             tmax = lam0<-1 ? atanh(-1./lam0)*2/nu/sqD : c_get_inf();
             tmp = atanh((lam0*sqD-a)/(a*lam0-sqD))*2/nu/sqD;
             tmp = tmp>0 ? tmp : c_get_inf();
-            tmax = fmin(fmin(tmax, tmp), REZEQ_PI/nu/sqD);
+            tmax = fmin(tmax, tmp);
         }
     }
     return tmax;
