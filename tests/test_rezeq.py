@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
 
+import warnings
+warnings.filterwarnings("ignore")
+
 import matplotlib.pyplot as plt
 
 from itertools import product as prod
@@ -22,7 +25,12 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NTRY = 50
+NTRY = 1000
+NPRINT = 20 if NTRY<100 else 500
+
+PARAM_MAX = 5
+S0_MAX = 5
+NU_MAX = 5
 
 def get_data():
     fq = FTEST / "streamflow_423202_423206_event.csv"
@@ -98,9 +106,7 @@ def integrate_forward_numerical(nu, a, b, c, t0, s0, t_eval, method="Radau"):
 
 
 def sample_params(case):
-    v0 = np.array([-5., -5., -5.])
-    v1 = np.array([5., 5., 2.])
-
+    v0, v1 = -PARAM_MAX*np.ones(3), PARAM_MAX*np.ones(3)
     eps = np.random.uniform(0, 1, size=(NTRY, 3))
 
     if case == 1:
@@ -136,6 +142,14 @@ def sample_params(case):
 
     return params
 
+def sample_config():
+    nus = np.random.uniform(0, NU_MAX, NTRY)
+    s0s = np.random.uniform(-S0_MAX, S0_MAX, NTRY)
+    Tmax = 20
+    t_eval = np.linspace(0, Tmax, 5000)
+    return nus, s0s, t_eval, Tmax
+
+
 def plot_solution(t, s1, expected=None, title="", params=None, \
                         s0=None, clear=False, show=False):
     if clear:
@@ -170,18 +184,8 @@ def plot_solution(t, s1, expected=None, title="", params=None, \
 
 
 def test_integrate_tmax(allclose):
-    # Parameters
-    nus = np.random.uniform(0, 5, NTRY)
-
-    # Initial condition
-    s0s = np.random.uniform(-10, 10, NTRY)
-
-    # Simulation period
-    Tmax = 10
-    t_eval = np.linspace(0, Tmax, 5000)
-
+    nus, s0s, t_eval, Tmax = sample_config()
     print("")
-    # Radau stops integrating for case 1???
     for case in range(2, 9):
         print(" "*4+f"Testing integrate_tmax - case {case}")
         params = sample_params(case)
@@ -191,8 +195,8 @@ def test_integrate_tmax(allclose):
         ndelta = 0
         for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
             # Log progress
-            if itry%100==0:
-                print(" "*8+f"tmax - Try {itry+1:3d}/{NTRY:3d}")
+            if itry%NPRINT==0:
+                print(" "*8+f"tmax - Try {itry+1:4d}/{NTRY:4d}")
 
             # Run solver first to see how far it goes
             t0 = 0
@@ -217,21 +221,6 @@ def test_integrate_tmax(allclose):
 
                 err = abs(np.log(tm)-np.log(expected))
                 assert err<2e-3
-
-                #if err>2e-3:
-                #    ax = plot_solution(te, s1, ns1, clear=True, s0=s0, \
-                #                            params=[nu, a, b, c])
-
-                #    x0, x1 = ax.get_xlim()
-                #    x1 = max(x1, expected+1e-3)
-                #    ax.set_xlim((x0, x1))
-                #    y0, y1 = ax.get_ylim()
-                #    ax.vlines(tm, y0, y1, color="tab:blue", ls=":", lw=0.8)
-                #    ax.vlines(expected, y0, y1, color="tab:orange", ls=":", lw=0.8)
-                #    ax.set_ylim((y0, y1))
-                #    plt.show()
-                #    import pdb; pdb.set_trace()
-
                 err_max = max(err, err_max)
 
         mess = f"forward - Errmax = {err_max:3.2e}"\
@@ -243,31 +232,19 @@ def test_integrate_tmax(allclose):
 
 
 def test_integrate_forward_vs_finite_difference(allclose):
-    return
-    # TODO
-
-    # Parameters
-    nus = np.random.uniform(0, 5, NTRY)
-
-    # Initial condition
-    s0s = np.random.uniform(-10, 10, NTRY)
-
-    # Simulation period
-    Tmax = 20
-    t_eval = np.linspace(0, Tmax, 10000)
-
+    nus, s0s, t_eval, Tmax = sample_config()
     print("")
-    for case in [8]: #range(1, 9):
+    for case in range(1, 9):
         print(" "*4+f"Testing integrate_forward using diff - case {case}")
         params = sample_params(case)
         t0 = 0
         errmax_max = 0
-        perc_delta_pos = 0
+        nchecked = 0
         ndelta = 0
         for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
             # Log progress
-            if itry%100==0:
-                print(" "*8+f"forward - Try {itry+1:3d}/{NTRY:3d}")
+            if itry%NPRINT==0:
+                print(" "*8+f"forward - Try {itry+1:4d}/{NTRY:4d}")
 
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
             Tmax_rev = t_eval[~np.isnan(s1)].max()
@@ -275,8 +252,11 @@ def test_integrate_forward_vs_finite_difference(allclose):
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval_rev)
 
             # Test if s1 is monotone
-            sgn = np.sign(np.diff(s1))
-            assert np.all(sgn==sgn[0])
+            ds1 = np.round(np.diff(s1), decimals=6)
+            ads1 = np.abs(ds1)
+            sgn = np.sign(ds1)
+            sgn_ref = np.sign(ds1[np.argmax(ads1)])
+            assert np.all(sgn[ads1>1e-8]==sgn_ref)
 
             # Differentiate using 5th point method
             h = t_eval_rev[1]-t_eval_rev[0]
@@ -286,37 +266,24 @@ def test_integrate_forward_vs_finite_difference(allclose):
             expected = rezeq.approx_fun(nu, a, b, c, s1[2:-2])
 
             err = np.abs(np.arcsinh(ds1*1e-3)-np.arcsinh(expected*1e-3))
-            iok = (np.abs(ds1)<1e3) & (td>td[5]) & (td<td[-5])
+            iok = (np.abs(ds1)<1e2) & (td>td[2]) & (td<td[-2])
             if iok.sum()<5:
                 continue
+
             errmax = np.nanmax(err[iok])
-
-            if errmax>1e-4:
-                plot_solution(t_eval, s1, params=[nu, a, b, c],\
-                                    title="Simulations", s0=s0, clear=True)
-                plot_solution(td[iok], ds1[iok], expected[iok], "Derivatives", show=True)
-                import pdb; pdb.set_trace()
-
+            nchecked += 1
             assert errmax<1e-4
 
             errmax_max = max(errmax, errmax_max)
 
-        mess = f"forward - Errmax = {errmax_max:3.2e}"
+        mess = f"forward - Errmax = {errmax_max:3.2e}"\
+                    f" %checked={nchecked*100/NTRY:0.0f}%"
         print(" "*8+mess)
         print("")
 
 
 def test_integrate_forward_vs_solver(allclose):
-    # Parameters
-    nus = np.random.uniform(0, 5, NTRY)
-
-    # Initial condition
-    s0s = np.random.uniform(-10, 10, NTRY)
-
-    # Simulation period
-    Tmax = 20
-    t_eval = np.linspace(0, Tmax, 500)
-
+    nus, s0s, t_eval, Tmax = sample_config()
     print("")
     for case in range(1, 9):
         print(" "*4+f"Testing integrate_forward using solver - case {case}")
@@ -326,7 +293,6 @@ def test_integrate_forward_vs_solver(allclose):
         perc_delta_pos = 0
         ndelta = 0
         for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
-
             # Count the frequence of positive determinant
             delta = a**2-4*b*c
             if abs(delta)>0:
@@ -334,8 +300,8 @@ def test_integrate_forward_vs_solver(allclose):
                 perc_delta_pos += delta>0
 
             # Log progress
-            if itry%100==0:
-                print(" "*8+f"forward - Try {itry+1:3d}/{NTRY:3d}")
+            if itry%NPRINT==0:
+                print(" "*8+f"forward - Try {itry+1:4d}/{NTRY:4d}")
 
             te, expected = integrate_forward_numerical(nu, a, b, c, t0, s0, t_eval)
             dsdt = np.diff(expected)/np.diff(te)
@@ -377,8 +343,8 @@ def test_integrate_inverse(allclose):
         t0 = 0
         errmax_max = 0
         for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
-            if itry%100==0:
-                print(" "*8+f"inverse - Try {itry+1:3d}/{NTRY:3d}")
+            if itry%NPRINT==0:
+                print(" "*8+f"inverse - Try {itry+1:4d}/{NTRY:4d}")
 
             # Simulate
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
