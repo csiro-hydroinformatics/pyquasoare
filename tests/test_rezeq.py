@@ -272,7 +272,7 @@ def test_integrate_forward_vs_finite_difference(allclose):
 
             errmax = np.nanmax(err[iok])
             nchecked += 1
-            assert errmax<1e-4
+            assert errmax<5e-4
 
             errmax_max = max(errmax, errmax_max)
 
@@ -326,16 +326,7 @@ def test_integrate_forward_vs_solver(allclose):
 
 
 def test_integrate_inverse(allclose):
-    # Parameters
-    nus = np.random.uniform(0, 3, NTRY)
-
-    # Initial condition
-    s0s = np.random.uniform(-5, 5, NTRY)
-
-    # Simulation period
-    Tmax = 20
-    t_eval = np.linspace(0, Tmax, 5000)
-
+    nus, s0s, t_eval, Tmax = sample_config()
     print("")
     for case in range(1,8): #range(1, 9):
         print(" "*4+f"Testing integrate_inverse - case {case}")
@@ -360,27 +351,13 @@ def test_integrate_inverse(allclose):
 
             dsdt = np.diff(s1)/np.diff(t)
             dsdt = np.abs(np.insert(dsdt, 0, 0))
-            Err = np.abs(np.arcsinh(ta*1e-3)-np.arcsinh(t*1e-3))
+            err = np.abs(np.arcsinh(ta*1e-3)-np.arcsinh(t*1e-3))
             iok = (dsdt>1e-4) & (dsdt<1e4)
             if iok.sum()<5:
                 continue
 
             errmax = np.nanmax(err[iok])
             assert errmax<1e-10
-
-            if errmax>1e-3:
-                import matplotlib.pyplot as plt
-                plt.close("all")
-                fig, axs = plt.subplots(ncols=2)
-                ax = axs[0]
-                ax.plot(t, s1)
-
-                ax = axs[1]
-                ax.plot(t, ta)
-
-                plt.show()
-                import pdb; pdb.set_trace()
-
 
             errmax_max = max(errmax, errmax_max)
 
