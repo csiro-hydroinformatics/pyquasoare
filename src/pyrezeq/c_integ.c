@@ -32,9 +32,16 @@ int notnull(double x){
     return 1-isnull(x);
 }
 
-double c_steady_state(nu, a, b, c){
+int c_steady_state(nu, a, b, c, double[2] sinf){
+    double Delta = a*a-4*b*c;
+    if(isnull(Delta)){
+    }
+    else if(Delta<-REZEQ_EPS){
 
-    return c_get_nan();
+    }
+    else if(Delta>REZEQ_EPS){
+    }
+    return 0;
 }
 
 double c_integrate_delta_t_max(double nu, double a, double b, double c,
@@ -72,7 +79,7 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c,
             tmax = a<-2*e0*b ? -2/(a+2*b*e0)/nu : c_get_inf();
             tmax = fmin(tmax, a>-c/e0 ? 4*b*e0/(a+2*b*e0)/nu/a : c_get_inf());
         }
-        else if (Delta<0){
+        else if (Delta<-REZEQ_EPS){
             tmax = lam0<0 ? atan(-1./lam0)*2/nu/sqD : c_get_inf();
             tmp = atan((lam0*sqD-a)/(a*lam0+sqD))*2/nu/sqD;
             tmp = tmp>0 ? tmp : c_get_inf();
