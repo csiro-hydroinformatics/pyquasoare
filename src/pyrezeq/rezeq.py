@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 from scipy.optimize import minimize
@@ -43,6 +44,33 @@ def integrate_forward(nu, a, b, c, t0, s0, t):
         return c_pyrezeq.integrate_forward(nu, a, b, c, t0, s0, t)
 
 
+def integrate_forward_numerical(fun, dfun, t0, s0, t, \
+                            method="Radau", max_step=np.inf):
+    v = np.zeros(1)
+    def f(t, y):
+        v[0] = fun(y[0])
+        return v
+
+    m = np.zeros((1, 1))
+    jac = None
+    if method == "Radau":
+        def jac(t, y):
+            m[0, 0] = dfun(y[0])
+            return m
+
+    res = solve_ivp(\
+            fun=f, \
+            t_span=[t0, t[-1]], \
+            y0=[s0], \
+            method=method, \
+            max_step=max_step, \
+            jac=jac, \
+            t_eval=t)
+
+    return res.t, res.y[0]
+
+
+
 def integrate_delta_t_max(nu, a, b, c, s0):
     return c_pyrezeq.integrate_delta_t_max(nu, a, b, c, s0)
 
@@ -56,65 +84,117 @@ def integrate_inverse(nu, a, b, c, s0, s1):
         return c_pyrezeq.integrate_inverse(nu, a, b, c, s0, s1)
 
 
-
-#def piecewise_linear_approximation(fun, alphas):
-#    """ Approximate a function with piecewise linear """
-#    check_alphas(alphas)
-#    yi = np.array([fun(u) for u in alphas])
-#    b = np.diff(yi)/np.diff(alphas)
-#    a = yi[:-1]-b*alphas[:-1]
-#    return np.column_stack([a, b])
-
-
-def get_alphas(fun, alpha_min, alpha_max, nalphas, ninterp=1000):
-    # First interpolation
-    aa0 = np.linspace(alpha_min, alpha_max, ninterp)
-    ff0 = np.array([fun(a) for a in aa0])
-
-    # Minimization of sse
-    def trans2raw(thetas):
-        aa = np.cumsum(np.insert(np.exp(thetas), 0, 0))
-        return alpha_min+(alpha_max-alpha_min)*(aa-aa[0])/(aa[-1]-aa[0])
-
-    def objfun(theta):
-        aa = trans2raw(theta)
-        ff1 = [fun(a) for a in aa]
-        ff0_int = np.interp(aa0, aa, ff1)
-        sse = np.sum((ff0_int-ff0)**2)
-        return sse
-
-    a0 = np.linspace(alpha_min, alpha_max, nalphas)
-    ini = np.log(np.diff(a0))
-    opt = minimize(objfun, ini)
-    alphas = trans2raw(opt.x)
-
-    return alphas
-
-
-def run_piecewise_approximation(x, alphas, coefs):
-    check_alphas(alphas)
-    y = np.zeros_like(x)
-    nalphas = len(alphas)
-    for i in range(nalphas-1):
-        ulow = alphas[i]
-        uhigh = alphas[i+1]
-        ii = ((x>=ulow)&(x<uhigh))
-
-        # Extrapolation
-        if i==0:
-            ii |= x<ulow
-        if i==nalphas-2:
-            ii |= x>=uhigh
-
-        if ii.sum()>0:
-            y[ii] = coefs[i, 0]+ coefs[i, 1]*x[ii]
-
-    return y
-
-
 def find_alpha(u0, alphas):
     alphas = np.array(alphas).astype(np.float64)
     return c_pyrezeq.find_alpha(u0, alphas)
+
+
+def get_coefficients(fun, dfun, nu, epsilon, alphaj, alphajp1):
+    """ Find approx coefficients for the interval [alphaj, alpjajp1]
+        nu is the non-linearity coefficient.
+        epsilon is the option controlling the third constraint:
+        -1 : set linearity constraint b=-c
+        0 : use derivative in alphaj
+        1 : use derivative in alphajp1
+        ]0, 1[ : use mid-point in ]alphaj, alphajp1[
+        ]
+    """
+    assert alphajp1>alphaj
+    assert epsilon==-1 or (epsilon>=0 and epsilon<=1)
+
+    # Basic constraints
+    fa = lambda a, b, c, x: approx_fun(nu, a, b, c, x)
+    X  = [[fa(1, 0, 0, x), fa(0, 1, 0, x), fa(0, 0, 1, x)]\
+                        for x in [alphaj, alphajp1]]
+    y = [fun(alphaj), fun(alphajp1)]
+
+    # Additional constraint
+    if epsilon==-1:
+        # Equality b=-c
+        X.append([0, 1, 1])
+        y.append(0)
+    elif epsilon in [0, 1]:
+        # Derivative
+        x = alphaj if epsilon==0 else alphajp1
+        ja = lambda a, b, c, x: approx_jac(nu, a, b, c, x)
+        X.append([ja(1, 0, 0, x), ja(0, 1, 0, x), ja(0, 0, 1, x)])
+        y.append(dfun(x))
+    else:
+        # Mid-point
+        x = (1-epsilon)*alphaj+epsilon*alphajp1
+        X.append([fa(1, 0, 0, x), fa(0, 1, 0, x), fa(0, 0, 1, x)])
+        y.append(fun(x))
+
+    # Solution
+    return np.linalg.solve(X, y)
+
+
+def get_coefficients_matrix(funs, dfuns, nus, epsilons, alphas, ext=1e-2):
+    """ Generate coefficient matrices for flux functions """
+    nalphas = len(alphas)
+    assert len(nus) == nalphas-1
+    assert len(epsilons) == nalphas-1
+    nfuns = len(funs)
+
+    # we add one row at the top end bottom for continuity extension
+    a_matrix = np.zeros((nalphas+1, nfuns))
+    b_matrix = np.zeros((nalphas+1, nfuns))
+    c_matrix = np.zeros((nalphas+1, nfuns))
+
+    for j in range(nalphas-1):
+        nu = nus[j]
+        epsilon = epsilons[j]
+        alphaj, alphajp1 = alphas[[j, j+1]]
+
+        for ifun, (f, df) in enumerate(zip(funs, dfuns)):
+            a, b, c = get_coefficients(f, df, nu, epsilon, alphaj, alphajp1)
+            a_matrix[j+1, ifun] = a
+            b_matrix[j+1, ifun] = b
+            c_matrix[j+1, ifun] = c
+
+    # Add fixed derivative extension
+    if ext>0:
+        alpha0, alpha1 = alphas[[0, -1]]
+        alphas_ext = np.concatenate([[alpha0-ext], alphas, [alpha1+ext]])
+        nus_ext = np.concatenate([[nus[0]], nus, [nus[-1]]])
+        for ifun, f in enumerate(funs):
+            a_matrix[0, ifun] = f(alpha0)
+            a_matrix[-1, ifun] = f(alpha1)
+
+    return nus_ext, alphas_ext, a_matrix, b_matrix, c_matrix
+
+
+def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
+    nalphas = len(alphas)
+    nfluxes = a_matrix.shape[1]
+    assert a_matrix.shape[0] == nalphas-1
+    assert len(nus) == nalphas-1
+    assert b_matrix.shape == a_matrix.shape
+    assert c_matrix.shape == a_matrix.shape
+
+    outputs = np.nan*np.zeros((len(s), a_matrix.shape[1]))
+    for j in range(nalphas-1):
+        nu = nus[j]
+        alphaj, alphajp1 = alphas[[j, j+1]]
+
+        if j==0:
+            idx = s<alphajp1
+        elif j==nalphas-2:
+            idx = s>=alphaj
+        else:
+            idx = (s>=alphaj)&(s<alphajp1)
+
+        if idx.sum()==0:
+            continue
+
+        for i in range(nfluxes):
+            a = a_matrix[j, i]
+            b = b_matrix[j, i]
+            c = c_matrix[j, i]
+            outputs[idx, i] = approx_fun(nu, a, b, c, s[idx])
+
+    return outputs
+
 
 
 def increment_fluxes(scalings, \
@@ -297,6 +377,7 @@ def quadrouting(delta, theta, q0, s0, inflows, \
         raise ValueError(f"c_pyrezeq.quadrouting returns {ierr}")
 
     return outflows
+
 
 
 def numrouting(delta, theta, q0, s0, inflows, nu, \
