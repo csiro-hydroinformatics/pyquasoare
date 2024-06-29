@@ -9,6 +9,7 @@ def pytest_terminal_summary(terminalreporter):
 def pytest_addoption(parser):
     parser.addoption("--ntry", type=int, default=50, help="Number of tries")
     parser.addoption("--selcase", type=int, default=-1, help="Select specific case")
+    parser.addoption("--selfun", type=str, default="", help="Select specific function")
     parser.addoption("--printout", action="store_true", default=False, help="Print progress")
 
 
@@ -21,6 +22,9 @@ def ntry(request):
 def selcase(request):
     return request.config.getoption("--selcase")
 
+@pytest.fixture(scope="session", autouse=True)
+def selfun(request):
+    return request.config.getoption("--selfun")
 
 @pytest.fixture(scope="session", autouse=True)
 def printout(request):

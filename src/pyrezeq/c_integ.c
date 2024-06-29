@@ -32,14 +32,37 @@ int notnull(double x){
     return 1-isnull(x);
 }
 
-int c_steady_state(nu, a, b, c, double[2] sinf){
+int c_steady_state(double nu, double a, double b, double c, double steady[2]){
     double Delta = a*a-4*b*c;
-    if(isnull(Delta)){
-    }
-    else if(Delta<-REZEQ_EPS){
+    double sqD;
+    double s1 = c_get_nan();
+    double s2 = c_get_nan();
+    steady[0] = s1;
+    steady[1] = s2;
 
+    if(notnull(b) && isnull(c)){
+        steady[0] = notnull(a) ? -log(-a/b)/nu : s1;
     }
-    else if(Delta>REZEQ_EPS){
+    else if(isnull(b) && notnull(c)){
+        steady[0] = notnull(a) ? log(-a/c)/nu : s1;
+    }
+    else if(notnull(b) && notnull(c)){
+        if(isnull(Delta)){
+            steady[0] = notnull(a) ? log(-a/2/c)/nu : s1;
+            steady[1] = steady[0];
+        }
+        else if(Delta>REZEQ_EPS){
+            sqD = sqrt(Delta);
+            s1 = log((-a-sqD)/2/b)/nu;
+            s2 = log((-a+sqD)/2/b)/nu;
+            if(s1<s2){
+                steady[0] = s1;
+                steady[1] = s2;
+            } else {
+                steady[0] = s2;
+                steady[1] = s1;
+            }
+        }
     }
     return 0;
 }
@@ -182,8 +205,9 @@ double c_integrate_inverse(double nu, double a, double b, double c,
             /* Non zero determinant */
             sqD = sqrt(sgn*Delta);
             lam0 = (2*b*e0+a)/sqD;
-            omeginv0 = Delta<0 ? atan(lam0) : atanh(lam0);
-            omeginv1 = Delta<0 ? atan(lam1) : atanh(lam1);
+            omeginv0 = Delta<REZEQ_EPS ? atan(lam0) : atanh(lam0);
+            lam1 = (2*b*e1+a)/sqD;
+            omeginv1 = Delta<REZEQ_EPS ? atan(lam1) : atanh(lam1);
             return 2*sgn/sqD*(omeginv1-omeginv0);
         }
     }

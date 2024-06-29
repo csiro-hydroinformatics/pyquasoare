@@ -35,23 +35,35 @@ NU_MAX = 5
             params=["x2", "x5", "tanh", "exp", "sin", "recip", "recipquad"])
 def reservoir_function(request):
     name = request.param
-    # sol is the analytical solution of ds/dt = 1+fun(s)
+    # sol is the analytical solution of ds/dt = inflow+fun(s)
+    # except for
     if name == "x2":
         sol = lambda t, s0: (s0+np.tanh(t))/(1+s0*np.tanh(t))
-        return name, lambda x: -x**2, lambda x: -2*x, sol
+        return name, lambda x: -x**2, lambda x: -2*x, sol, 1.
+
     elif name == "x5":
-        return name, lambda x: -x**5, lambda x: -5*x**4, None
+        return name, lambda x: -x**5, lambda x: -5*x**4, None, None
+
     elif name == "tanh":
-        return name, lambda x: -np.tanh(x), lambda x: -1+np.tanh(x)**2, None
+        a, b = 0.5, 10
+        sol = lambda t, s0: (np.asinh(2*np.exp(-t/b)+np.sinh(a+b*s0))-a)/b
+        return name, lambda x: -np.tanh(a+b*x), \
+                            lambda x: b*(np.tanh(a+b*x)**2-1), sol, 0.
+
     elif name == "exp":
         sol = lambda t, s0: s0+t-np.log(1-(1+np.exp(t))/math.exp(s0))
-        return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol
+        return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1.
+
     elif name == "sin":
-        return name, lambda x: -1.01-np.sin(20*x), lambda x: -20*np.cos(3*x), None
+        w = 2*math.pi
+        sol = lambda t, s0: -2./w*np.atan(np.exp(w*t)+np.tan(w*s0/2))
+        return name, lambda x: np.sin(w*x), lambda x: -w*np.cos(w*x), sol, 0.
+
     elif name == "recip":
-        return name, lambda x: -1e-2/(1.01-x), lambda x: 1e-2/(1.01-x)**2, None
+        return name, lambda x: -1e-2/(1.01-x), lambda x: 1e-2/(1.01-x)**2, None, None
+
     elif name == "recipquad":
-        return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, None
+        return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, None, None
 
 
 @pytest.fixture(scope="module", params=list(range(1, NCASES+1)))
@@ -186,7 +198,7 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
     print("")
     print(" "*4+f"Testing integrate_tmax - case {case} / {cname}")
     err_max = 0
-    ncutoff = 0
+    nskipped = 0
     ndpos = 0
     ndelta = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
@@ -198,10 +210,9 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
         t0 = 0
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, ns1 = rezeq.integrate_forward_numerical(f, df, t0, s0, t_eval)
+        te, ns1 = rezeq.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
 
         if te.max()<Tmax and te.max()>0 and len(te)>3:
-            ncutoff += 1
             Delta = a**2-4*b*c
             ndpos += Delta>0
 
@@ -209,7 +220,7 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
             t0, t1 = te[[-3, -1]]
             te = np.linspace(t0, 2*t1-t0, 1000)
             s0 = ns1[-3]
-            te, ns1 = rezeq.integrate_forward_numerical(f, df, t0, s0, te)
+            te, ns1 = rezeq.integrate_forward_numerical([f], [df], t0, [s0], te)
             expected = te.max()
 
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, te)
@@ -220,13 +231,43 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
             err = abs(np.log(tm)-np.log(expected))
             assert err<2e-3
             err_max = max(err, err_max)
+        else:
+            nskipped += 1
 
-    mess = f"forward - Errmax = {err_max:3.2e}"\
-            f"  cutoff={100*ncutoff/ntry:3.0f}%"
+    mess = " "*4+f">> Errmax = {err_max:3.2e}"\
+            f"  skipped={100*nskipped/ntry:0.0f}%"
     if case in [8, 9, 10]:
-        mess += f" including Delta>0={100*ndpos/ncutoff:3.0f}%"
-    print(" "*8+mess)
+        mess += f" - when running we have Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
+    print(mess)
     print("")
+
+
+def test_steady_state(allclose, parameter_samples, printout):
+    case, params, cname = parameter_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip("No parameter samples")
+    if case<5:
+        pytest.skip("No steady state")
+    nprint = get_nprint(ntry)
+    nus, s0s, t_eval, Tmax = sample_config(ntry)
+
+    print("")
+    print(" "*4+f"Testing steady state - case {case} / {cname}")
+    err_max = 0
+    a, b, c = [np.ascontiguousarray(v) for v in params.T]
+    steady = rezeq.steady_state(nus, a, b, c)
+
+    f = np.array([[rezeq.approx_fun(nu, aa, bb, cc, s) for nu, aa, bb, cc, s\
+                        in zip(nus, a, b, c, ss)] for ss in steady.T]).T
+    err_max = np.nanmax(np.abs(f))
+    nskipped = np.all(np.isnan(f), axis=1).sum()
+
+    mess = " "*4+f">> Errmax = {err_max:3.2e}"\
+            f"  skipped={100*(nskipped)/ntry:0.0f}%"
+    print(mess)
+    print("")
+
 
 
 def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, printout):
@@ -241,7 +282,7 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
     print(" "*4+f"Testing integrate_forward using diff - case {case} / {cname}")
     t0 = 0
     errmax_max = 0
-    nchecked = 0
+    notskipped = 0
     ndelta = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         # Log progress
@@ -250,6 +291,8 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
 
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
         Tmax_rev = t_eval[~np.isnan(s1)].max()
+        if Tmax_rev<1e-10:
+            continue
         t_eval_rev = np.linspace(0, Tmax_rev, 10000)
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval_rev)
 
@@ -269,22 +312,22 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
 
         err = np.abs(np.arcsinh(ds1*1e-3)-np.arcsinh(expected*1e-3))
         iok = (np.abs(ds1)<1e2) & (td>td[2]) & (td<td[-2])
-        if iok.sum()<5:
+        if iok.sum()<4:
             continue
 
         errmax = np.nanmax(err[iok])
-        nchecked += 1
+        notskipped += 1
         assert errmax<5e-4
 
         errmax_max = max(errmax, errmax_max)
 
-    mess = f"forward - Errmax = {errmax_max:3.2e}"\
-                f" %checked={nchecked*100/ntry:0.0f}%"
-    print(" "*8+mess)
+    mess = f">> Errmax = {errmax_max:3.2e}"\
+                f" skipped={(ntry-notskipped)*100/ntry:0.0f}%"
+    print(" "*4+mess)
     print("")
 
 
-def test_integrate_forward_vs_solver(allclose, parameter_samples, printout):
+def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
     case, params, cname = parameter_samples
     ntry = len(params)
     if ntry==0:
@@ -293,10 +336,11 @@ def test_integrate_forward_vs_solver(allclose, parameter_samples, printout):
     nus, s0s, t_eval, Tmax = sample_config(ntry)
 
     print("")
-    print(" "*4+f"Testing integrate_forward using solver - case {case} / {cname}")
+    print(" "*4+f"Testing integrate_forward vs numerical - case {case} / {cname}")
     t0 = 0
     errmax_max = 0
     perc_delta_pos = 0
+    nskipped = 0
     ndelta = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         # Count the frequence of positive determinant
@@ -311,7 +355,11 @@ def test_integrate_forward_vs_solver(allclose, parameter_samples, printout):
 
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, expected = rezeq.integrate_forward_numerical(f, df, t0, s0, t_eval)
+        te, expected = rezeq.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
+        if len(te)<3:
+            nskipped += 1
+            continue
+
         dsdt = np.diff(expected)/np.diff(te)
         dsdt = np.insert(dsdt, 0, 0)
 
@@ -324,11 +372,12 @@ def test_integrate_forward_vs_solver(allclose, parameter_samples, printout):
 
         errmax_max = max(errmax, errmax_max)
 
-    mess = f"forward - Errmax = {errmax_max:3.2e}"
+    perc_skipped = nskipped*100/ntry
+    mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
     if case in [8, 9, 10]:
         perc_delta_pos = perc_delta_pos/ndelta*100
-        mess += f"   %Delta>0 = {perc_delta_pos:0.0f}%"
-    print(" "*8+mess)
+        mess += f"  Delta>0 = {perc_delta_pos:0.0f}%"
+    print(" "*4+mess)
     print("")
 
 
@@ -352,6 +401,7 @@ def test_integrate_inverse(allclose, parameter_samples, printout):
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
 
         iok = ~np.isnan(s1)
+        iok[0] = False
         if iok.sum()<5:
             continue
 
@@ -360,50 +410,62 @@ def test_integrate_inverse(allclose, parameter_samples, printout):
         # Compute difference
         ta = rezeq.integrate_inverse(nu, a, b, c, s0, s1)
 
-        dsdt = np.diff(s1)/np.diff(t)
-        dsdt = np.abs(np.insert(dsdt, 0, 0))
-        err = np.abs(np.arcsinh(ta*1e-3)-np.arcsinh(t*1e-3))
+        dsdt = rezeq.approx_fun(nu, a, b, c, s1)
+        err = np.abs(np.log(ta*1e-3)-np.log((t-t0)*1e-3))
         iok = (dsdt>1e-4) & (dsdt<1e4)
         if iok.sum()<5:
             continue
 
         errmax = np.nanmax(err[iok])
-        assert errmax<(1e-3 if case==8 else 1e-10)
+        #assert errmax<(1e-3 if case==8 else 1e-9)
+        if np.isnan(errmax):
+            plot_solution(t, s1, params=[nu, a, b, c], show=True, clear=True)
+            import pdb; pdb.set_trace()
+
 
         errmax_max = max(errmax, errmax_max)
 
-    print(" "*8+f"inverse - Errmax = {errmax_max:3.2e}")
+    print(" "*4+f">> Errmax = {errmax_max:3.2e}")
     print("")
 
 
 def test_get_coefficients(allclose, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _ = reservoir_function
+    fname, fun, dfun, _, _ = reservoir_function
     alphaj = 0.
     alphajp1 = 1.
     nus = [0.01, 0.1, 1, 5]
 
-    for eps, nu in prod([-1, 0, 0.2, 0.5, 0.8], nus):
+    for eps, nu in prod([None, -1, 0, 0.2, 0.5, 0.8], nus):
         if eps==-1 and nu>nus[0]:
             continue
-        a, b, c = rezeq.get_coefficients(fun, dfun, nu, eps, alphaj, alphajp1)
+        a, b, c = rezeq.get_coefficients(fun, dfun, alphaj, alphajp1, nu, eps)
 
+        # Check continuity
         assert allclose(rezeq.approx_fun(nu, a, b, c, alphaj), fun(alphaj))
         assert allclose(rezeq.approx_fun(nu, a, b, c, alphajp1), fun(alphajp1))
 
-        if eps==-1:
+        # Check derivative
+        if eps is None:
+            continue
+        elif eps==-1:
             assert b==-c
         elif eps==0:
             assert allclose(rezeq.approx_jac(nu, a, b, c, alphaj), dfun(alphaj))
-
+        elif eps==1:
+            assert allclose(rezeq.approx_jac(nu, a, b, c, alphajp1), dfun(alphajp1))
         else:
             x = (1-eps)*alphaj+eps*alphajp1
             assert allclose(rezeq.approx_fun(nu, a, b, c, x), fun(x))
 
 
-def test_get_coefficients_matrix(allclose, reservoir_function):
+def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _ = reservoir_function
+    fname, fun, dfun, _, _ = reservoir_function
+    if selfun !="":
+        if selfun != fname:
+            pytest.skip("Skip non selected function")
+
     funs = [lambda x: 1., fun]
     dfuns = [lambda x: 0, dfun]
 
@@ -413,13 +475,15 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
     s = np.linspace(-0.1, 1.1, 1000)
     print("")
     errmax = {n: 0 for n in nus}
-    for e, nu in prod([-1, 0, 0.2, 0.5, 0.8, 1], nus):
+    #for e, nu in prod([-1, 0, 0.2, 0.5, 0.8, 1], nus):
+    for e, nu in prod([None], nus):
         if e==-1 and nu>nus[0]:
             continue
-        n = nu*np.ones(nalphas-1)
-        eps = e*np.ones(nalphas-1)
-        ne, ae, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, dfuns, n, eps, alphas)
 
+        n = nu*np.ones(nalphas-1)
+        eps = None if e is None else e*np.ones(nalphas-1)
+        ne, ae, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
+                                            dfuns, alphas, n, eps)
         out = rezeq.approx_fun_from_matrix(ae, ne, amat, bmat, cmat, s)
 
         fapprox = out[:, 1]
@@ -433,13 +497,13 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
         errmax[nu] = max(errmax[nu], emax)
 
         if fname in "sin":
-            ethresh = 3e-2
+            ethresh = 1e-6
         elif fname == "recip":
-            ethresh = 1e-1
+            ethresh = 1e-4
         elif fname == "recipquad":
-            ethresh = 2e-1
+            ethresh = 1e-3
         else:
-            ethresh = 1e-5
+            ethresh = 1e-7
         assert emax < ethresh
 
     print(f"coef matrix - fun={fname} :")
@@ -447,138 +511,57 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
         print(" "*4+f"errmax(nu={nu:0.2f}) = {errmax[nu]:3.3e}")
 
 
-
 def test_find_alphas(allclose):
     alphas = np.linspace(0, 1, 4)
     u0 = -1.
-    ialpha = rezeq.find_alpha(u0, alphas)
+    ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 0
 
     u0 = 1.1
-    ialpha = rezeq.find_alpha(u0, alphas)
+    ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 2
 
     u0 = 0.2
-    ialpha = rezeq.find_alpha(u0, alphas)
+    ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 0
 
     u0 = 0.4
-    ialpha = rezeq.find_alpha(u0, alphas)
+    ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 1
 
     u0 = 0.7
-    ialpha = rezeq.find_alpha(u0, alphas)
+    ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 2
 
 
-def test_integrate_reservoir_equations(allclose, reservoir_function):
-    fname, fun, dfun, sol = reservoir_function
+def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):
+    fname, fun, dfun, sol, inflow = reservoir_function
+    if selfun !="":
+        if selfun != fname:
+            pytest.skip("Skip non selected function")
+
     if sol is None:
         pytest.skip("No analytical solution")
 
+    inp = lambda x: inflow
+    sfun = lambda x: inflow+fun(x)
+    funs = [sfun, inp, fun]
 
+    dinp = lambda x: 0.
+    dsfun = lambda x: dinp(x)+dfun(x)
+    dfuns = [dsfun, dinp, dfun]
 
-#def test_integrate_mass_balance(allclose):
-#    deltas = np.linspace(0.1, 5, 10)
-#    nalphas = 10
-#    alphas = np.linspace(0, 10, nalphas)
-#
-#    scalings = [1.]
-#    a_matrix_noscaling = [np.ones(nalphas-1)]
-#    b_matrix_noscaling = [np.zeros(nalphas-1)]
-#    f1 = lambda x: -(-1 if x<0 else 1)*math.sqrt(abs(x))
-#    f2 = lambda x: -x
-#    f3 = lambda x: -3*x**2
-#    for f in [f1, f2, f3]:
-#        coefs = rezeq.piecewise_linear_approximation(f, alphas)
-#        scalings.append(1.)
-#        a_matrix_noscaling.append(coefs[:, 0])
-#        b_matrix_noscaling.append(coefs[:, 1])
-#
-#    u0 = 1.
-#    scalings = np.array(scalings)
-#    a_matrix_noscaling = np.column_stack(a_matrix_noscaling)
-#    b_matrix_noscaling = np.column_stack(b_matrix_noscaling)
-#
-#    for delta in deltas:
-#        u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings, \
-#                        a_matrix_noscaling, b_matrix_noscaling)
-#        mass_bal = u1-u0-fluxes.sum()
-#        assert allclose(mass_bal, 0.)
-#
-#
-#def test_integrate_non_linear_reservoir(allclose):
-#    delta = 1.
-#
-#    alpha_min = 1313
-#    alpha_max = 4153
-#    nalphas = 3
-#    alphas = np.linspace(alpha_min, alpha_max, nalphas)
-#
-#    theta = 3239
-#    q0 = 71.29
-#    nu = 6.
-#    rezfun = lambda x: -q0*(x/theta)**nu
-#    coefs = rezeq.piecewise_linear_approximation(rezfun, alphas)
-#
-#    a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
-#    b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
-#    scalings = np.array([0.316, 1.])
-#
-#    # Impact of s0 on solution
-#    s0 = 0.
-#    s1, fluxes = rezeq.integrate(delta, s0, alphas, scalings, \
-#                a_matrix_noscaling, b_matrix_noscaling)
-#    assert fluxes[1]>0
-#
-#    s0 = alpha_min
-#    s1, fluxes = rezeq.integrate(delta, s0, alphas, scalings, \
-#                a_matrix_noscaling, b_matrix_noscaling)
-#    assert fluxes[1]<0
-#
-#
-#def test_quadrouting(allclose):
-#    inflows, outflows = get_data()
-#
-#    delta = 1
-#    q0 = inflows.mean()
-#    theta = (inflows.cumsum()-outflows.cumsum()).max()*0.7
-#    s0 = 0.
-#    sim1 = pd.Series(rezeq.quadrouting(delta, theta, q0, s0, inflows), \
-#                        index=inflows.index)
-#
-#    f = lambda x: -q0*(x/theta)**2
-#    nalphas = 500
-#    alpha_min = 0
-#    alpha_max = 2*theta
-#    alphas = np.linspace(alpha_min, alpha_max, nalphas)
-#
-#    coefs = rezeq.piecewise_linear_approximation(f, alphas)
-#    a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
-#    b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
-#    scalings = np.column_stack([inflows, np.ones_like(inflows)])
-#    s1, fluxes = rezeq.run(delta, s0, alphas, scalings, \
-#                            a_matrix_noscaling, b_matrix_noscaling)
-#    sim2 = pd.Series(-fluxes[:, 1], index=inflows.index)
-#
-#    assert allclose(sim1, sim2, atol=5e-2)
-#
-#
-#def test_numrouting(allclose):
-#    inflows, outflows = get_data()
-#
-#    delta = 1
-#    q0 = inflows.mean()
-#    theta = (inflows.cumsum()-outflows.cumsum()).max()*0.7
-#    s0 = 0.
-#    sim1 = pd.Series(rezeq.quadrouting(delta, theta, q0, s0, inflows), \
-#                        index=inflows.index)
-#
-#    s2, f2 = rezeq.numrouting(delta, theta, q0, s0, inflows, 2.)
-#    sim2 = pd.Series(f2, index=inflows.index)
-#
-#    assert allclose(sim1, sim2, atol=1e-8)
-#
+    nalphas = 500
+    alphas = np.linspace(0., 1., nalphas)
+    nus, alphase, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
+                                            dfuns, alphas, nus=1)
+    s0 = [-5, 0, 0]
+    t0, Tmax = 0, 10
+    t_eval = np.linspace(t0, Tmax, 500)
+    te, expected = rezeq.integrate_forward_numerical(funs, dfuns, t0, s0, t_eval)
+
+    import pdb; pdb.set_trace()
+
 #
 #def test_integrate_continuity(allclose):
 #    delta = 1

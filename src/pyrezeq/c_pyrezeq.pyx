@@ -14,6 +14,8 @@ cdef extern from 'c_integ.h':
     double c_integrate_forward(double nu, double a, double b, double c,
                                     double t0, double s0, double t);
 
+    int c_steady_state(double nu, double a, double b, double c, double steady[2]);
+
     double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
     double c_integrate_inverse(double nu, double a, double b, double c,
@@ -83,10 +85,10 @@ def approx_fun_vect(double nu, double a, double b, double c, \
                 np.ndarray[double, ndim=1, mode='c'] s not None,\
                 np.ndarray[double, ndim=1, mode='c'] ds not None):
     cdef int nval = s.shape[0]
-    cdef int i
+    cdef int k
 
-    for i in range(nval):
-        ds[i] = c_approx_fun(nu, a, b, c, s[i])
+    for k in range(nval):
+        ds[k] = c_approx_fun(nu, a, b, c, s[k])
 
     return 0
 
@@ -94,18 +96,43 @@ def approx_jac_vect(double nu, double a, double b, double c, \
                 np.ndarray[double, ndim=1, mode='c'] s not None,\
                 np.ndarray[double, ndim=1, mode='c'] ds not None):
     cdef int nval = s.shape[0]
-    cdef int i
+    cdef int k
     assert ds.shape[0] == nval
-    for i in range(nval):
-        ds[i] = c_approx_jac(nu, a, b, c, s[i])
+    for k in range(nval):
+        ds[k] = c_approx_jac(nu, a, b, c, s[k])
 
     return 0
-
 
 
 def integrate_forward(double nu, double a, double b, double c, \
                         double t0, double s0, double t):
     return c_integrate_forward(nu, a, b, c, t0, s0, t)
+
+
+def steady_state(double nu, double a, double b, double c, \
+                        np.ndarray[double, ndim=1, mode='c'] steady not None):
+    assert steady.shape[0] == 2
+    return c_steady_state(nu, a, b, c, \
+                            <double*> np.PyArray_DATA(steady))
+
+
+def steady_state_vect(np.ndarray[double, ndim=1, mode='c'] nus not None,\
+                        np.ndarray[double, ndim=1, mode='c'] a not None, \
+                        np.ndarray[double, ndim=1, mode='c'] b not None, \
+                        np.ndarray[double, ndim=1, mode='c'] c not None, \
+                        np.ndarray[double, ndim=2, mode='c'] steady not None):
+    cdef int k
+    cdef int nval = nus.shape[0]
+    assert a.shape[0] == nval
+    assert b.shape[0] == nval
+    assert c.shape[0] == nval
+    assert steady.shape[0] == nval
+    assert steady.shape[1] == 2
+
+    for k in range(nval):
+        c_steady_state(nus[k], a[k], b[k], c[k], \
+                            <double*> np.PyArray_DATA(steady[k]))
+    return 0
 
 
 def integrate_delta_t_max(double nu, double a, double b, double c, double s0):

@@ -25,6 +25,8 @@ double c_integrate_forward(double nu, double a, double b, double c,
                         double t0, double s0,
                         double t);
 
+int c_steady_state(double nu, double a, double b, double c, double steady[2]);
+
 double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
 
