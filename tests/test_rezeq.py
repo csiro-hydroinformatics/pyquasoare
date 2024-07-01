@@ -409,10 +409,7 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
         err = np.abs(np.arcsinh(s1*1e-3)-np.arcsinh(expected*1e-3))
         iok = np.abs(dsdt)<1e3
         errmax = np.nanmax(err[iok])
-        assert errmax<1e-4, \
-                    plot_solution(te, s1, expected, params=[nu, a, b, c], \
-                                        show=True)
-
+        assert errmax<1e-4
         errmax_max = max(errmax, errmax_max)
 
     perc_skipped = nskipped*100/ntry
@@ -612,6 +609,53 @@ def test_find_alphas(allclose):
     u0 = 0.7
     ialpha = rezeq.find_alpha(alphas, u0)
     assert ialpha == 2
+
+
+def test_increment_fluxes(allclose, parameter_samples, printout):
+    case, params, cname = parameter_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip()
+    nprint = get_nprint(ntry)
+    nus, s0s, _ = sample_config(ntry)
+
+    print("")
+    print(" "*4+f"Testing increment_fluxes - case {case} / {cname}")
+    t0 = 0
+    nskipped = 0
+    errmax_max = 0
+    ntry = ntry//3
+    for itry in range(ntry):
+        if itry%nprint==0 and printout:
+            print(" "*8+f"flux - case {case} - Try {itry+1:4d}/{ntry:4d}")
+        nu, s0 = nus[itry], s0s[itry]
+        avect = params[3*itry:3*itry+3, 0]
+        bvect = params[3*itry:3*itry+3, 1]
+        cvect = params[3*itry:3*itry+3, 2]
+        aoj = avect.sum()
+        boj = bvect.sum()
+        coj = cvect.sum()
+        fluxes = np.zeros(3)
+        t0, t1 = 0, 10
+
+        # Integrate numerical
+        sfun = lambda x: rezeq.approx_fun(nu, aoj, boj, coj, x)
+        funs = [sfun] + [lambda x: rezeq.approx_fun(nu, a, b, c, x) \
+                    for a, b, c in zip(avect, bvect, cvect)]
+
+        sdfun = lambda x: rezeq.approx_jac(nu, aoj, boj, coj, x)
+        dfuns = [sdfun] + [lambda x: rezeq.approx_jac(nu, a, b, c, x) \
+                    for a, b, c in zip(avect, bvect, cvect)]
+
+        #
+        import pdb; pdb.set_trace()
+        s1 = rezeq.integrate_forward(nu, aoj, boj, coj, s0, t0, t1)
+
+
+    rezeq.increment_fluxes(nus, scalings, \
+                        avect, bvect, cvect, \
+                        aoj, boj, coj, \
+                        t0, t1, s0, s1, fluxes)
 
 
 def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):

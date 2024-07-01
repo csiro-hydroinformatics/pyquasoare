@@ -164,9 +164,9 @@ double c_integrate_inverse(double nu, double a, double b, double c,
 int c_increment_fluxes(int nfluxes,
                         double * scalings,
                         double nu,
-                        double * a_vector_noscaling,
-                        double * b_vector_noscaling,
-                        double * c_vector_noscaling,
+                        double * aj_vector_noscaling,
+                        double * bj_vector_noscaling,
+                        double * cj_vector_noscaling,
                         double aoj,
                         double boj,
                         double coj,
@@ -178,26 +178,61 @@ int c_increment_fluxes(int nfluxes,
     int i;
     double dt = t1-t0;
     double ds = s1-s0;
-    double aij, bij, cij, dflux;
+    double e0 = exp(-nu*s0);
+    double expint=0;
+    double a = aoj;
+    double b = boj;
+    double c = coj;
+    double A, B, C;
+    double sqD, Delta, aij, bij, cij, gam, lam0;
 
     if(t1<t0)
         return -1;
 
     for(i=0; i<nfluxes; i++){
-        aij = a_vector_noscaling[i]*scalings[i];
-        bij = b_vector_noscaling[i]*scalings[i];
-        cij = c_vector_noscaling[i]*scalings[i];
+        aij = aj_vector_noscaling[i]*scalings[i];
+        bij = bj_vector_noscaling[i]*scalings[i];
+        cij = cj_vector_noscaling[i]*scalings[i];
 
-        /* TODO */
-        if(notnull(boj)){
-            dflux = -999;
-        } else {
-            /* u = s0+ai(t-t0) */
-            dflux = -999;
+        if(isnull(boj) && isnull(coj)){
+
         }
-        fluxes[i] += dflux;
-    }
+        else if(isnull(a) && isnull(b) && notnull(c)){
+            expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
+        }
+        else if(isnull(a) && notnull(b) && isnull(c)){
+            expint = dt/e0+nu*c/2*(t1*t1-t0*t0);
+        }
+        else if(notnull(a) && isnull(b) && notnull(c)){
+            expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
+            expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
+        }
+        else if(notnull(a) && notnull(b) && isnull(c)){
+            expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
+            expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
+        }
+        else if(notnull(b) && notnull(c)){
+            sqD = sqrt(abs(Delta));
+            lam0 = (2*b*e0+a)/sqD;
+            if(isnull(Delta)){
+                /* Determinant is zero */
+                /* TODO */
+            }
+            else if (ispos(Delta)){
+                gam = (1-lam0)/(1+lam0);
+                expint = (log((gam+exp(t1*nu*sqD))/(gam+exp(t0*nu*sqD)))-dt)/sqD/nu;
+            }
+            else {
+                /* TODO */
+            }
+        }
 
+        /* Final flux computation */
+        A = aij-aoj*cij/coj;
+        B = cij/coj;
+        C = bij-cij*boj/coj;
+        fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
+    }
     return 0;
 }
 

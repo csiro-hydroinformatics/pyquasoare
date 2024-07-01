@@ -24,9 +24,9 @@ cdef extern from 'c_integ.h':
     int c_increment_fluxes(int nfluxes,
                             double * scalings,
                             double nu,
-                            double * a_vector_noscaling,
-                            double * b_vector_noscaling,
-                            double * c_vector_noscaling,
+                            double * aj_vector_noscaling,
+                            double * bj_vector_noscaling,
+                            double * cj_vector_noscaling,
                             double aoj,
                             double boj,
                             double coj,
@@ -177,33 +177,33 @@ def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
 
 
 def increment_fluxes(np.ndarray[double, ndim=1, mode='c'] scalings not None,
-                        double nu, \
-                        np.ndarray[double, ndim=1, mode='c'] a_vector_noscaling not None,
-                        np.ndarray[double, ndim=1, mode='c'] b_vector_noscaling not None,
-                        np.ndarray[double, ndim=1, mode='c'] c_vector_noscaling not None,
-                        double aoj, double boj, double coj, \
-                        double t0, double t1, \
-                        double s0, double s1, \
-                        np.ndarray[double, ndim=1, mode='c'] fluxes not None):
+                    double nu, \
+                    np.ndarray[double, ndim=1, mode='c'] aj_vector_noscaling not None,
+                    np.ndarray[double, ndim=1, mode='c'] bj_vector_noscaling not None,
+                    np.ndarray[double, ndim=1, mode='c'] cj_vector_noscaling not None,
+                    double aoj, double boj, double coj, \
+                    double t0, double t1, \
+                    double s0, double s1, \
+                    np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
-    cdef int nfluxes = a_vector_noscaling.shape[0]
+    cdef int nfluxes = aj_vector_noscaling.shape[0]
 
     if scalings.shape[0] != nfluxes:
         raise ValueError("scalings.shape[0] != nfluxes")
 
-    if b_vector_noscaling.shape[0] != nfluxes:
-        raise ValueError("b_vector_noscaling.shape[0] != nfluxes")
+    if bj_vector_noscaling.shape[0] != nfluxes:
+        raise ValueError("bj_vector_noscaling.shape[0] != nfluxes")
 
-    if c_vector_noscaling.shape[0] != nfluxes:
-        raise ValueError("c_vector_noscaling.shape[0] != nfluxes")
+    if cj_vector_noscaling.shape[0] != nfluxes:
+        raise ValueError("cj_vector_noscaling.shape[0] != nfluxes")
 
     # Run C code
     return c_increment_fluxes(nfluxes,
                             <double*> np.PyArray_DATA(scalings),
                             nu,
-                            <double*> np.PyArray_DATA(a_vector_noscaling),
-                            <double*> np.PyArray_DATA(b_vector_noscaling),
-                            <double*> np.PyArray_DATA(c_vector_noscaling),
+                            <double*> np.PyArray_DATA(aj_vector_noscaling),
+                            <double*> np.PyArray_DATA(bj_vector_noscaling),
+                            <double*> np.PyArray_DATA(cj_vector_noscaling),
                             aoj, boj, coj, t0, t1, s0, s1, \
                             <double*> np.PyArray_DATA(fluxes))
 
