@@ -18,21 +18,21 @@ import time
 import warnings
 
 from hydrodiy.io import csv
-from pyrezeq import rezeq
+from pyrezeq import rezeq, rezeq_slow
 
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 10
+NCASES = 12
 PARAM_MAX = 5
 S0_MAX = 5
 NU_MAX = 5
 
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \
-            params=["x2", "x5", "tanh", "exp", "sin", "recip", "recipquad"])
+            params=["x2", "x4", "x6", "tanh", "exp", "sin", "recip", "recipquad"])
 def reservoir_function(request):
     name = request.param
     # sol is the analytical solution of ds/dt = inflow+fun(s)
@@ -41,8 +41,11 @@ def reservoir_function(request):
         sol = lambda t, s0: (s0+np.tanh(t))/(1+s0*np.tanh(t))
         return name, lambda x: -x**2, lambda x: -2*x, sol, 1.
 
-    elif name == "x5":
-        return name, lambda x: -x**5, lambda x: -5*x**4, None, None
+    elif name == "x4":
+        return name, lambda x: -x**4, lambda x: -4*x**3, None, None
+
+    elif name == "x6":
+        return name, lambda x: -x**6, lambda x: -6*x**5, None, None
 
     elif name == "tanh":
         a, b = 0.5, 10
@@ -115,6 +118,12 @@ def parameter_samples(ntry, selcase, request):
         params[:, 2] = params[:, 1]
     elif case ==10:
         name = "General case"
+    elif case ==11:
+        name = "General case with large scaling"
+        params *= 1000
+    elif case ==12:
+        name = "General case with low scaling"
+        params /= 1000
 
     return case, params, name
 
@@ -135,8 +144,7 @@ def sample_config(ntry):
     nus = np.random.uniform(0, NU_MAX, ntry)
     s0s = np.random.uniform(-S0_MAX, S0_MAX, ntry)
     Tmax = 20
-    t_eval = np.linspace(0, Tmax, 5000)
-    return nus, s0s, t_eval, Tmax
+    return nus, s0s, Tmax
 
 def plot_solution(t, s1, expected=None, title="", params=None, \
                         s0=None, clear=False, show=False):
@@ -187,13 +195,14 @@ def test_approx_fun(allclose):
         assert allclose(ds, expected[0])
 
 
-def test_integrate_tmax(allclose, parameter_samples, printout):
+def test_integrate_delta_t_max(allclose, parameter_samples, printout):
     case, params, cname = parameter_samples
     ntry = len(params)
     if ntry==0:
-        pytest.skip("No parameter samples")
+        pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
-    nus, s0s, t_eval, Tmax = sample_config(ntry)
+    nus, s0s, Tmax = sample_config(ntry)
+    t_eval = np.linspace(0, Tmax, 1000)
 
     print("")
     print(" "*4+f"Testing integrate_tmax - case {case} / {cname}")
@@ -210,8 +219,9 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
         t0 = 0
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, ns1 = rezeq.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
+        te, ns1 = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
 
+        # Check tmax < end of sim
         if te.max()<Tmax and te.max()>0 and len(te)>3:
             Delta = a**2-4*b*c
             ndpos += Delta>0
@@ -220,7 +230,7 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
             t0, t1 = te[[-3, -1]]
             te = np.linspace(t0, 2*t1-t0, 1000)
             s0 = ns1[-3]
-            te, ns1 = rezeq.integrate_forward_numerical([f], [df], t0, [s0], te)
+            te, ns1 = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], te)
             expected = te.max()
 
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, te)
@@ -236,21 +246,20 @@ def test_integrate_tmax(allclose, parameter_samples, printout):
 
     mess = " "*4+f">> Errmax = {err_max:3.2e}"\
             f"  skipped={100*nskipped/ntry:0.0f}%"
-    if case in [8, 9, 10]:
-        mess += f" - when running we have Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
+    if case >=8:
+        if nskipped<ntry:
+            mess += f" - when running we have Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
+
     print(mess)
     print("")
 
 
-def test_steady_state(allclose, parameter_samples, printout):
+def test_steady_state(allclose, parameter_samples):
     case, params, cname = parameter_samples
     ntry = len(params)
     if ntry==0:
-        pytest.skip("No parameter samples")
-    if case<5:
-        pytest.skip("No steady state")
+        pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
-    nus, s0s, t_eval, Tmax = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing steady state - case {case} / {cname}")
@@ -258,16 +267,34 @@ def test_steady_state(allclose, parameter_samples, printout):
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
     steady = rezeq.steady_state(nus, a, b, c)
 
+    if case<5:
+        # No steady state
+        assert np.all(np.isnan(steady))
+        print(" "*4 +">> No steady state for this case")
+        return
+
+    # check nan values
+    iboth = np.isnan(steady).sum(axis=1)==0
+    assert np.all(np.diff(steady[iboth], axis=1)>=0)
+
+    if case==10:
+        # 2 distinct roots
+        assert np.all(np.diff(steady[iboth], axis=1)>0)
+
+    ione = np.isnan(steady).sum(axis=1)==1
+    assert np.all(~np.isnan(steady[ione, 0]))
+
+    # check steady state
     f = np.array([[rezeq.approx_fun(nu, aa, bb, cc, s) for nu, aa, bb, cc, s\
                         in zip(nus, a, b, c, ss)] for ss in steady.T]).T
     err_max = np.nanmax(np.abs(f))
-    nskipped = np.all(np.isnan(f), axis=1).sum()
+    assert err_max < 5e-4
 
+    nskipped = np.all(np.isnan(f), axis=1).sum()
     mess = " "*4+f">> Errmax = {err_max:3.2e}"\
             f"  skipped={100*(nskipped)/ntry:0.0f}%"
     print(mess)
     print("")
-
 
 
 def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, printout):
@@ -276,7 +303,7 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, t_eval, Tmax = sample_config(ntry)
+    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_forward using diff - case {case} / {cname}")
@@ -289,7 +316,15 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
         if itry%nprint==0 and printout:
             print(" "*8+f"forward - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
+        # Set integration time
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        if np.isnan(Tmax) or Tmax<0:
+            continue
+        t_eval = np.linspace(0, Tmax, 1000)
+
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
+        if np.all(np.isnan(s1)):
+            continue
         Tmax_rev = t_eval[~np.isnan(s1)].max()
         if Tmax_rev<1e-10:
             continue
@@ -321,9 +356,8 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
 
         errmax_max = max(errmax, errmax_max)
 
-    mess = f">> Errmax = {errmax_max:3.2e}"\
-                f" skipped={(ntry-notskipped)*100/ntry:0.0f}%"
-    print(" "*4+mess)
+    print(" "*4+f">> Errmax = {errmax_max:3.2e}"\
+                f" skipped={(ntry-notskipped)*100/ntry:0.0f}%")
     print("")
 
 
@@ -333,7 +367,7 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, t_eval, Tmax = sample_config(ntry)
+    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_forward vs numerical - case {case} / {cname}")
@@ -353,9 +387,16 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
         if itry%nprint==0 and printout:
             print(" "*8+f"forward - {name} - Try {itry+1:4d}/{ntry:4d}")
 
+        # Set integration time
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        if np.isnan(Tmax) or Tmax<0:
+            continue
+        t_eval = np.linspace(0, Tmax, 1000)
+
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, expected = rezeq.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
+        te, expected = rezeq_slow.integrate_forward_numerical([f], [df], \
+                                                            t0, [s0], t_eval)
         if len(te)<3:
             nskipped += 1
             continue
@@ -368,13 +409,15 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
         err = np.abs(np.arcsinh(s1*1e-3)-np.arcsinh(expected*1e-3))
         iok = np.abs(dsdt)<1e3
         errmax = np.nanmax(err[iok])
-        assert errmax<1e-4
+        assert errmax<1e-4, \
+                    plot_solution(te, s1, expected, params=[nu, a, b, c], \
+                                        show=True)
 
         errmax_max = max(errmax, errmax_max)
 
     perc_skipped = nskipped*100/ntry
     mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
-    if case in [8, 9, 10]:
+    if case>=8:
         perc_delta_pos = perc_delta_pos/ndelta*100
         mess += f"  Delta>0 = {perc_delta_pos:0.0f}%"
     print(" "*4+mess)
@@ -387,45 +430,54 @@ def test_integrate_inverse(allclose, parameter_samples, printout):
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, t_eval, Tmax = sample_config(ntry)
+    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_inverse - case {case} / {cname}")
     t0 = 0
+    nskipped = 0
     errmax_max = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
             print(" "*8+f"inverse - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
+        # Set integration time
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        if np.isnan(Tmax) or Tmax<0:
+            nskipped += 1
+            continue
+        t_eval = np.linspace(0, Tmax, 1000)
+
         # Simulate
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
+        ds1 = rezeq.approx_fun(nu, a, b, c, s1)
 
-        iok = ~np.isnan(s1)
+        iok = ~np.isnan(s1) & (ds1>1e-5)
         iok[0] = False
         if iok.sum()<5:
+            nskipped += 1
             continue
 
         t, s1 = t_eval[iok], s1[iok]
 
         # Compute difference
         ta = rezeq.integrate_inverse(nu, a, b, c, s0, s1)
+        assert np.all(ta>=0)
 
         dsdt = rezeq.approx_fun(nu, a, b, c, s1)
         err = np.abs(np.log(ta*1e-3)-np.log((t-t0)*1e-3))
         iok = (dsdt>1e-4) & (dsdt<1e4)
         if iok.sum()<5:
+            nskipped += 1
             continue
 
         errmax = np.nanmax(err[iok])
-        #assert errmax<(1e-3 if case==8 else 1e-9)
-        if np.isnan(errmax):
-            plot_solution(t, s1, params=[nu, a, b, c], show=True, clear=True)
-            import pdb; pdb.set_trace()
-
-
+        assert errmax< 5e-6 if case in [9, 12] else 1e-8
         errmax_max = max(errmax, errmax_max)
 
-    print(" "*4+f">> Errmax = {errmax_max:3.2e}")
+    perc_skipped = nskipped*100/ntry
+    mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
+    print(" "*4+mess)
     print("")
 
 
@@ -436,27 +488,24 @@ def test_get_coefficients(allclose, reservoir_function):
     alphajp1 = 1.
     nus = [0.01, 0.1, 1, 5]
 
-    for eps, nu in prod([None, -1, 0, 0.2, 0.5, 0.8], nus):
+    for eps, nu in prod([None, 0.2, 0.5, 0.8], nus):
         if eps==-1 and nu>nus[0]:
             continue
-        a, b, c = rezeq.get_coefficients(fun, dfun, alphaj, alphajp1, nu, eps)
+        a, b, c = rezeq.get_coefficients(fun, alphaj, alphajp1, nu, eps)
 
         # Check continuity
         assert allclose(rezeq.approx_fun(nu, a, b, c, alphaj), fun(alphaj))
         assert allclose(rezeq.approx_fun(nu, a, b, c, alphajp1), fun(alphajp1))
 
-        # Check derivative
+        # Check mid-point values
         if eps is None:
             continue
         elif eps==-1:
             assert b==-c
-        elif eps==0:
-            assert allclose(rezeq.approx_jac(nu, a, b, c, alphaj), dfun(alphaj))
-        elif eps==1:
-            assert allclose(rezeq.approx_jac(nu, a, b, c, alphajp1), dfun(alphajp1))
         else:
             x = (1-eps)*alphaj+eps*alphajp1
             assert allclose(rezeq.approx_fun(nu, a, b, c, x), fun(x))
+
 
 
 def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
@@ -467,14 +516,12 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
             pytest.skip("Skip non selected function")
 
     funs = [lambda x: 1., fun]
-    dfuns = [lambda x: 0, dfun]
-
     nalphas = 500
     alphas = np.linspace(0., 1., nalphas)
-    nus = [0.01, 1, 5]
+    nus = [0.01, 1, 2, 5, 8]
     s = np.linspace(-0.1, 1.1, 1000)
     print("")
-    errmax = {n: 0 for n in nus}
+    errmax = {n: np.inf for n in nus}
     #for e, nu in prod([-1, 0, 0.2, 0.5, 0.8, 1], nus):
     for e, nu in prod([None], nus):
         if e==-1 and nu>nus[0]:
@@ -482,10 +529,10 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
 
         n = nu*np.ones(nalphas-1)
         eps = None if e is None else e*np.ones(nalphas-1)
-        ne, ae, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
-                                            dfuns, alphas, n, eps)
-        out = rezeq.approx_fun_from_matrix(ae, ne, amat, bmat, cmat, s)
-
+        _, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
+                                                        alphas, n, eps)
+        # Run approx
+        out = rezeq.approx_fun_from_matrix(alphas, n, amat, bmat, cmat, s)
         fapprox = out[:, 1]
         assert allclose(fapprox[s<0], fun(0))
         assert allclose(fapprox[s>1], fun(1))
@@ -494,7 +541,7 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
         err = fapprox-ftrue
         isin = (s>=0)&(s<=1)
         emax = np.abs(err[isin]).max()
-        errmax[nu] = max(errmax[nu], emax)
+        errmax[nu] = min(errmax[nu], emax)
 
         if fname in "sin":
             ethresh = 1e-6
@@ -509,6 +556,39 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
     print(f"coef matrix - fun={fname} :")
     for nu in nus:
         print(" "*4+f"errmax(nu={nu:0.2f}) = {errmax[nu]:3.3e}")
+
+
+def test_steady_state_scalings(allclose):
+    nalphas = 500
+    alphas = np.linspace(0, 1.2, nalphas)
+    # GR4J production
+    funs = [
+        lambda x: 1-x**2, \
+        lambda x: -x*(2-x), \
+        lambda x: -x**4/3
+    ]
+    nus, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, alphas)
+
+    nval = 200
+    scalings = np.random.uniform(0, 100, size=(nval, 3))
+    scalings[:, -1] = 1
+
+    steady = rezeq.steady_state_scalings(alphas, nus, scalings, amat, bmat, cmat)
+    for t in range(nval):
+        s0 = steady[t]
+        # Check steady on approx fun
+        amats = amat*scalings[t][None, :]
+        bmats = bmat*scalings[t][None, :]
+        cmats = cmat*scalings[t][None, :]
+        out = rezeq.approx_fun_from_matrix(alphas, nus, amats, bmats, cmats, s0)
+        fsum = out.sum(axis=1)
+        assert allclose(fsum[~np.isnan(fsum)], 0.)
+
+        # Check steady on original fun
+        feval = np.array([f(s0)*scalings[t, ifun] for ifun, f in enumerate(funs)])
+        fsum = np.sum(feval, axis=0)
+        assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-7)
+
 
 
 def test_find_alphas(allclose):
@@ -554,11 +634,11 @@ def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):
     nalphas = 500
     alphas = np.linspace(0., 1., nalphas)
     nus, alphase, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
-                                            dfuns, alphas, nus=1)
+                                                                alphas, nus=1)
     s0 = [-5, 0, 0]
     t0, Tmax = 0, 10
     t_eval = np.linspace(t0, Tmax, 500)
-    te, expected = rezeq.integrate_forward_numerical(funs, dfuns, t0, s0, t_eval)
+    te, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, t0, s0, t_eval)
 
     import pdb; pdb.set_trace()
 

@@ -4,24 +4,22 @@ cimport numpy as np
 np.import_array()
 
 # -- HEADERS --
-cdef extern from 'c_integ.h':
+cdef extern from 'c_utils.h':
     double c_get_eps()
 
+    int c_find_alpha(int nalphas, double * alphas, double s0);
+
+cdef extern from 'c_integ.h':
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
     double c_approx_jac(double nu, double a, double b, double c, double s);
 
     double c_integrate_forward(double nu, double a, double b, double c,
                                     double t0, double s0, double t);
-
-    int c_steady_state(double nu, double a, double b, double c, double steady[2]);
-
     double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
     double c_integrate_inverse(double nu, double a, double b, double c,
                                         double s0, double s1);
-
-    int c_find_alpha(int nalphas, double * alphas, double s0);
 
     int c_increment_fluxes(int nfluxes,
                             double * scalings,
@@ -49,6 +47,7 @@ cdef extern from 'c_integ.h':
                                 double * s1,
                                 double * fluxes);
 
+cdef extern from 'c_run.h':
     int c_run(int nalphas, int nfluxes, int nval, double delta,
                                 double * alphas,
                                 double * scalings,
@@ -59,6 +58,9 @@ cdef extern from 'c_integ.h':
                                 double s0,
                                 double * s1,
                                 double * fluxes);
+
+cdef extern from 'c_steady.h':
+    int c_steady_state(double nu, double a, double b, double c, double steady[2]);
 
 
 cdef extern from 'c_quadrouting.h':

@@ -56,38 +56,6 @@ def steady_state(nu, a, b, c):
     return steady
 
 
-def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
-                            method="Radau", max_step=np.inf, \
-                            fun_args=None):
-    nfluxes = len(funs)
-    assert len(dfuns) == nfluxes
-    v = np.zeros(nfluxes)
-    def fun_ivp(t, y):
-        for i in range(nfluxes):
-            v[i] = funs[i](y[0])
-        return v
-
-    m = np.zeros((nfluxes, nfluxes))
-    jac_ivp = None
-    if method == "Radau":
-        def jac_ivp(t, y):
-            for i in range(nfluxes):
-                m[i, 0] = dfuns[i](y[0])
-            return m
-
-    res = solve_ivp(\
-            fun=fun_ivp, \
-            t_span=[t0, t[-1]], \
-            y0=s0, \
-            method=method, \
-            max_step=max_step, \
-            jac=jac_ivp, \
-            t_eval=t, \
-            args=fun_args)
-
-    return res.t, res.y.T.squeeze()
-
-
 
 def integrate_delta_t_max(nu, a, b, c, s0):
     return c_pyrezeq.integrate_delta_t_max(nu, a, b, c, s0)
@@ -106,20 +74,17 @@ def find_alpha(alphas, u0):
     return c_pyrezeq.find_alpha(alphas, u0)
 
 
-def get_coefficients(fun, dfun, alphaj, alphajp1, nu, epsilon, ninterp=500):
+def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=500):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         nu is the non-linearity coefficient.
         epsilon is the option controlling the third constraint:
-        -1 : set linearity constraint b=-c
-        0 : use derivative in alphaj
-        1 : use derivative in alphajp1
         ]0, 1[ : use mid-point in ]alphaj, alphajp1[
         ]
     """
     assert alphajp1>alphaj
     has_epsilon = not epsilon is None
     if has_epsilon:
-        assert epsilon==-1 or (epsilon>=0 and epsilon<=1)
+        assert epsilon>0 and epsilon<1
 
     # Basic constraints
     fa = lambda a, b, c, x: approx_fun(nu, a, b, c, x)
@@ -128,22 +93,9 @@ def get_coefficients(fun, dfun, alphaj, alphajp1, nu, epsilon, ninterp=500):
     y = [fun(alphaj), fun(alphajp1)]
 
     if has_epsilon:
-        # Epsilon is predefined - Additional constraint
-        if epsilon==-1:
-            # Equality b=-c
-            X.append([0, 1, 1])
-            y.append(0)
-        elif epsilon in [0, 1]:
-            # Derivative
-            x = alphaj if epsilon==0 else alphajp1
-            ja = lambda a, b, c, x: approx_jac(nu, a, b, c, x)
-            X.append([ja(1, 0, 0, x), ja(0, 1, 0, x), ja(0, 0, 1, x)])
-            y.append(dfun(x))
-        else:
-            # Mid-point
-            x = (1-epsilon)*alphaj+epsilon*alphajp1
-            X.append([fa(1, 0, 0, x), fa(0, 1, 0, x), fa(0, 0, 1, x)])
-            y.append(fun(x))
+        x = (1-epsilon)*alphaj+epsilon*alphajp1
+        X.append([fa(1, 0, 0, x), fa(0, 1, 0, x), fa(0, 0, 1, x)])
+        y.append(fun(x))
     else:
         # Fit epsilon
         xx = np.linspace(alphaj, alphajp1, ninterp)
@@ -172,7 +124,7 @@ def get_coefficients(fun, dfun, alphaj, alphajp1, nu, epsilon, ninterp=500):
     return np.linalg.solve(X, y)
 
 
-def get_coefficients_matrix(funs, dfuns, alphas, nus, epsilons=None, ext=1e-3):
+def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     """ Generate coefficient matrices for flux functions """
     nalphas = len(alphas)
     # Default
@@ -190,32 +142,22 @@ def get_coefficients_matrix(funs, dfuns, alphas, nus, epsilons=None, ext=1e-3):
     nfluxes = len(funs)
 
     # we add one row at the top end bottom for continuity extension
-    a_matrix = np.zeros((nalphas+1, nfluxes))
-    b_matrix = np.zeros((nalphas+1, nfluxes))
-    c_matrix = np.zeros((nalphas+1, nfluxes))
+    a_matrix = np.zeros((nalphas-1, nfluxes))
+    b_matrix = np.zeros((nalphas-1, nfluxes))
+    c_matrix = np.zeros((nalphas-1, nfluxes))
     for j in range(nalphas-1):
         nu = nus[j]
         epsilon = epsilons[j] if has_epsilons else None
         alphaj, alphajp1 = alphas[[j, j+1]]
 
-        for ifun, (f, df) in enumerate(zip(funs, dfuns)):
-            a, b, c = get_coefficients(f, df, alphaj, alphajp1,\
-                                                    nu, epsilon)
-            a_matrix[j+1, ifun] = a
-            b_matrix[j+1, ifun] = b
-            c_matrix[j+1, ifun] = c
-
-    # Add fixed derivative extension
-    if ext>0:
-        alpha0, alpha1 = alphas[[0, -1]]
-        alphas_ext = np.concatenate([[alpha0-ext], alphas, [alpha1+ext]])
-        nus_ext = np.concatenate([[nus[0]], nus, [nus[-1]]])
         for ifun, f in enumerate(funs):
-            a_matrix[0, ifun] = f(alpha0)
-            a_matrix[-1, ifun] = f(alpha1)
+            a, b, c = get_coefficients(f, alphaj, alphajp1,\
+                                                    nu, epsilon)
+            a_matrix[j, ifun] = a
+            b_matrix[j, ifun] = b
+            c_matrix[j, ifun] = c
 
-    return nus_ext, alphas_ext, a_matrix, b_matrix, c_matrix
-
+    return nus, a_matrix, b_matrix, c_matrix
 
 
 def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
@@ -227,17 +169,26 @@ def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
     assert c_matrix.shape == a_matrix.shape
 
     outputs = np.nan*np.zeros((len(s), a_matrix.shape[1]))
+
+    # Outside of alpha bounds
+    idx = s<alphas[0]
+    if idx.sum()>0:
+        o = [approx_fun(nus[0], a, b, c, alphas[0]) for a, b, c \
+                    in zip(a_matrix[0], b_matrix[0], c_matrix[0])]
+        outputs[idx] = np.column_stack(o)
+
+    idx = s>alphas[-1]
+    if idx.sum()>0:
+        o = [approx_fun(nus[-1], a, b, c, alphas[-1]) for a, b, c \
+                    in zip(a_matrix[-1], b_matrix[-1], c_matrix[-1])]
+        outputs[idx] = np.column_stack(o)
+
+    # Inside alpha bounds
     for j in range(nalphas-1):
         nu = nus[j]
         alphaj, alphajp1 = alphas[[j, j+1]]
 
-        if j==0:
-            idx = s<alphajp1
-        elif j==nalphas-2:
-            idx = s>=alphaj
-        else:
-            idx = (s>=alphaj)&(s<alphajp1)
-
+        idx = (s>=alphaj)&(s<alphajp1)
         if idx.sum()==0:
             continue
 
@@ -250,8 +201,40 @@ def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
     return outputs
 
 
+def approx_error(funs, alphas, nus, a_matrix, b_matrix, c_matrix):
+    pass
 
-def increment_fluxes(scalings, nus, \
+
+
+def steady_state_scalings(alphas, nus, scalings, \
+                a_matrix_noscaling, \
+                b_matrix_noscaling, \
+                c_matrix_noscaling):
+    # Check inputs
+    nalphas = len(alphas)
+    nval, nfluxes = scalings.shape
+    for m in [a_matrix_noscaling, b_matrix_noscaling, c_matrix_noscaling]:
+        assert len(m) == nalphas-1
+        assert m.shape[1] == nfluxes
+
+    steady = np.nan*np.zeros((nval, 2))
+    for j in range(1, nalphas-1):
+        a0 = scalings@a_matrix_noscaling[j]
+        b0 = scalings@b_matrix_noscaling[j]
+        c0 = scalings@c_matrix_noscaling[j]
+        nu = np.ones_like(a0)*nus[j]
+        s = steady_state(nu, a0, b0, c0)
+
+        # eliminates steady states outside bounds
+        s[s<alphas[j]] = np.nan
+        s[s>alphas[j+1]] = np.nan
+        isok = ~np.isnan(s)
+        steady[isok] = s[isok]
+
+    return np.array(steady)
+
+
+def increment_fluxes(nus, scalings, \
                         a_vector_noscaling, \
                         b_vector_noscaling, \
                         c_vector_noscaling, \
@@ -268,27 +251,6 @@ def increment_fluxes(scalings, nus, \
         raise ValueError(f"c_pyrezeq.integrate returns {ierr}")
 
 
-def steady_state_scalings(alphas, scalings, nus, \
-                a_matrix_noscaling, \
-                b_matrix_noscaling, \
-                c_matrix_noscaling):
-    """ uses extended matrices = outputs from get_coefficients_matrix """
-    nalphas = len(alphas)
-    nval, nfluxes = scalings.shape
-
-    for m in [a_matrix_noscaling, b_matrix_noscaling, c_matrix_noscaling]:
-        assert len(m) == nalphas+1
-        assert m.shape[1] == nfluxes
-
-    steady = []
-    for j in range(1, nalphas):
-        nu = nus[j]
-        a0 = scalings@a_matrix[j]
-        b0 = scalings@b_matrix[j]
-        c0 = scalings@c_matrix[j]
-        s = steady_state(nu, a0, b0, c0)
-        # TODO
-
 
 
 def integrate(delta, alphas, scalings, nus, \
@@ -296,9 +258,12 @@ def integrate(delta, alphas, scalings, nus, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, \
                 s0):
+    # Initialise
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
     s1 = np.zeros(1, dtype=np.float64)
-    ierr = c_pyrezeq.integrate(delta, scalings, nus, \
+
+    # run
+    ierr = c_pyrezeq.integrate(delta, alphas, scalings, nus, \
                     a_matrix_noscaling, b_matrix_noscaling, \
                     c_matrix_noscaling, s0, s1, fluxes)
     if ierr>0:
@@ -316,7 +281,6 @@ def run(delta, alphas, scalings, \
                 s0):
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
     s1 = np.zeros(scalings.shape[0], dtype=np.float64)
-
     ierr = c_pyrezeq.run(delta, alphas, scalings, \
                     nu_vector, \
                     a_matrix_noscaling, \

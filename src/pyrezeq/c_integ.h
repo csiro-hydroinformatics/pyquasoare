@@ -1,5 +1,5 @@
-#ifndef __REZEQ__
-#define __REZEQ__
+#ifndef __REZEQ_INTEG__
+#define __REZEQ_INTEG__
 
 #include <math.h>
 #include <stdlib.h>
@@ -7,15 +7,8 @@
 #include <string.h>
 #include <errno.h>
 
-/* Define Error message */
-#define REZEQ_ERROR 123000
+#include "c_utils.h"
 
-/* Define small number */
-#define REZEQ_EPS 1e-10
-
-#define REZEQ_PI 3.1415926535897936
-
-double c_get_eps();
 
 double c_approx_fun(double nu, double a, double b, double c, double s);
 
@@ -25,15 +18,11 @@ double c_integrate_forward(double nu, double a, double b, double c,
                         double t0, double s0,
                         double t);
 
-int c_steady_state(double nu, double a, double b, double c, double steady[2]);
-
 double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
 
 
 double c_integrate_inverse(double nu, double a, double b, double c,
                                 double s0, double s1);
-
-int c_find_alpha(int nalphas, double * alphas, double s0);
 
 int c_increment_fluxes(int nfluxes,
                         double * scalings,
