@@ -72,6 +72,9 @@ double c_integrate_forward(double nu, double a, double b, double c,
     if(nu<0)
         return c_get_nan();
 
+    if(t<0)
+        return c_get_nan();
+
     double dtmax = c_integrate_delta_t_max(nu, a, b, c, s0);
     if(t-t0>dtmax)
         return c_get_nan();
@@ -187,51 +190,56 @@ int c_increment_fluxes(int nfluxes,
     double sqD, Delta, aij, bij, cij, gam, lam0;
 
     if(t1<t0)
-        return -1;
+        return REZEQ_ERROR + __LINE__;
 
     for(i=0; i<nfluxes; i++){
         aij = aj_vector_noscaling[i]*scalings[i];
         bij = bj_vector_noscaling[i]*scalings[i];
         cij = cj_vector_noscaling[i]*scalings[i];
 
-        if(isnull(boj) && isnull(coj)){
+        if(isnull(b) && isnull(c)){
+            fluxes[i] += aij*dt-bij/nu/a/e0*(exp(-nu*a*t1)-exp(-nu*a*t0));
+            fluxes[i] += cij/nu/a/e0*(exp(nu*a*t1)-exp(nu*a*t0));
 
-        }
-        else if(isnull(a) && isnull(b) && notnull(c)){
-            expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
-        }
-        else if(isnull(a) && notnull(b) && isnull(c)){
-            expint = dt/e0+nu*c/2*(t1*t1-t0*t0);
-        }
-        else if(notnull(a) && isnull(b) && notnull(c)){
-            expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
-            expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
-        }
-        else if(notnull(a) && notnull(b) && isnull(c)){
-            expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
-            expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
-        }
-        else if(notnull(b) && notnull(c)){
-            sqD = sqrt(abs(Delta));
-            lam0 = (2*b*e0+a)/sqD;
-            if(isnull(Delta)){
-                /* Determinant is zero */
-                /* TODO */
+        } else {
+            if(isnull(a) && isnull(b) && notnull(c)){
+                expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
             }
-            else if (ispos(Delta)){
-                gam = (1-lam0)/(1+lam0);
-                expint = (log((gam+exp(t1*nu*sqD))/(gam+exp(t0*nu*sqD)))-dt)/sqD/nu;
+            else if(isnull(a) && notnull(b) && isnull(c)){
+                expint = dt/e0+nu*b/2*(t1*t1-t0*t0);
             }
-            else {
-                /* TODO */
+            else if(notnull(a) && isnull(b) && notnull(c)){
+                expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
+                expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
             }
-        }
+            else if(notnull(a) && notnull(b) && isnull(c)){
+                expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
+                expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
+            }
+            else if(notnull(b) && notnull(c)){
+                sqD = sqrt(abs(Delta));
+                lam0 = (2*b*e0+a)/sqD;
+                if(isnull(Delta)){
+                    /* Determinant is zero */
+                    /* TODO */
+                    expint = 0;
+                }
+                else if (ispos(Delta)){
+                    gam = (1-lam0)/(1+lam0);
+                    expint = (log((gam+exp(t1*nu*sqD))/(gam+exp(t0*nu*sqD)))-dt)/sqD/nu;
+                }
+                else {
+                    /* TODO */
+                    expint = 0;
+                }
+            }
 
-        /* Final flux computation */
-        A = aij-aoj*cij/coj;
-        B = cij/coj;
-        C = bij-cij*boj/coj;
-        fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
+            /* Final flux computation */
+            A = aij-aoj*cij/coj;
+            B = cij/coj;
+            C = bij-cij*boj/coj;
+            fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
+        }
     }
     return 0;
 }

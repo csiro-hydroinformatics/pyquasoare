@@ -25,7 +25,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 12
+NCASES = 13
 PARAM_MAX = 5
 S0_MAX = 5
 NU_MAX = 5
@@ -88,40 +88,44 @@ def parameter_samples(ntry, selcase, request):
         name = "all zero except c"
         v0[:2] = 0
         v1[:2] = 0
-    elif case == 3:
+    if case == 3:
+        name = "all zero except b"
+        v0[:2] = 0
+        v1[:2] = 0
+    elif case == 4:
         name = "a and c are zero"
         v0[[0, 2]] = 0
         v1[[0, 2]] = 0
-    elif case == 4:
+    elif case == 5:
         name = "a and b are zero"
         v0[[0, 1]] = 0
         v1[[0, 1]] = 0
-    elif case == 5:
+    elif case == 6:
         name = "b is zero"
         v0[1] = 0
         v1[1] = 0
-    elif case == 6:
+    elif case == 7:
         name = "c is zero"
         v0[2] = 0
         v1[2] = 0
 
     params = v0[None, :]+(v1-v0)[None, :]*eps
 
-    if case == 7:
+    if case == 8:
         name = "Determinant is null"
         params[:, 2] = params[:, 0]**2/4/params[:, 1]
-    elif case == 8:
+    elif case == 9:
         name = "linear constraint b=-c"
         params[:, 2] = -params[:, 1]
-    elif case == 9:
+    elif case == 10:
         name = "linear constraint b=c"
         params[:, 2] = params[:, 1]
-    elif case ==10:
-        name = "General case"
     elif case ==11:
+        name = "General case"
+    elif case ==12:
         name = "General case with large scaling"
         params *= 1000
-    elif case ==12:
+    elif case ==13:
         name = "General case with low scaling"
         params /= 1000
 
@@ -181,18 +185,22 @@ def plot_solution(t, s1, expected=None, title="", params=None, \
 
 # ----- TEST FUNCTIONS --------------------------------------------
 
-def test_approx_fun(allclose):
-    abcs = np.random.uniform(-2, 2, size=(100, 3))
-    nus = np.random.uniform(-2, 2, size=100)
-    s = np.linspace(-10, 10)
-    for abc, nu in zip(abcs, nus):
-        a, b, c = abc
-        ds = rezeq.approx_fun(nu, a, b, c, s)
-        expected = a+b*np.exp(-nu*s)+c*np.exp(nu*s)
+def test_approx_fun(allclose, parameter_samples):
+    case, params, cname = parameter_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip("Skip param config")
+    nprint = get_nprint(ntry)
+    nus, s0s, Tmax = sample_config(ntry)
+
+    for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
+        ds = rezeq.approx_fun(nu, a, b, c, s0s)
+        expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
         assert allclose(ds, expected)
 
-        ds = rezeq.approx_fun(nu, a, b, c, s[0])
-        assert allclose(ds, expected[0])
+        jac = rezeq.approx_jac(nu, a, b, c, s0s)
+        expected = -nu*b*np.exp(-nu*s0s)+nu*c*np.exp(nu*s0s)
+        assert allclose(jac, expected)
 
 
 def test_integrate_delta_t_max(allclose, parameter_samples, printout):
@@ -246,7 +254,7 @@ def test_integrate_delta_t_max(allclose, parameter_samples, printout):
 
     mess = " "*4+f">> Errmax = {err_max:3.2e}"\
             f"  skipped={100*nskipped/ntry:0.0f}%"
-    if case >=8:
+    if case>=9:
         if nskipped<ntry:
             mess += f" - when running we have Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
 
@@ -260,6 +268,7 @@ def test_steady_state(allclose, parameter_samples):
     if ntry==0:
         pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
+    nus, _, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing steady state - case {case} / {cname}")
@@ -267,7 +276,7 @@ def test_steady_state(allclose, parameter_samples):
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
     steady = rezeq.steady_state(nus, a, b, c)
 
-    if case<5:
+    if case<6:
         # No steady state
         assert np.all(np.isnan(steady))
         print(" "*4 +">> No steady state for this case")
@@ -277,9 +286,11 @@ def test_steady_state(allclose, parameter_samples):
     iboth = np.isnan(steady).sum(axis=1)==0
     assert np.all(np.diff(steady[iboth], axis=1)>=0)
 
-    if case==10:
+    if case>=9:
         # 2 distinct roots
-        assert np.all(np.diff(steady[iboth], axis=1)>0)
+        Delta = a**2-4*b*c
+        ipos = Delta>0
+        assert np.all(np.diff(steady[iboth&ipos], axis=1)>0)
 
     ione = np.isnan(steady).sum(axis=1)==1
     assert np.all(~np.isnan(steady[ione, 0]))
@@ -317,7 +328,7 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
             print(" "*8+f"forward - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
-        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)*0.99)
         if np.isnan(Tmax) or Tmax<0:
             continue
         t_eval = np.linspace(0, Tmax, 1000)
@@ -388,7 +399,7 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
             print(" "*8+f"forward - {name} - Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
-        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)*0.99)
         if np.isnan(Tmax) or Tmax<0:
             continue
         t_eval = np.linspace(0, Tmax, 1000)
@@ -414,7 +425,7 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
 
     perc_skipped = nskipped*100/ntry
     mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
-    if case>=8:
+    if case>=9:
         perc_delta_pos = perc_delta_pos/ndelta*100
         mess += f"  Delta>0 = {perc_delta_pos:0.0f}%"
     print(" "*4+mess)
@@ -439,7 +450,7 @@ def test_integrate_inverse(allclose, parameter_samples, printout):
             print(" "*8+f"inverse - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
-        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)-1e-2)
+        Tmax = min(20, t0+rezeq.integrate_delta_t_max(nu, a, b, c, s0)*0.99)
         if np.isnan(Tmax) or Tmax<0:
             nskipped += 1
             continue
@@ -621,7 +632,6 @@ def test_increment_fluxes(allclose, parameter_samples, printout):
 
     print("")
     print(" "*4+f"Testing increment_fluxes - case {case} / {cname}")
-    t0 = 0
     nskipped = 0
     errmax_max = 0
     ntry = ntry//3
@@ -629,33 +639,58 @@ def test_increment_fluxes(allclose, parameter_samples, printout):
         if itry%nprint==0 and printout:
             print(" "*8+f"flux - case {case} - Try {itry+1:4d}/{ntry:4d}")
         nu, s0 = nus[itry], s0s[itry]
-        avect = params[3*itry:3*itry+3, 0]
-        bvect = params[3*itry:3*itry+3, 1]
-        cvect = params[3*itry:3*itry+3, 2]
+        avect = np.ascontiguousarray(params[3*itry:3*itry+3, 0])
+        bvect = np.ascontiguousarray(params[3*itry:3*itry+3, 1])
+        cvect = np.ascontiguousarray(params[3*itry:3*itry+3, 2])
         aoj = avect.sum()
         boj = bvect.sum()
         coj = cvect.sum()
-        fluxes = np.zeros(3)
-        t0, t1 = 0, 10
 
-        # Integrate numerical
-        sfun = lambda x: rezeq.approx_fun(nu, aoj, boj, coj, x)
-        funs = [sfun] + [lambda x: rezeq.approx_fun(nu, a, b, c, x) \
-                    for a, b, c in zip(avect, bvect, cvect)]
+        # Integrate forward analytically
+        t0 = 0
+        t1 = min(10, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
+        t1 = t0 + t1*0.99
+        s1 = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t1)
+        if np.isnan(s1):
+            continue
 
-        sdfun = lambda x: rezeq.approx_jac(nu, aoj, boj, coj, x)
-        dfuns = [sdfun] + [lambda x: rezeq.approx_jac(nu, a, b, c, x) \
-                    for a, b, c in zip(avect, bvect, cvect)]
-
-        #
-        import pdb; pdb.set_trace()
-        s1 = rezeq.integrate_forward(nu, aoj, boj, coj, s0, t0, t1)
-
-
-    rezeq.increment_fluxes(nus, scalings, \
+        # Compute fluxes analytically
+        fluxes, scalings = np.zeros(3), np.ones(3)
+        rezeq.increment_fluxes(scalings, nu, \
                         avect, bvect, cvect, \
                         aoj, boj, coj, \
                         t0, t1, s0, s1, fluxes)
+
+        # Test mass balance
+        # TODO
+
+        # Integrate forward numerically
+        funs = [\
+                    lambda x: rezeq.approx_fun(nu, aoj, boj, coj, x), \
+                    lambda x: rezeq.approx_fun(nu, avect[0], bvect[0], cvect[0], x), \
+                    lambda x: rezeq.approx_fun(nu, avect[1], bvect[1], cvect[1], x), \
+                    lambda x: rezeq.approx_fun(nu, avect[2], bvect[2], cvect[2], x)
+               ]
+        dfuns = [
+                    lambda x: rezeq.approx_jac(nu, aoj, boj, coj, x), \
+                    lambda x: rezeq.approx_jac(nu, avect[0], bvect[0], cvect[0], x), \
+                    lambda x: rezeq.approx_jac(nu, avect[1], bvect[1], cvect[1], x), \
+                    lambda x: rezeq.approx_jac(nu, avect[2], bvect[2], cvect[2], x)
+        ]
+        te, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, \
+                                                             t0, [s0, 0, 0, 0],
+                                                             [t1])
+        expected = expected[1:]
+
+
+        errmax = np.nanmax(np.abs(expected-fluxes))
+        #assert errmax< 5e-6 if case in [9, 12] else 1e-8
+        errmax_max = max(errmax, errmax_max)
+
+    perc_skipped = nskipped*100/ntry
+    mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
+    print(" "*4+mess)
+    print("")
 
 
 def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):
@@ -686,24 +721,3 @@ def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):
 
     import pdb; pdb.set_trace()
 
-#
-#def test_integrate_continuity(allclose):
-#    delta = 1
-#    nalphas = 10
-#    alphas = np.linspace(0, 10, nalphas)
-#    theta = 10.
-#    u0 = 0.1
-#    inflow = 100.
-#    q0 = 1.
-#
-#    f = lambda x: -x**2
-#    coefs = rezeq.piecewise_linear_approximation(f, alphas)
-#    scalings = np.array([inflow, q0/theta**2])
-#    a_matrix_noscaling = np.column_stack([np.ones(nalphas-1), coefs[:, [0]]])
-#    b_matrix_noscaling = np.column_stack([np.zeros(nalphas-1), coefs[:, [1]]])
-#    b_matrix_noscaling[:, 1] += np.random.uniform(0.2, 1, nalphas-1)
-#
-#    with pytest.raises(ValueError, match="integrate returns"):
-#        u1, fluxes = rezeq.integrate(delta, u0, alphas, scalings, \
-#                        a_matrix_noscaling, b_matrix_noscaling)
-#
