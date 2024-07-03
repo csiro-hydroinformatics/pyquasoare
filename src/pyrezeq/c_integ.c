@@ -187,7 +187,7 @@ int c_increment_fluxes(int nfluxes,
     double b = boj;
     double c = coj;
     double A, B, C;
-    double sqD, Delta, aij, bij, cij, gam, lam0;
+    double sqD, Delta, aij, bij, cij, gam, lam0, lam1, u0, u1;
 
     if(t1<t0)
         return REZEQ_ERROR + __LINE__;
@@ -229,16 +229,25 @@ int c_increment_fluxes(int nfluxes,
                     expint = (log((gam+exp(t1*nu*sqD))/(gam+exp(t0*nu*sqD)))-dt)/sqD/nu;
                 }
                 else {
-                    /* TODO */
-                    expint = 0;
+                    u0 = atan(lam0)-nu*sqD/2;
+                    lam1 = (2*b*exp(-nu*s1)+a)/sqD;
+                    u1 = atan(lam1)-nu*sqD/2;
+                    expint = log(cos(u1)/cos(u0))/nu/b;
                 }
             }
 
             /* Final flux computation */
-            A = aij-aoj*cij/coj;
-            B = cij/coj;
-            C = bij-cij*boj/coj;
-            fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
+            if(notnull(c)){
+                A = aij-a*cij/c;
+                B = bij-cij*b/c;
+                C = cij/c;
+                fluxes[i] += A*(t1-t0)+B*expint+C*(s1-s0);
+            } else {
+                A = aij-a*bij/b;
+                B = bij/b;
+                C = cij-bij*c/b;
+                fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
+            }
         }
     }
     return 0;

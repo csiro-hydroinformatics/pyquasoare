@@ -118,19 +118,20 @@ def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=500):
             return np.abs(yyhat-yy).max()
 
         opt = minimize_scalar(ofun, [-5, 5], method="Bounded", bounds=[-5, 5])
+        epsilon = expit(opt.x)
         _, X, y = ofun_utils(opt.x)
 
     # Solution
-    return np.linalg.solve(X, y)
+    return np.linalg.solve(X, y), epsilon
 
 
 def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     """ Generate coefficient matrices for flux functions """
     nalphas = len(alphas)
+    nfluxes = len(funs)
+
     # Default
     # .. option to optimize?
-    epsilons = 0.5*np.ones(nalphas-1) if epsilons is None else epsilons
-
     nus = np.ones(nalphas-1) if nus is None else nus
     if np.isscalar(nus):
         nus = nus*np.ones(nalphas-1)
@@ -138,8 +139,11 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     assert len(nus) == nalphas-1
     has_epsilons = not epsilons is None
     if has_epsilons:
-        assert len(epsilons) == nalphas-1
-    nfluxes = len(funs)
+        if np.isscalar(epsilon):
+            epsilons = epsilons*np.ones((nalphas-1, nfluxes))
+        assert epsilons.shape == (nalphas-1, nfluxes)
+    else:
+        epsilons = 0.5*np.ones((nalphas-1, nfluxes))
 
     # we add one row at the top end bottom for continuity extension
     a_matrix = np.zeros((nalphas-1, nfluxes))
@@ -147,17 +151,20 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     c_matrix = np.zeros((nalphas-1, nfluxes))
     for j in range(nalphas-1):
         nu = nus[j]
-        epsilon = epsilons[j] if has_epsilons else None
         alphaj, alphajp1 = alphas[[j, j+1]]
 
         for ifun, f in enumerate(funs):
-            a, b, c = get_coefficients(f, alphaj, alphajp1,\
+            epsilon = epsilons[j] if has_epsilons else None
+            (a, b, c), e = get_coefficients(f, alphaj, alphajp1,\
                                                     nu, epsilon)
             a_matrix[j, ifun] = a
             b_matrix[j, ifun] = b
             c_matrix[j, ifun] = c
 
-    return nus, a_matrix, b_matrix, c_matrix
+            if not has_epsilons:
+                epsilons[j, ifun] = e
+
+    return nus, a_matrix, b_matrix, c_matrix, epsilons
 
 
 def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
