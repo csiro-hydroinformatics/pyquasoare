@@ -111,6 +111,18 @@ def integrate_forward(double nu, double a, double b, double c, \
     return c_integrate_forward(nu, a, b, c, t0, s0, t)
 
 
+def integrate_forward_vect(double nu, double a, double b, double c, \
+                        double t0, double s0, \
+                        np.ndarray[double, ndim=1, mode='c'] t not None,\
+                        np.ndarray[double, ndim=1, mode='c'] s not None):
+    cdef int nval = t.shape[0]
+    cdef int i
+    assert s.shape[0] == nval
+    for i in range(nval):
+        s[i] = c_integrate_forward(nu, a, b, c, t0, s0, t[i])
+    return 0
+
+
 def steady_state(double nu, double a, double b, double c, \
                         np.ndarray[double, ndim=1, mode='c'] steady not None):
     assert steady.shape[0] == 2
@@ -139,18 +151,6 @@ def steady_state_vect(np.ndarray[double, ndim=1, mode='c'] nus not None,\
 
 def integrate_delta_t_max(double nu, double a, double b, double c, double s0):
     return c_integrate_delta_t_max(nu, a, b, c, s0)
-
-
-def integrate_forward_vect(double nu, double a, double b, double c, \
-                        double t0, double s0, \
-                        np.ndarray[double, ndim=1, mode='c'] t not None,\
-                        np.ndarray[double, ndim=1, mode='c'] s not None):
-    cdef int nval = t.shape[0]
-    cdef int i
-    assert s.shape[0] == nval
-    for i in range(nval):
-        s[i] = c_integrate_forward(nu, a, b, c, t0, s0, t[i])
-    return 0
 
 
 def integrate_inverse(double nu, double a, double b, double c, \
