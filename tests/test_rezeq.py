@@ -4,7 +4,7 @@ import re
 import pytest
 import numpy as np
 import pandas as pd
-from scipy.integrate import solve_ivp
+from scipy.special import expit
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -32,7 +32,8 @@ NU_MAX = 5
 
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \
-            params=["x2", "x4", "x6", "tanh", "exp", "sin", "recip", "recipquad"])
+            params=["x2", "x4", "x6", "tanh", "exp", "sin", \
+                            "recip", "recipquad", "runge"])
 def reservoir_function(request):
     name = request.param
     # sol is the analytical solution of ds/dt = inflow+fun(s)
@@ -68,9 +69,13 @@ def reservoir_function(request):
     elif name == "recipquad":
         return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, None, None
 
+    elif name == "runge":
+        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, None, None
+
+
 
 @pytest.fixture(scope="module", params=list(range(1, NCASES+1)))
-def parameter_samples(ntry, selcase, request):
+def generate_samples(ntry, selcase, request):
     case = request.param
     assert case in list(range(1, NCASES+1))
 
@@ -125,7 +130,12 @@ def parameter_samples(ntry, selcase, request):
         name = "General case with low scaling"
         params /= 1000
 
-    return case, params, name
+    # Other data
+    nus = np.random.uniform(0, NU_MAX, ntry)
+    s0s = np.random.uniform(-S0_MAX, S0_MAX, ntry)
+    Tmax = 20
+
+    return name, case, params, nus, s0s, Tmax
 
 
 # ----- UTILITY FUNCTIONS ------------------------------------------
@@ -139,12 +149,6 @@ def get_data():
 
 def get_nprint(ntry):
     return 50
-
-def sample_config(ntry):
-    nus = np.random.uniform(0, NU_MAX, ntry)
-    s0s = np.random.uniform(-S0_MAX, S0_MAX, ntry)
-    Tmax = 20
-    return nus, s0s, Tmax
 
 def plot_solution(t, s1, expected=None, title="", params=None, \
                         s0=None, clear=False, show=False):
@@ -181,13 +185,12 @@ def plot_solution(t, s1, expected=None, title="", params=None, \
 
 # ----- TEST FUNCTIONS --------------------------------------------
 
-def test_approx_fun(allclose, parameter_samples):
-    case, params, cname = parameter_samples
+def test_approx_fun(allclose, generate_samples):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
-    nus, s0s, Tmax = sample_config(ntry)
 
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         ds = rezeq.approx_fun(nu, a, b, c, s0s)
@@ -199,13 +202,12 @@ def test_approx_fun(allclose, parameter_samples):
         assert allclose(jac, expected)
 
 
-def test_integrate_delta_t_max(allclose, parameter_samples, printout):
-    case, params, cname = parameter_samples
+def test_integrate_delta_t_max(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
-    nus, s0s, Tmax = sample_config(ntry)
     t_eval = np.linspace(0, Tmax, 1000)
 
     print("")
@@ -258,13 +260,12 @@ def test_integrate_delta_t_max(allclose, parameter_samples, printout):
     print("")
 
 
-def test_steady_state(allclose, parameter_samples):
-    case, params, cname = parameter_samples
+def test_steady_state(allclose, generate_samples):
+    cname, case, params, nus, _, _ = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip("Skip param config")
     nprint = get_nprint(ntry)
-    nus, _, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing steady state - case {case} / {cname}")
@@ -304,13 +305,12 @@ def test_steady_state(allclose, parameter_samples):
     print("")
 
 
-def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, printout):
-    case, params, cname = parameter_samples
+def test_integrate_forward_vs_finite_difference(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_forward using diff - case {case} / {cname}")
@@ -368,13 +368,12 @@ def test_integrate_forward_vs_finite_difference(allclose, parameter_samples, pri
     print("")
 
 
-def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
-    case, params, cname = parameter_samples
+def test_integrate_forward_vs_numerical(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_forward vs numerical - case {case} / {cname}")
@@ -428,13 +427,12 @@ def test_integrate_forward_vs_numerical(allclose, parameter_samples, printout):
     print("")
 
 
-def test_integrate_inverse(allclose, parameter_samples, printout):
-    case, params, cname = parameter_samples
+def test_integrate_inverse(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, _ = sample_config(ntry)
 
     print("")
     print(" "*4+f"Testing integrate_inverse - case {case} / {cname}")
@@ -562,6 +560,84 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
         print(" "*4+f"errmax(nu={nu:0.2f}) = {errmax[nu]:3.3e}")
 
 
+def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
+    # Get function and its derivative
+    fname, fun, dfun, _, _ = reservoir_function
+    if fname in ["x2"]:
+        pytest.skip("Skip function")
+
+    if fname == "runge":
+        alpha0, alpha1 = (-1, 3)
+    elif fname == "tanh":
+        alpha0, alpha1 = (-1., 1.)
+    elif re.search("recip", fname):
+        alpha0, alpha1 = (0., 1.0)
+    else:
+        alpha0, alpha1 = (0., 1.2)
+
+    nalphas = 3
+
+    x = np.linspace(alpha0, alpha1, 1000)
+    y = fun(x)
+    funs = [fun]
+
+    alphas, nus = rezeq.get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas)
+    _, amat, bmat, cmat, emat = rezeq.get_coefficients_matrix(funs, alphas, nus)
+
+    err_app = rezeq.approx_error(funs, alphas, nus, amat, bmat, cmat, \
+                                    errfun="mean")[0]
+    yhat = rezeq.approx_fun_from_matrix(alphas, nus, amat, bmat, cmat, x)
+
+    # Comparison with quadratic interpolation
+    quad = lambda x, p: p[0]+p[1]*x+p[2]*x**2
+    yquad = np.nan*np.zeros_like(x)
+    for j in range(nalphas-1):
+        a0, a1 = alphas[[j, j+1]]
+        X = np.array([[quad(a, [1, 0, 0]), quad(a, [0, 1, 0]), \
+                            quad(a, [0, 0, 1])] for a in [a0, a1, a1]])
+        Y = np.array([fun(a) for a in [a0, a1, a1]])
+        xq = np.linspace(a0, a1, 1000)
+        fq = fun(xq)
+        emin = np.inf
+        # Finds betst 3rd interpolation point
+        for t in np.linspace(-5, 5, 100):
+            ae = a0*(1-expit(t))+a1*expit(t)
+            X[-1] = quad(ae, [1, 0, 0]), quad(ae, [0, 1, 0]), \
+                        quad(ae, [0, 0, 1])
+            Y[-1] = fun(ae)
+            p = np.linalg.solve(X, Y)
+            yq = quad(xq, p)
+            e = ((yq-fq)**2).sum()
+            if e<emin:
+                emin, pq, Xq, Yq, aeq = e, p, X, Y, ae
+
+        idx = (x>=a0-1e-10)&(x<=a1+1e-10)
+        yquad[idx] = quad(x[idx], pq)
+
+    err_quad = np.abs(yquad-y).max()
+
+    # We want to make sure quad is always worse than app
+    assert err_app/err_quad<0.6
+
+    #import matplotlib.pyplot as plt
+    #plt.close("all")
+    #fig, ax = plt.subplots()
+    #ax.plot(alphas, fun(alphas), "ro", label="alphas")
+    #ax.plot(x, y, label="True")
+    #ax.plot(x, yhat, label=f"Approx err={err_app:2.2e}")
+    #col = ax.get_lines()[-1].get_color()
+    #for j in range(len(alphas)-1):
+    #    a0, a1 = alphas[[j, j+1]]
+    #    am = (a0+a1)/2
+    #    ax.text(am, fun(am), f"nu={nus[j]:0.2f}", va="center", \
+    #                    ha="center", color=col)
+    #ax.plot(x, yquad, label=f"Quadratic err={err_quad:2.2e}")
+    #ax.set(title=f"{fname} : ratio = {err_app/err_quad:2.2e}")
+    #ax.legend()
+    #plt.show()
+
+
+
 def test_steady_state_scalings(allclose):
     nalphas = 500
     alphas = np.linspace(0, 1.2, nalphas)
@@ -618,23 +694,22 @@ def test_find_alphas(allclose):
     assert ialpha == 2
 
 
-def test_increment_fluxes(allclose, parameter_samples, printout):
-    case, params, cname = parameter_samples
+def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus, s0s, _ = sample_config(ntry)
     nus = [0.1, 2]
 
     print("")
-    print(" "*4+f"Testing increment_fluxes - case {case} / {cname}")
+    print(" "*4+f"Testing increment_fluxes - finite diff - case {case} / {cname}")
     nskipped = 0
     errbal_max = 0
     errmax_max = 0
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            print(" "*8+f"flux - case {case} - Try {itry+1:4d}/{ntry:4d}")
+            print(" "*8+f"flux finite - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
         # make sure coefficient sum matches aoj, boj and coj
@@ -642,20 +717,78 @@ def test_increment_fluxes(allclose, parameter_samples, printout):
         bvect[-1] = boj-bvect[:-1].sum()
         cvect[-1] = coj-cvect[:-1].sum()
 
-        # Problematic case
-        #aoj, boj, coj = [0.8661756043823416, 0.6980164537067051, 0.6980164537067051]
-        #avect = np.array([ 0.66898522, -0.08030584,  0.27749622])
-        #bvect = np.array([-0.38545112, -0.24438742,  1.327855  ])
-        #cvect = np.array([0.57292254, 0.1155186 , 0.00957531])
+        # Integrate forward analytically
+        t0 = 0
+        t1 = min(2, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
+        t1 = t0 + t1*0.95
+        t_eval = np.linspace(t0, t1, 10000)
+        sim = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t_eval)
+        s1 = sim[-1]
+        if np.isnan(s1):
+            nskipped += 1
+            continue
+
+        # Compute fluxes analytically
+        fluxes, scalings = np.zeros(3), np.ones(3)
+        rezeq.increment_fluxes(scalings, nu, \
+                        avect, bvect, cvect, \
+                        aoj, boj, coj, \
+                        t0, t1, s0, s1, fluxes)
+
+        # Test mass balance
+        balance = s1-s0-fluxes.sum()
+        errbal_max = max(abs(balance), errbal_max)
+        assert allclose(balance, 0)
+
+        # Compare against finite difference calculation
+        dt = t_eval[1]-t_eval[0]
+        f = np.column_stack([rezeq.approx_fun(nu, a, b, c, sim)\
+                for a, b, c in zip(avect, bvect, cvect)])
+        expected = (dt*(f[1:]+f[:-1])/2).sum(axis=0)
+        assert allclose(fluxes, expected)
+        import pdb; pdb.set_trace()
+
+
+    # We should not skip any simulation because we stop at t=tmax
+    assert nskipped == 0
+    mess = f"Errmax = {errmax_max:3.2e}   Balmax = {errbal_max:3.3e}"
+    print(" "*4+mess)
+    print("")
+
+
+
+
+def test_increment_fluxes_vs_numerical(allclose, generate_samples, printout):
+    cname, case, params, nus, s0s, Tmax = generate_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip()
+    nprint = get_nprint(ntry)
+    nus = [0.1, 2]
+
+    print("")
+    print(" "*4+f"Testing increment_fluxes - numerical - case {case} / {cname}")
+    nskipped = 0
+    errmax_max = 0
+    for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
+        if itry%nprint==0 and printout:
+            print(" "*8+f"flux numerical - case {case} - Try {itry+1:4d}/{ntry:4d}")
+
+        avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
+        # make sure coefficient sum matches aoj, boj and coj
+        avect[-1] = aoj-avect[:-1].sum()
+        bvect[-1] = boj-bvect[:-1].sum()
+        cvect[-1] = coj-cvect[:-1].sum()
 
         # Integrate forward analytically
         t0 = 0
         t1 = min(2, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
-        t1 = t0 + t1*0.99
+        t1 = t0 + t1*0.95
         s1 = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t1)
         if np.isnan(s1):
             nskipped += 1
             continue
+        import pdb; pdb.set_trace()
 
         # Compute fluxes analytically
         fluxes, scalings = np.zeros(3), np.ones(3)
@@ -694,7 +827,6 @@ def test_increment_fluxes(allclose, parameter_samples, printout):
 
     # We should not skip any simulation because we stop at t=tmax
     assert nskipped == 0
-
     mess = f"Errmax = {errmax_max:3.2e}   Balmax = {errbal_max:3.3e}"
     print(" "*4+mess)
     print("")

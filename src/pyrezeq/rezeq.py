@@ -1,8 +1,8 @@
 import math
 import numpy as np
 
-from scipy.optimize import minimize_scalar
-from scipy.special import expit, logit
+from scipy.optimize import minimize_scalar, minimize
+from scipy.special import expit, logit, softmax
 from scipy.integrate import solve_ivp
 
 from pyrezeq import has_c_module
@@ -74,12 +74,11 @@ def find_alpha(alphas, u0):
     return c_pyrezeq.find_alpha(alphas, u0)
 
 
-def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=500):
+def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=1000):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         nu is the non-linearity coefficient.
         epsilon is the option controlling the third constraint:
         ]0, 1[ : use mid-point in ]alphaj, alphajp1[
-        ]
     """
     assert alphajp1>alphaj
     has_epsilon = not epsilon is None
@@ -103,7 +102,7 @@ def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=500):
         Xn = np.row_stack([X, [0, 0, 0]])
         yn = np.concatenate([y, [0]])
 
-        def ofun_utils(theta):
+        def trans2true(theta):
             eps = expit(theta)
             x = (1-eps)*alphaj+eps*alphajp1
             Xn[2] = [fa(1, 0, 0, x), fa(0, 1, 0, x), fa(0, 0, 1, x)]
@@ -111,15 +110,16 @@ def get_coefficients(fun, alphaj, alphajp1, nu, epsilon, ninterp=500):
             return x, Xn, yn
 
         def ofun(theta):
-            x, Xn, yn = ofun_utils(theta)
+            x, Xn, yn = trans2true(theta)
             yn[2] = fun(x)
             a, b, c = np.linalg.solve(Xn, yn)
             yyhat = approx_fun(nu, a, b, c, xx)
-            return np.abs(yyhat-yy).max()
+            err = yyhat-yy
+            return (err*err).sum()
 
         opt = minimize_scalar(ofun, [-5, 5], method="Bounded", bounds=[-5, 5])
         epsilon = expit(opt.x)
-        _, X, y = ofun_utils(opt.x)
+        _, X, y = trans2true(opt.x)
 
     # Solution
     return np.linalg.solve(X, y), epsilon
@@ -170,6 +170,8 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
 def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
     nalphas = len(alphas)
     nfluxes = a_matrix.shape[1]
+    if np.isscalar(nus):
+        nus = nus*np.ones(nalphas-1)
     assert a_matrix.shape[0] == nalphas-1
     assert len(nus) == nalphas-1
     assert b_matrix.shape == a_matrix.shape
@@ -194,8 +196,7 @@ def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
     for j in range(nalphas-1):
         nu = nus[j]
         alphaj, alphajp1 = alphas[[j, j+1]]
-
-        idx = (s>=alphaj)&(s<alphajp1)
+        idx = (s>=alphaj-1e-10)&(s<=alphajp1+1e-10)
         if idx.sum()==0:
             continue
 
@@ -208,15 +209,70 @@ def approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, s):
     return outputs
 
 
-def approx_error(funs, alphas, nus, a_matrix, b_matrix, c_matrix):
-    pass
+def approx_error(funs, alphas, nus, a_matrix, b_matrix, c_matrix, \
+                        errfun="max", ninterp=1000):
+    """ Compute maximum approximation error and error on first difference """
+    x = np.linspace(alphas[0], alphas[-1], ninterp)
+    y = np.column_stack([f(x) for f in funs])
+    yhat = approx_fun_from_matrix(alphas, nus, a_matrix, b_matrix, c_matrix, x)
+    err = np.abs(yhat-y)
+    f = getattr(np, errfun)
+    return f(err, axis=0)
 
+
+def get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas, \
+                                        nu0=0.1, nu1=10., nexplore=1000, \
+                                        errfun="max"):
+    """ Optimize alphas and nus. Caution: use low nalphas"""
+    assert alpha0<alpha1
+    assert nu0<nu1
+
+    # sum function
+    def sfun(x):
+        y = np.zeros_like(x)
+        for f in funs:
+            y += f(x)
+        return y
+
+    # Optimization functions
+    def trans2true(theta):
+        u = softmax(theta[:nalphas-1])
+        u = np.insert(np.cumsum(u), 0, 0)
+        alphas = alpha0+(alpha1-alpha0)*u
+        nus = nu0+(nu1-nu0)*expit(theta[nalphas-1:])
+        return alphas, nus
+
+    def ofun(theta):
+        # avoids too small delta in alphas
+        if np.any(np.abs(theta[:nalphas-1])>2):
+            return np.inf
+        alphas, nus = trans2true(theta)
+        _, amat, bmat, cmat, _ = get_coefficients_matrix([sfun], alphas, nus)
+        return approx_error([sfun], alphas, nus, amat, bmat, cmat, \
+                                        errfun=errfun)
+
+    omin = np.inf
+    for i in range(nexplore):
+        p = np.random.uniform(-1, 1, nalphas*2-2)
+        p[:nalphas-1] *= 2
+        p[nalphas-1:] *= 5
+        o = ofun(p)
+        if o<omin:
+            ini = p
+            omin = o
+
+    opts = dict(maxiter=1000, maxfev=5000, xatol=1e-5, fatol=1e-5)
+    opt = minimize(ofun, ini, method="Nelder-Mead", options=opts)
+    alphas, nus = trans2true(opt.x)
+
+    return alphas, nus
 
 
 def steady_state_scalings(alphas, nus, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling):
+    """ Compute steady states using scalings """
     # Check inputs
     nalphas = len(alphas)
     nval, nfluxes = scalings.shape
