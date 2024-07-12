@@ -8,7 +8,7 @@
 #include <errno.h>
 
 /* Define Error message */
-#define REZEQ_ERROR 123000
+#define REZEQ_ERROR 100000
 
 /* Define small number */
 #define REZEQ_EPS 1e-10

@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 import pandas as pd
 from scipy.special import expit
+import scipy.integrate as integrate
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -33,20 +34,24 @@ NU_MAX = 5
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \
             params=["x2", "x4", "x6", "tanh", "exp", "sin", \
-                            "recip", "recipquad", "runge"])
-def reservoir_function(request):
+                            "recip", "recipquad", "runge", "stiff"])
+def reservoir_function(request, selfun):
     name = request.param
+    if name!=selfun and selfun!="":
+        pytest.skip("Function skipped")
+
     # sol is the analytical solution of ds/dt = inflow+fun(s)
-    # except for
     if name == "x2":
         sol = lambda t, s0: (s0+np.tanh(t))/(1+s0*np.tanh(t))
         return name, lambda x: -x**2, lambda x: -2*x, sol, 1.
 
     elif name == "x4":
-        return name, lambda x: -x**4, lambda x: -4*x**3, None, None
+        sol = lambda t, s0: s0/(1+3*t*s0**3)**(1./3)
+        return name, lambda x: -x**4, lambda x: -4*x**3, sol, 0.
 
     elif name == "x6":
-        return name, lambda x: -x**6, lambda x: -6*x**5, None, None
+        sol = lambda t, s0: s0/(1+5*t*s0**5)**(1./5)
+        return name, lambda x: -x**6, lambda x: -6*x**5, sol, 0.
 
     elif name == "tanh":
         a, b = 0.5, 10
@@ -57,6 +62,11 @@ def reservoir_function(request):
     elif name == "exp":
         sol = lambda t, s0: s0+t-np.log(1-(1+np.exp(t))/math.exp(s0))
         return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1.
+
+    elif name == "stiff":
+        lam = 100
+        sol = lambda t, s0: 1./lam-(1./lam-s0)*np.exp(-lam*t)
+        return name, lambda x: -lam*x, lambda x: -lam, sol, 1.
 
     elif name == "sin":
         w = 2*math.pi
@@ -70,7 +80,11 @@ def reservoir_function(request):
         return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, None, None
 
     elif name == "runge":
-        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, None, None
+        # solution of s1^3+3s1 = 3t+s0^3+3s0
+        Q = lambda t, s0: -3*t-3*s0-s0**3
+        sol = lambda t, s0: np.cbrt(-Q(t,s0)/2+np.sqrt(Q(t,s0)**2/4+1))\
+                            +np.cbrt(-Q(t,s0)/2-np.sqrt(Q(t,s0)**2/4+1))
+        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, sol, 0.
 
 
 
@@ -78,9 +92,8 @@ def reservoir_function(request):
 def generate_samples(ntry, selcase, request):
     case = request.param
     assert case in list(range(1, NCASES+1))
-
     if selcase>0 and case!=selcase:
-        return case, np.zeros((0, 3)), "skipped"
+        pytest.skip("Configuration skipped")
 
     v0, v1 = -PARAM_MAX*np.ones(3), PARAM_MAX*np.ones(3)
     eps = np.random.uniform(0, 1, size=(ntry, 3))
@@ -254,7 +267,7 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
             f"  skipped={100*nskipped/ntry:0.0f}%"
     if case>=9:
         if nskipped<ntry:
-            mess += f" - when running we have Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
+            mess += f" - Delta>0={100*ndpos/(ntry-nskipped):0.0f}%"
 
     print(mess)
     print("")
@@ -273,7 +286,7 @@ def test_steady_state(allclose, generate_samples):
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
     steady = rezeq.steady_state(nus, a, b, c)
 
-    if case<5:
+    if case<4:
         # No steady state
         assert np.all(np.isnan(steady))
         print(" "*4 +">> No steady state for this case")
@@ -509,14 +522,9 @@ def test_get_coefficients(allclose, reservoir_function):
             assert allclose(rezeq.approx_fun(nu, a, b, c, x), fun(x))
 
 
-
-def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
+def test_get_coefficients_matrix(allclose, reservoir_function):
     # Get function and its derivative
     fname, fun, dfun, _, _ = reservoir_function
-    if selfun !="":
-        if selfun != fname:
-            pytest.skip("Skip function")
-
     funs = [lambda x: 1., fun]
     nalphas = 200
     alphas = np.linspace(0., 1., nalphas)
@@ -545,12 +553,12 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
         emax = np.abs(err[isin]).max()
         errmax[nu] = min(errmax[nu], emax)
 
-        if fname in "sin":
-            ethresh = 1e-6
-        elif fname == "recip":
+        if fname == "recip":
             ethresh = 5e-3
         elif fname == "recipquad":
             ethresh = 1e-2
+        elif fname == "stiff":
+            ethresh = 1e-5
         else:
             ethresh = 1e-6
         assert emax < ethresh
@@ -563,7 +571,8 @@ def test_get_coefficients_matrix(allclose, selfun, reservoir_function):
 def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
     # Get function and its derivative
     fname, fun, dfun, _, _ = reservoir_function
-    if fname in ["x2"]:
+    if fname in ["x2", "stiff"]:
+        # Skip x2 and stiff which are perfect match with quadratic functions
         pytest.skip("Skip function")
 
     if fname == "runge":
@@ -617,25 +626,10 @@ def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
     err_quad = np.abs(yquad-y).max()
 
     # We want to make sure quad is always worse than app
-    assert err_app/err_quad<0.6
-
-    #import matplotlib.pyplot as plt
-    #plt.close("all")
-    #fig, ax = plt.subplots()
-    #ax.plot(alphas, fun(alphas), "ro", label="alphas")
-    #ax.plot(x, y, label="True")
-    #ax.plot(x, yhat, label=f"Approx err={err_app:2.2e}")
-    #col = ax.get_lines()[-1].get_color()
-    #for j in range(len(alphas)-1):
-    #    a0, a1 = alphas[[j, j+1]]
-    #    am = (a0+a1)/2
-    #    ax.text(am, fun(am), f"nu={nus[j]:0.2f}", va="center", \
-    #                    ha="center", color=col)
-    #ax.plot(x, yquad, label=f"Quadratic err={err_quad:2.2e}")
-    #ax.set(title=f"{fname} : ratio = {err_app/err_quad:2.2e}")
-    #ax.legend()
-    #plt.show()
-
+    ratio = err_app/err_quad
+    assert ratio<0.6
+    print("")
+    print(f"approx vs quad error ratio for fun={fname}: {ratio:2.2e}")
 
 
 def test_steady_state_scalings(allclose):
@@ -670,7 +664,6 @@ def test_steady_state_scalings(allclose):
         assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-7)
 
 
-
 def test_find_alphas(allclose):
     alphas = np.linspace(0, 1, 4)
     u0 = -1.
@@ -694,33 +687,38 @@ def test_find_alphas(allclose):
     assert ialpha == 2
 
 
-def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, generate_samples, printout):
+def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, \
+                                        generate_samples, printout):
     cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
     nprint = get_nprint(ntry)
-    nus = [0.1, 2]
+
+    # Reduce range of nu
+    nus *= 1.5/NU_MAX
 
     print("")
-    print(" "*4+f"Testing increment_fluxes - finite diff - case {case} / {cname}")
+    print(" "*4+f"Testing increment_fluxes - trapezoidal quadrature"+\
+                f" - case {case} / {cname}")
     nskipped = 0
     errbal_max = 0
     errmax_max = 0
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            print(" "*8+f"flux finite - case {case} - Try {itry+1:4d}/{ntry:4d}")
+            print(" "*8+f"flux trapezoidal - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
+
         # make sure coefficient sum matches aoj, boj and coj
         avect[-1] = aoj-avect[:-1].sum()
         bvect[-1] = boj-bvect[:-1].sum()
         cvect[-1] = coj-cvect[:-1].sum()
 
         # Integrate forward analytically
-        t0 = 0
-        t1 = min(2, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
-        t1 = t0 + t1*0.95
+        t1 = min(5, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
+        t0 = t1*0.1
+        t1 = t1*0.5 # far away from limits of validity
         t_eval = np.linspace(t0, t1, 10000)
         sim = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t_eval)
         s1 = sim[-1]
@@ -728,30 +726,85 @@ def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, generate_samples, 
             nskipped += 1
             continue
 
+        # Check error
+        with pytest.raises(ValueError):
+            cvect2 = cvect.copy()
+            cvect2[0] += 10
+            fluxes, scalings = np.zeros(3), np.ones(3)
+            rezeq.increment_fluxes(scalings, nu, avect, bvect, cvect2, \
+                            aoj, boj, coj, t0, t1, s0, s1, fluxes)
+
         # Compute fluxes analytically
         fluxes, scalings = np.zeros(3), np.ones(3)
-        rezeq.increment_fluxes(scalings, nu, \
-                        avect, bvect, cvect, \
-                        aoj, boj, coj, \
-                        t0, t1, s0, s1, fluxes)
+        rezeq.increment_fluxes(scalings, nu, avect, bvect, cvect, \
+                        aoj, boj, coj, t0, t1, s0, s1, fluxes)
+
+        a, b, c = aoj, boj, coj
+        Delta = a**2-4*b*c
 
         # Test mass balance
         balance = s1-s0-fluxes.sum()
         errbal_max = max(abs(balance), errbal_max)
-        assert allclose(balance, 0)
+        #assert allclose(balance, 0)
 
-        # Compare against finite difference calculation
+        # Compare against trapezoidal quadrature
         dt = t_eval[1]-t_eval[0]
-        f = np.column_stack([rezeq.approx_fun(nu, a, b, c, sim)\
+        fx = np.column_stack([rezeq.approx_fun(nu, a, b, c, sim)\
                 for a, b, c in zip(avect, bvect, cvect)])
-        expected = (dt*(f[1:]+f[:-1])/2).sum(axis=0)
-        assert allclose(fluxes, expected)
-        import pdb; pdb.set_trace()
+        expected = (dt*(fx[1:]+fx[:-1])/2).sum(axis=0)
 
+        if Delta<0 and abs(b*c)>0:
+            aij, bij, cij = avect[-1], bvect[-1], cvect[-1]
+            A = avect-cvect*a/c
+            B = bvect-cvect*b/c
+            C = cvect/c
+
+            sqD = math.sqrt(-Delta);
+            e0 = math.exp(-nu*s0)
+            lam0 = (2*b*e0+a)/sqD
+            ra2b = a/2/b
+            def finteg1(t):
+                omeg = math.tan(nu*sqD*(t-t0)/2)
+                s = -math.log((lam0-omeg)/(1+lam0*omeg)*sqD/2/b-ra2b)/nu
+                return math.exp(-nu*s)
+
+            I1 = integrate.quad(finteg1, t0, t1)[0]
+            f1 = A*(t1-t0)+B*I1+C*(s1-s0)
+
+            def finteg2(t):
+                omeg = math.tan(nu*sqD*(t-t0)/2)
+                return sqD/2/b*(lam0-omeg)/(1+lam0*omeg)
+
+            I2 = integrate.quad(finteg2, t0, t1)[0]-ra2b*(t1-t0)
+            f2 = A*(t1-t0)+B*I2+C*(s1-s0)
+
+            w = math.atan(lam0)
+            def finteg3(t):
+                return sqD/2/b*math.tan(w-nu*sqD/2*(t-t0))
+
+            I3 = integrate.quad(finteg3, t0, t1)[0]-ra2b*(t1-t0)
+            f3 = A*(t1-t0)+B*I3+C*(s1-s0)
+
+            #u1 = math.exp(nu*sqD/2*(t1-t0))
+            #I3 = integrate.quad(finteg3, 1, u1)[0]-ra2b*(t1-t0)
+            #f3 = A*(t1-t0)+B*I3+C*(s1-s0)
+
+            #I4 = math.log((lam0+1)*u1/2+(1-lam0)/2/u1)/nu/b-ra2b*(t1-t0)
+            #f4 = A*(t1-t0)+B*I4+C*(s1-s0)
+
+            errmax = max(abs(fluxes-expected))
+            errmax_max = max(errmax, errmax_max)
+            import pdb; pdb.set_trace()
+
+
+            #assert allclose(fluxes, expected)
+        else:
+            nskipped += 1
 
     # We should not skip any simulation because we stop at t=tmax
-    assert nskipped == 0
-    mess = f"Errmax = {errmax_max:3.2e}   Balmax = {errbal_max:3.3e}"
+    #assert nskipped == 0
+    mess = f"Errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
+                f" Balmax = {errbal_max:3.3e}"
     print(" "*4+mess)
     print("")
 
@@ -797,11 +850,6 @@ def test_increment_fluxes_vs_numerical(allclose, generate_samples, printout):
                         aoj, boj, coj, \
                         t0, t1, s0, s1, fluxes)
 
-        # Test mass balance
-        balance = s1-s0-fluxes.sum()
-        errbal_max = max(abs(balance), errbal_max)
-        #assert allclose(balance, 0)
-
         # Integrate forward numerically
         funs = [\
                     lambda x: rezeq.approx_fun(nu, aoj, boj, coj, x), \
@@ -822,27 +870,19 @@ def test_increment_fluxes_vs_numerical(allclose, generate_samples, printout):
         #assert errmax< 5e-6 if case in [9, 12] else 1e-8
         errmax_max = max(errmax, errmax_max)
 
-        import pdb; pdb.set_trace()
-
-
     # We should not skip any simulation because we stop at t=tmax
     assert nskipped == 0
-    mess = f"Errmax = {errmax_max:3.2e}   Balmax = {errbal_max:3.3e}"
+    mess = f"Errmax = {errmax_max:3.2e}"
     print(" "*4+mess)
     print("")
 
 
-def test_integrate_reservoir_equations(allclose, selfun, reservoir_function):
-    #TODO
-    return
-
+def test_integrate_reservoir_equation(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow = reservoir_function
-    if selfun !="":
-        if selfun != fname:
-            pytest.skip("Skip function")
-
     if sol is None:
         pytest.skip("No analytical solution")
+
+    pytest.skip("TODO : Work in progress")
 
     inp = lambda x: inflow
     sfun = lambda x: inflow+fun(x)

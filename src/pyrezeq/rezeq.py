@@ -311,7 +311,7 @@ def increment_fluxes(scalings, nu, \
                             aoj, boj, coj, \
                             t0, t1, s0, s1, fluxes)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.integrate_flues returns {ierr}")
+        raise ValueError(f"c_pyrezeq.increment_fluxes returns {ierr}")
 
 
 def integrate(delta, alphas, scalings, nus, \

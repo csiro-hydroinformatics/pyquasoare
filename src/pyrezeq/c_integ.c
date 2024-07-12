@@ -2,9 +2,16 @@
 
 /* Approximation functions */
 double c_approx_fun(double nu, double a, double b, double c, double s){
+    if(nu<0 || isnan(nu))
+        return c_get_nan();
+
     return a+b*exp(-nu*s)+c*exp(nu*s);
 }
+
 double c_approx_jac(double nu, double a, double b, double c, double s){
+    if(nu<0 || isnan(nu))
+        return c_get_nan();
+
     return -nu*b*exp(-nu*s)+nu*c*exp(nu*s);
 }
 
@@ -12,11 +19,10 @@ double c_approx_jac(double nu, double a, double b, double c, double s){
 double c_integrate_delta_t_max(double nu, double a, double b, double c,
                                 double s0){
     double e0 = exp(-nu*s0);
-    double lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
-    double tmax, tmp=0;
+    double tmax, tmp=0, lam0=0, sqD=0;
 
-    if(nu<0)
+    if(nu<0 || isnan(nu))
         return c_get_nan();
 
     if(isnull(b) && isnull(c)){
@@ -66,13 +72,12 @@ double c_integrate_forward(double nu, double a, double b, double c,
     double e0 = exp(-nu*s0);
     double sgn=1,omeg=0, lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
-    double ra2b;
-    double s1;
+    double ra2b, s1;
 
-    if(nu<0)
+    if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    if(t<0)
+    if(t<t0)
         return c_get_nan();
 
     double dtmax = c_integrate_delta_t_max(nu, a, b, c, s0);
@@ -117,12 +122,11 @@ double c_integrate_inverse(double nu, double a, double b, double c,
                                 double s0, double s1){
     double e0 = exp(-nu*s0);
     double e1 = exp(-nu*s1);
-    double sqD=0., lam0=0., lam1=0., omeginv1=0., omeginv0=0.;
     double Delta = a*a-4*b*c;
     double sgn = Delta<0 ? -1 : 1;
-    double tau0=0., tau1=0.;
+    double tau0=0, tau1=0, sqD=0., lam0=0., lam1=0.;
 
-    if(nu<0)
+    if(nu<0 || isnan(nu))
         return c_get_nan();
 
     if(isnull(b) && isnull(c)){
@@ -163,115 +167,112 @@ double c_integrate_inverse(double nu, double a, double b, double c,
 }
 
 
-/* a and b matrix: [nalphas x nfluxes] */
-int c_increment_fluxes(int nfluxes,
-                        double * scalings,
-                        double nu,
+/* Increment fluxes by integrating f*(s) */
+int c_increment_fluxes(int nfluxes, double * scalings, double nu,
                         double * aj_vector_noscaling,
                         double * bj_vector_noscaling,
                         double * cj_vector_noscaling,
-                        double aoj,
-                        double boj,
-                        double coj,
-                        double t0,
-                        double t1,
-                        double s0,
-                        double s1,
+                        double aoj, double boj, double coj,
+                        double t0, double t1, double s0, double s1,
                         double * fluxes){
     int i;
     double dt = t1-t0;
     double ds = s1-s0;
     double e0 = exp(-nu*s0);
     double expint=0;
-    double a = aoj;
-    double b = boj;
-    double c = coj;
+    double a = aoj, a_check=0;
+    double b = boj, b_check=0;
+    double c = coj, c_check=0;
     double A, B, C;
-    double sqD, Delta, aij, bij, cij, gam, lam0, lam1, u0, u1;
+    double Delta = aoj*aoj-4*boj*coj;
+    double sqD, aij, bij, cij, gam, lam0, u0, u1;
 
-    if(t1<t0)
+    if(t1<t0 || nu<0 || isnan(nu))
         return REZEQ_ERROR + __LINE__;
 
-    for(i=0; i<nfluxes; i++){
-        aij = aj_vector_noscaling[i]*scalings[i];
-        bij = bj_vector_noscaling[i]*scalings[i];
-        cij = cj_vector_noscaling[i]*scalings[i];
-
-        if(isnull(b) && isnull(c)){
-            fluxes[i] += aij*dt-bij/nu/a/e0*(exp(-nu*a*t1)-exp(-nu*a*t0));
-            fluxes[i] += cij/nu/a/e0*(exp(nu*a*t1)-exp(nu*a*t0));
-
-        } else {
-            if(isnull(a) && isnull(b) && notnull(c)){
-                expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
+    /* Integrate exp(-nuS) if needed */
+    if(notnull(b) || notnull(c)){
+        if(isnull(a) && isnull(b) && notnull(c)){
+            expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
+        }
+        else if(isnull(a) && notnull(b) && isnull(c)){
+            expint = dt/e0+nu*b/2*(t1*t1-t0*t0);
+        }
+        else if(notnull(a) && isnull(b) && notnull(c)){
+            expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
+            expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
+        }
+        else if(notnull(a) && notnull(b) && isnull(c)){
+            expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
+            expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
+        }
+        else if(notnull(b) && notnull(c)){
+            sqD = sqrt(fabs(Delta));
+            if(isnull(Delta)){
+                /* Determinant is zero */
+                /* TODO */
+                expint = c_get_nan();
             }
-            else if(isnull(a) && notnull(b) && isnull(c)){
-                expint = dt/e0+nu*b/2*(t1*t1-t0*t0);
-            }
-            else if(notnull(a) && isnull(b) && notnull(c)){
-                expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
-                expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
-            }
-            else if(notnull(a) && notnull(b) && isnull(c)){
-                expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
-                expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
-            }
-            else if(notnull(b) && notnull(c)){
-                sqD = sqrt(abs(Delta));
+            else {
                 lam0 = (2*b*e0+a)/sqD;
-                if(isnull(Delta)){
-                    /* Determinant is zero */
-                    /* TODO */
-                    expint = 0;
-                }
-                else if (ispos(Delta)){
-                    gam = (1-lam0)/(1+lam0);
-                    expint = (log((gam+exp(t1*nu*sqD))/(gam+exp(t0*nu*sqD)))-dt)/sqD/nu;
+                if (ispos(Delta)){
+                    u1 = exp(nu*sqD/2*(t1-t0));
+                    expint = log((lam0+1)*u1/2+(1-lam0)/u1/2)/nu/b-a/2/b*(t1-t0);
                 }
                 else {
-                    u0 = atan(lam0)-nu*sqD/2;
-                    lam1 = (2*b*exp(-nu*s1)+a)/sqD;
-                    u1 = atan(lam1)-nu*sqD/2;
+                    u0 = atan(lam0);
+                    u1 = u0-nu*sqD/2*(t1-t0);
                     expint = log(cos(u1)/cos(u0))/nu/b;
                 }
             }
+        }
+    }
 
-            /* Final flux computation */
+    for(i=0; i<nfluxes; i++){
+        aij = aj_vector_noscaling[i]*scalings[i];
+        a_check += aij;
+
+        bij = bj_vector_noscaling[i]*scalings[i];
+        b_check += bij;
+
+        cij = cj_vector_noscaling[i]*scalings[i];
+        c_check += cij;
+
+        if(isnull(b) && isnull(c)){
+            fluxes[i] += aij*dt-bij*e0/nu/a*(exp(-nu*a*t1)-exp(-nu*a*t0));
+            fluxes[i] += cij/nu/a/e0*(exp(nu*a*t1)-exp(nu*a*t0));
+
+        } else {
             if(notnull(c)){
-                A = aij-a*cij/c;
+                A = aij-cij*a/c;
                 B = bij-cij*b/c;
                 C = cij/c;
                 fluxes[i] += A*(t1-t0)+B*expint+C*(s1-s0);
             } else {
-                A = aij-a*bij/b;
+                A = aij-bij*a/b;
                 B = bij/b;
                 C = cij-bij*c/b;
                 fluxes[i] += A*(t1-t0)+B*(s1-s0)+C*expint;
             }
         }
     }
+
+    /* Check the coefficients sum to aoj, boj and coj */
+    if(notnull(a-a_check)||notnull(b-b_check)||notnull(c-c_check))
+        return REZEQ_ERROR + __LINE__;
+
     return 0;
 }
 
 
-/**
-* Integrate reservoir equation over 1 time step:
-* - scalings [nfluxes] : scalings applied to linear coefficients
-* - a and b matrices [nalphas x nfluxes] : reservoir function piecewise linear
-*                                           approx
-* - s0 : initial state
-* - s1 : final state
-**/
+/* Integrate reservoir equation over 1 time step and compute associated fluxes */
 int c_integrate(int nalphas, int nfluxes, double delta,
-                            double * alphas,
-                            double * scalings,
+                            double * alphas, double * scalings,
                             double * nu_vector,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
-                            double s0,
-                            double * s1,
-                            double * fluxes) {
+                            double s0, double * s1, double * fluxes) {
     int i, jalpha_next;
     double aoj=0., boj=0., coj=0., nu;
     double a=0, b=0, c=0;
