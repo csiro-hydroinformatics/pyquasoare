@@ -156,7 +156,6 @@ double c_integrate_inverse(double nu, double a, double b, double c,
             return tau1-tau0;
         }
         else if (ispos(Delta)){
-            /* atanh(x) = 0.5 log((1+x)/(1-x)) */
             return 1./sqD/nu*log((1+lam1)*(1-lam0)/(1-lam1)/(1+lam0));
         }
         else {
@@ -193,36 +192,32 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
     /* Integrate exp(-nuS) if needed */
     if(notnull(b) || notnull(c)){
         if(isnull(a) && isnull(b) && notnull(c)){
-            expint = dt*e0-nu*c/2*(t1*t1-t0*t0);
+            expint = dt*e0-nu*c/2*(t1-t0)*(t1-t0);
         }
         else if(isnull(a) && notnull(b) && isnull(c)){
-            expint = dt/e0+nu*b/2*(t1*t1-t0*t0);
+            expint = dt/e0+nu*b/2*(t1-t0)*(t1-t0);
         }
         else if(notnull(a) && isnull(b) && notnull(c)){
-            expint = c/2/nu/a/a*(exp(-2*nu*a*t1)-exp(-2*nu*a*t0));
-            expint -= e0/nu/a*(1+c/a/e0)*(exp(-nu*a*t1)-exp(-nu*a*t0));
+            expint = (e0+c/a)/nu/a*(1-exp(-nu*a*dt))-c/a*dt;
         }
         else if(notnull(a) && notnull(b) && isnull(c)){
-            expint = -b/2/nu/a/a*(exp(2*nu*a*t1)-exp(2*nu*a*t0));
-            expint += 1./e0/nu/a*(1+b*e0/a)*(exp(nu*a*t1)-exp(nu*a*t0));
+            expint = -(1/e0+b/a)/nu/a*(1-exp(nu*a*dt))-b/a*dt;
         }
         else if(notnull(b) && notnull(c)){
             sqD = sqrt(fabs(Delta));
             if(isnull(Delta)){
-                /* Determinant is zero */
-                /* TODO */
-                expint = c_get_nan();
+                expint = log(1+(e0+a/2/b)*nu*b*dt)/nu/b-a/2/b*dt;
             }
             else {
                 lam0 = (2*b*e0+a)/sqD;
                 if (ispos(Delta)){
-                    u1 = exp(nu*sqD/2*(t1-t0));
-                    expint = log((lam0+1)*u1/2+(1-lam0)/u1/2)/nu/b-a/2/b*(t1-t0);
+                    u1 = exp(nu*sqD/2*dt);
+                    expint = log((lam0+1)*u1/2+(1-lam0)/u1/2)/nu/b-a/2/b*dt;
                 }
                 else {
                     u0 = atan(lam0);
-                    u1 = u0-nu*sqD/2*(t1-t0);
-                    expint = log(cos(u1)/cos(u0))/nu/b;
+                    u1 = u0-nu*sqD/2*dt;
+                    expint = log(cos(u1)/cos(u0))/nu/b-a/2/b*dt;
                 }
             }
         }
@@ -239,9 +234,8 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
         c_check += cij;
 
         if(isnull(b) && isnull(c)){
-            fluxes[i] += aij*dt-bij*e0/nu/a*(exp(-nu*a*t1)-exp(-nu*a*t0));
-            fluxes[i] += cij/nu/a/e0*(exp(nu*a*t1)-exp(nu*a*t0));
-
+            fluxes[i] += aij*dt-bij*e0/nu/a*(exp(-nu*a*(t1-t0))-1);
+            fluxes[i] += cij/nu/a/e0*(exp(nu*a*(t1-t0))-1);
         } else {
             if(notnull(c)){
                 A = aij-cij*a/c;
@@ -277,7 +271,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
     double aoj=0., boj=0., coj=0., nu;
     double a=0, b=0, c=0;
     double ds1=0, ds2=0;
-    double alow, ahigh, t1;
+    double alpha0, alpha1, t1;
 
     /* Initial interval */
     int jalpha = c_find_alpha(nalphas, alphas, s0);
@@ -316,13 +310,13 @@ int c_integrate(int nalphas, int nfluxes, double delta,
             a = a_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
             b = b_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
             c = c_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-            /* if is lower than alpha1 or higher than alpham
+            /* if s is lower than alpha1 or higher than alpham
                 then set approx_fun to constant
             */
             if(is_low) {
                 aoj += c_approx_fun(nu, a, b, c, alphas[0]);
             }
-            else if(is_low) {
+            else if(is_high) {
                 aoj += c_approx_fun(nu, a, b, c, alphas[nalphas-1]);
             } else {
                 aoj += a;
@@ -343,8 +337,8 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         }
 
         /* Get band limits */
-        alow = alphas[jalpha];
-        ahigh = alphas[jalpha+1];
+        alpha0 = alphas[jalpha];
+        alpha1 = alphas[jalpha+1];
 
         /* integrate ODE up to the end of the time step */
         *s1 = c_integrate_forward(t0, s0, nu, aoj, boj, coj, delta);
@@ -357,9 +351,9 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         * if we are below lowest alphas or above highest alpha
         * In these cases, complete integration straight away.
         **/
-        is_low=0;
-        is_high=0;
-        if(*s1>=alow && *s1<=ahigh){
+        is_low = 0;
+        is_high = 0;
+        if(*s1>=alpha0 && *s1<=alpha1){
             c_increment_fluxes(nfluxes, scalings, nu,
                         &(a_matrix_noscaling[nfluxes*jalpha]),
                         &(b_matrix_noscaling[nfluxes*jalpha]),
@@ -369,8 +363,8 @@ int c_integrate(int nalphas, int nfluxes, double delta,
             s0 = *s1;
         }
         else {
-            is_low = *s1<alow;
-            is_high = *s1>ahigh;
+            is_low = *s1<alpha0;
+            is_high = *s1>alpha1;
             if((jalpha==0 && is_low) || (jalpha==nalphas-2 && is_high)){
                 /* We are on the fringe of the alphas domain */
                 jalpha_next = jalpha;
@@ -380,18 +374,18 @@ int c_integrate(int nalphas, int nfluxes, double delta,
                 /* If not, decrease or increase parameter band
                  * depending on increasing or decreasing nature
                  * of ODE solution */
-                if(*s1<=alow){
+                if(*s1<=alpha0){
                     jalpha_next = jalpha-1;
-                    *s1 = alow;
+                    *s1 = alpha0;
                 } else{
                     jalpha_next = jalpha+1;
-                    *s1 = ahigh;
+                    *s1 = alpha1;
                 }
 
-                /* Find time where we move to the next band */
+                /* Find time where we are crossing to the next band */
                 t1 = t0+c_integrate_inverse(s0, nu, aoj, boj, coj, *s1);
             }
-            /* Increment variables */
+            /* Increment fluxes during the last interval */
             c_increment_fluxes(nfluxes, scalings,
                         nu_vector[jalpha],
                         &(a_matrix_noscaling[nfluxes*jalpha]),

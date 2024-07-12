@@ -221,11 +221,10 @@ def approx_error(funs, alphas, nus, a_matrix, b_matrix, c_matrix, \
 
 
 def get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas, \
-                                        nu0=0.1, nu1=10., nexplore=1000, \
+                                        nexplore=1000, \
                                         errfun="max"):
     """ Optimize alphas and nus. Caution: use low nalphas"""
     assert alpha0<alpha1
-    assert nu0<nu1
 
     # sum function
     def sfun(x):
@@ -239,23 +238,25 @@ def get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas, \
         u = softmax(theta[:nalphas-1])
         u = np.insert(np.cumsum(u), 0, 0)
         alphas = alpha0+(alpha1-alpha0)*u
-        nus = nu0+(nu1-nu0)*expit(theta[nalphas-1:])
+        nus = np.exp(theta[nalphas-1:])
         return alphas, nus
 
     def ofun(theta):
         # avoids too small delta in alphas
         if np.any(np.abs(theta[:nalphas-1])>2):
             return np.inf
+        # avoids too extreme nus
+        if np.any(np.abs(theta[nalphas-1:])>3):
+            return np.inf
         alphas, nus = trans2true(theta)
         _, amat, bmat, cmat, _ = get_coefficients_matrix([sfun], alphas, nus)
         return approx_error([sfun], alphas, nus, amat, bmat, cmat, \
                                         errfun=errfun)
-
     omin = np.inf
     for i in range(nexplore):
         p = np.random.uniform(-1, 1, nalphas*2-2)
         p[:nalphas-1] *= 2
-        p[nalphas-1:] *= 5
+        p[nalphas-1:] *= 3
         o = ofun(p)
         if o<omin:
             ini = p

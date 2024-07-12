@@ -571,6 +571,40 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
 def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
     # Get function and its derivative
     fname, fun, dfun, _, _ = reservoir_function
+
+    if fname == "runge":
+        alpha0, alpha1 = (-1, 3)
+    elif fname == "tanh":
+        alpha0, alpha1 = (-1., 1.)
+    elif re.search("recip", fname):
+        alpha0, alpha1 = (0., 1.0)
+    else:
+        alpha0, alpha1 = (0., 1.2)
+
+    x = np.linspace(alpha0, alpha1, 1000)
+    y = fun(x)
+    funs = [fun]
+
+    # Optimize alphas and nus
+    nalphas = 10
+    alphas, nus = rezeq.get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas)
+    _, amat, bmat, cmat, emat = rezeq.get_coefficients_matrix(funs, alphas, nus)
+
+    # compute error max
+    err_app = rezeq.approx_error(funs, alphas, nus, amat, bmat, cmat, \
+                                    errfun="mean")[0]
+    assert err_app<5e-3
+
+    print("")
+    qnus = [np.min(nus), np.median(nus), np.max(nus)]
+    tnus = " / ".join([f"{n:0.2f}" for n in qnus])
+    print(f"approx of fun={fname} with {nalphas} points: err={err_app:2.2e}   "+\
+                    f"nus=[{tnus}]")
+
+
+def test_get_coefficients_matrix_optimize_compare_quad(allclose, reservoir_function):
+    # Get function and its derivative
+    fname, fun, dfun, _, _ = reservoir_function
     if fname in ["x2", "stiff"]:
         # Skip x2 and stiff which are perfect match with quadratic functions
         pytest.skip("Skip function")
@@ -584,15 +618,14 @@ def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
     else:
         alpha0, alpha1 = (0., 1.2)
 
-    nalphas = 3
-
     x = np.linspace(alpha0, alpha1, 1000)
     y = fun(x)
     funs = [fun]
 
+    # Optimize alphas and nus
+    nalphas = 3
     alphas, nus = rezeq.get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas)
     _, amat, bmat, cmat, emat = rezeq.get_coefficients_matrix(funs, alphas, nus)
-
     err_app = rezeq.approx_error(funs, alphas, nus, amat, bmat, cmat, \
                                     errfun="mean")[0]
     yhat = rezeq.approx_fun_from_matrix(alphas, nus, amat, bmat, cmat, x)
@@ -687,7 +720,7 @@ def test_find_alphas(allclose):
     assert ialpha == 2
 
 
-def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, \
+def test_increment_fluxes_vs_integration(allclose, \
                                         generate_samples, printout):
     cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
@@ -716,17 +749,15 @@ def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, \
         cvect[-1] = coj-cvect[:-1].sum()
 
         # Integrate forward analytically
-        t1 = min(5, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
-        t0 = t1*0.1
+        t1 = min(10, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
+        t0 = t1*0.05 # do not start at zero to avoid sharp falls
         t1 = t1*0.5 # far away from limits of validity
-        t_eval = np.linspace(t0, t1, 10000)
-        sim = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t_eval)
-        s1 = sim[-1]
+        s1 = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t1)
         if np.isnan(s1):
             nskipped += 1
             continue
 
-        # Check error
+        # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
@@ -747,132 +778,29 @@ def test_increment_fluxes_vs_trapezoidal_quadrature(allclose, \
         errbal_max = max(abs(balance), errbal_max)
         #assert allclose(balance, 0)
 
-        # Compare against trapezoidal quadrature
-        dt = t_eval[1]-t_eval[0]
-        fx = np.column_stack([rezeq.approx_fun(nu, a, b, c, sim)\
-                for a, b, c in zip(avect, bvect, cvect)])
-        expected = (dt*(fx[1:]+fx[:-1])/2).sum(axis=0)
+        # Compare against numerical integration
+        def finteg(t, a, b, c):
+            s = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t)
+            return rezeq.approx_fun(nu, a, b, c, s)
 
-        if Delta<0 and abs(b*c)>0:
-            aij, bij, cij = avect[-1], bvect[-1], cvect[-1]
-            A = avect-cvect*a/c
-            B = bvect-cvect*b/c
-            C = cvect/c
+        expected = np.array([integrate.quad(finteg, t0, t1, args=(a, b, c))\
+                        for a, b, c in zip(avect, bvect, cvect)])
+        tol = expected[:, 1].max()
+        errmax = max(abs(fluxes-expected[:, 0]))
+        if errmax>1e10:
+            Delta = aoj**2-4*boj*coj
+            sqD = math.sqrt(abs(Delta))
+            dt = t1-t0
+            u1 = math.exp(nu*sqD/2*dt)
+            #import pdb; pdb.set_trace()
 
-            sqD = math.sqrt(-Delta);
-            e0 = math.exp(-nu*s0)
-            lam0 = (2*b*e0+a)/sqD
-            ra2b = a/2/b
-            def finteg1(t):
-                omeg = math.tan(nu*sqD*(t-t0)/2)
-                s = -math.log((lam0-omeg)/(1+lam0*omeg)*sqD/2/b-ra2b)/nu
-                return math.exp(-nu*s)
+        errmax_max = max(errmax, errmax_max)
 
-            I1 = integrate.quad(finteg1, t0, t1)[0]
-            f1 = A*(t1-t0)+B*I1+C*(s1-s0)
-
-            def finteg2(t):
-                omeg = math.tan(nu*sqD*(t-t0)/2)
-                return sqD/2/b*(lam0-omeg)/(1+lam0*omeg)
-
-            I2 = integrate.quad(finteg2, t0, t1)[0]-ra2b*(t1-t0)
-            f2 = A*(t1-t0)+B*I2+C*(s1-s0)
-
-            w = math.atan(lam0)
-            def finteg3(t):
-                return sqD/2/b*math.tan(w-nu*sqD/2*(t-t0))
-
-            I3 = integrate.quad(finteg3, t0, t1)[0]-ra2b*(t1-t0)
-            f3 = A*(t1-t0)+B*I3+C*(s1-s0)
-
-            #u1 = math.exp(nu*sqD/2*(t1-t0))
-            #I3 = integrate.quad(finteg3, 1, u1)[0]-ra2b*(t1-t0)
-            #f3 = A*(t1-t0)+B*I3+C*(s1-s0)
-
-            #I4 = math.log((lam0+1)*u1/2+(1-lam0)/2/u1)/nu/b-ra2b*(t1-t0)
-            #f4 = A*(t1-t0)+B*I4+C*(s1-s0)
-
-            errmax = max(abs(fluxes-expected))
-            errmax_max = max(errmax, errmax_max)
-            import pdb; pdb.set_trace()
-
-
-            #assert allclose(fluxes, expected)
-        else:
-            nskipped += 1
 
     # We should not skip any simulation because we stop at t=tmax
     #assert nskipped == 0
     mess = f"Errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
                 f" Balmax = {errbal_max:3.3e}"
-    print(" "*4+mess)
-    print("")
-
-
-
-
-def test_increment_fluxes_vs_numerical(allclose, generate_samples, printout):
-    cname, case, params, nus, s0s, Tmax = generate_samples
-    ntry = len(params)
-    if ntry==0:
-        pytest.skip()
-    nprint = get_nprint(ntry)
-    nus = [0.1, 2]
-
-    print("")
-    print(" "*4+f"Testing increment_fluxes - numerical - case {case} / {cname}")
-    nskipped = 0
-    errmax_max = 0
-    for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
-        if itry%nprint==0 and printout:
-            print(" "*8+f"flux numerical - case {case} - Try {itry+1:4d}/{ntry:4d}")
-
-        avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
-        # make sure coefficient sum matches aoj, boj and coj
-        avect[-1] = aoj-avect[:-1].sum()
-        bvect[-1] = boj-bvect[:-1].sum()
-        cvect[-1] = coj-cvect[:-1].sum()
-
-        # Integrate forward analytically
-        t0 = 0
-        t1 = min(2, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
-        t1 = t0 + t1*0.95
-        s1 = rezeq.integrate_forward(nu, aoj, boj, coj, t0, s0, t1)
-        if np.isnan(s1):
-            nskipped += 1
-            continue
-        import pdb; pdb.set_trace()
-
-        # Compute fluxes analytically
-        fluxes, scalings = np.zeros(3), np.ones(3)
-        rezeq.increment_fluxes(scalings, nu, \
-                        avect, bvect, cvect, \
-                        aoj, boj, coj, \
-                        t0, t1, s0, s1, fluxes)
-
-        # Integrate forward numerically
-        funs = [\
-                    lambda x: rezeq.approx_fun(nu, aoj, boj, coj, x), \
-                    lambda x: rezeq.approx_fun(nu, avect[0], bvect[0], cvect[0], x), \
-                    lambda x: rezeq.approx_fun(nu, avect[1], bvect[1], cvect[1], x), \
-                    lambda x: rezeq.approx_fun(nu, avect[2], bvect[2], cvect[2], x)
-               ]
-        dfuns = [
-                    lambda x: rezeq.approx_jac(nu, aoj, boj, coj, x), \
-                    lambda x: rezeq.approx_jac(nu, avect[0], bvect[0], cvect[0], x), \
-                    lambda x: rezeq.approx_jac(nu, avect[1], bvect[1], cvect[1], x), \
-                    lambda x: rezeq.approx_jac(nu, avect[2], bvect[2], cvect[2], x)
-        ]
-        te, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, \
-                                                       t0, [s0, 0, 0, 0], [t1])
-        expected = expected[1:]
-        errmax = np.nanmax(np.abs(expected-fluxes))
-        #assert errmax< 5e-6 if case in [9, 12] else 1e-8
-        errmax_max = max(errmax, errmax_max)
-
-    # We should not skip any simulation because we stop at t=tmax
-    assert nskipped == 0
-    mess = f"Errmax = {errmax_max:3.2e}"
     print(" "*4+mess)
     print("")
 
