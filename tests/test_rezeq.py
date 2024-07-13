@@ -230,6 +230,7 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
     ndpos = 0
     ndelta = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
+
         # Log progress
         if itry%nprint==0 and printout:
             print(" "*8+f"tmax - case {case} - Try {itry+1:4d}/{ntry:4d}")
@@ -258,7 +259,8 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
             tm = t0+dtm
 
             err = abs(np.log(tm)-np.log(expected))
-            assert err<2e-3, plot_solution(te, ns1, show=True, params=[nu, a, b, c])
+            assert err<2e-3
+            #plot_solution(te, s1, ns1, show=True, params=[nu, a, b, c])
             err_max = max(err, err_max)
         else:
             nskipped += 1
@@ -737,6 +739,7 @@ def test_increment_fluxes_vs_integration(allclose, \
     nskipped = 0
     errbal_max = 0
     errmax_max = 0
+    ev = []
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
             print(" "*8+f"flux trapezoidal - case {case} - Try {itry+1:4d}/{ntry:4d}")
@@ -744,9 +747,10 @@ def test_increment_fluxes_vs_integration(allclose, \
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
 
         # make sure coefficient sum matches aoj, boj and coj
-        avect[-1] = aoj-avect[:-1].sum()
-        bvect[-1] = boj-bvect[:-1].sum()
-        cvect[-1] = coj-cvect[:-1].sum()
+        sa, sb, sc = avect.sum(), bvect.sum(), cvect.sum()
+        avect += (aoj-sa)/3
+        bvect += (boj-sb)/3
+        cvect += (coj-sc)/3
 
         # Integrate forward analytically
         t1 = min(10, rezeq.integrate_delta_t_max(nu, aoj, boj, coj, s0))
@@ -787,15 +791,12 @@ def test_increment_fluxes_vs_integration(allclose, \
                         for a, b, c in zip(avect, bvect, cvect)])
         tol = expected[:, 1].max()
         errmax = max(abs(fluxes-expected[:, 0]))
-        if errmax>1e10:
-            Delta = aoj**2-4*boj*coj
-            sqD = math.sqrt(abs(Delta))
-            dt = t1-t0
-            u1 = math.exp(nu*sqD/2*dt)
-            #import pdb; pdb.set_trace()
 
-        errmax_max = max(errmax, errmax_max)
-
+        Delta = aoj**2-4*boj*coj
+        w = nu*math.sqrt(abs(Delta))/2*(t1-t0)
+        # integration not trusted when overflow becomes really bad
+        if w<1000:
+            errmax_max = max(errmax, errmax_max)
 
     # We should not skip any simulation because we stop at t=tmax
     #assert nskipped == 0
