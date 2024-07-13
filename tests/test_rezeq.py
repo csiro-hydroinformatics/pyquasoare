@@ -40,52 +40,68 @@ def reservoir_function(request, selfun):
     if name!=selfun and selfun!="":
         pytest.skip("Function skipped")
 
+    # Alpha interval
+    alpha0, alpha1 = (0., 1.2)
+
     # sol is the analytical solution of ds/dt = inflow+fun(s)
     if name == "x2":
         sol = lambda t, s0: (s0+np.tanh(t))/(1+s0*np.tanh(t))
-        return name, lambda x: -x**2, lambda x: -2*x, sol, 1.
+        return name, lambda x: -x**2, lambda x: -2*x, sol, 1.,\
+                    (alpha0, alpha1)
 
     elif name == "x4":
         sol = lambda t, s0: s0/(1+3*t*s0**3)**(1./3)
-        return name, lambda x: -x**4, lambda x: -4*x**3, sol, 0.
+        return name, lambda x: -x**4, lambda x: -4*x**3, sol, 0., \
+                    (alpha0, alpha1)
 
     elif name == "x6":
         sol = lambda t, s0: s0/(1+5*t*s0**5)**(1./5)
-        return name, lambda x: -x**6, lambda x: -6*x**5, sol, 0.
+        return name, lambda x: -x**6, lambda x: -6*x**5, sol, 0., \
+                    (alpha0, alpha1)
 
     elif name == "tanh":
         a, b = 0.5, 10
         sol = lambda t, s0: (np.asinh(2*np.exp(-t/b)+np.sinh(a+b*s0))-a)/b
+        alpha0, alpha1 = (-1., 1.)
         return name, lambda x: -np.tanh(a+b*x), \
-                            lambda x: b*(np.tanh(a+b*x)**2-1), sol, 0.
+                            lambda x: b*(np.tanh(a+b*x)**2-1), sol, 0., \
+                            (alpha0, alpha1)
 
     elif name == "exp":
         sol = lambda t, s0: s0+t-np.log(1-(1+np.exp(t))/math.exp(s0))
-        return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1.
+        return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1., \
+                    (alpha0, alpha1)
 
     elif name == "stiff":
         lam = 100
         sol = lambda t, s0: 1./lam-(1./lam-s0)*np.exp(-lam*t)
-        return name, lambda x: -lam*x, lambda x: -lam, sol, 1.
+        return name, lambda x: -lam*x, lambda x: -lam, sol, 1., \
+                    (alpha0, alpha1)
 
     elif name == "sin":
         w = 2*math.pi
         sol = lambda t, s0: -2./w*np.atan(np.exp(w*t)+np.tan(w*s0/2))
-        return name, lambda x: np.sin(w*x), lambda x: -w*np.cos(w*x), sol, 0.
+        return name, lambda x: np.sin(w*x), lambda x: -w*np.cos(w*x), sol, 0.,\
+                    (alpha0, alpha1)
 
     elif name == "recip":
-        return name, lambda x: -1e-2/(1.01-x), lambda x: 1e-2/(1.01-x)**2, None, None
+        alpha0, alpha1 = (0., 1.0)
+        return name, lambda x: -1e-2/(1.01-x), lambda x: 1e-2/(1.01-x)**2, \
+                            None, None, (alpha0, alpha1)
 
     elif name == "recipquad":
-        return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, None, None
+        alpha0, alpha1 = (0., 1.0)
+        return name, lambda x: -1e-4/(1.01-x)**2, lambda x: 2e-4/(1.01-x)**3, \
+                            None, None, (alpha0, alpha1)
 
     elif name == "runge":
+        alpha0, alpha1 = (-1, 3)
         # solution of s1^3+3s1 = 3t+s0^3+3s0
         Q = lambda t, s0: -3*t-3*s0-s0**3
         sol = lambda t, s0: np.cbrt(-Q(t,s0)/2+np.sqrt(Q(t,s0)**2/4+1))\
                             +np.cbrt(-Q(t,s0)/2-np.sqrt(Q(t,s0)**2/4+1))
-        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, sol, 0.
-
+        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, \
+                        sol, 0., (alpha0, alpha1)
 
 
 @pytest.fixture(scope="module", params=list(range(1, NCASES+1)))
@@ -500,7 +516,7 @@ def test_integrate_inverse(allclose, generate_samples, printout):
 
 def test_get_coefficients(allclose, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _, _ = reservoir_function
+    fname, fun, dfun, _, _, _ = reservoir_function
     alphaj = 0.
     alphajp1 = 1.
     nus = [0.01, 0.1, 1, 5]
@@ -526,10 +542,10 @@ def test_get_coefficients(allclose, reservoir_function):
 
 def test_get_coefficients_matrix(allclose, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _, _ = reservoir_function
+    fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
     funs = [lambda x: 1., fun]
     nalphas = 200
-    alphas = np.linspace(0., 1., nalphas)
+    alphas = np.linspace(alpha0, alpha1, nalphas)
     nus = [0.01, 1, 2, 5, 8]
     s = np.linspace(-0.1, 1.1, 1000)
     print("")
@@ -545,8 +561,8 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
         # Run approx
         out = rezeq.approx_fun_from_matrix(alphas, n, amat, bmat, cmat, s)
         fapprox = out[:, 1]
-        assert allclose(fapprox[s<0], fun(0))
-        assert allclose(fapprox[s>1], fun(1))
+        assert allclose(fapprox[s<alpha0], fun(0))
+        assert allclose(fapprox[s>alpha1], fun(1))
         assert np.all((emat>0) & (emat<1))
 
         ftrue = fun(s)
@@ -560,6 +576,8 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
         elif fname == "recipquad":
             ethresh = 1e-2
         elif fname == "stiff":
+            ethresh = 1e-4
+        elif fname in ["tanh", "sin", "runge"]:
             ethresh = 1e-5
         else:
             ethresh = 1e-6
@@ -572,16 +590,7 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
 
 def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _, _ = reservoir_function
-
-    if fname == "runge":
-        alpha0, alpha1 = (-1, 3)
-    elif fname == "tanh":
-        alpha0, alpha1 = (-1., 1.)
-    elif re.search("recip", fname):
-        alpha0, alpha1 = (0., 1.0)
-    else:
-        alpha0, alpha1 = (0., 1.2)
+    fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
 
     x = np.linspace(alpha0, alpha1, 1000)
     y = fun(x)
@@ -604,21 +613,12 @@ def test_get_coefficients_matrix_optimize(allclose, reservoir_function):
                     f"nus=[{tnus}]")
 
 
-def test_get_coefficients_matrix_optimize_compare_quad(allclose, reservoir_function):
+def test_get_coefficients_matrix_optimize_vs_quad(allclose, reservoir_function):
     # Get function and its derivative
-    fname, fun, dfun, _, _ = reservoir_function
+    fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
     if fname in ["x2", "stiff"]:
         # Skip x2 and stiff which are perfect match with quadratic functions
         pytest.skip("Skip function")
-
-    if fname == "runge":
-        alpha0, alpha1 = (-1, 3)
-    elif fname == "tanh":
-        alpha0, alpha1 = (-1., 1.)
-    elif re.search("recip", fname):
-        alpha0, alpha1 = (0., 1.0)
-    else:
-        alpha0, alpha1 = (0., 1.2)
 
     x = np.linspace(alpha0, alpha1, 1000)
     y = fun(x)
@@ -807,11 +807,9 @@ def test_increment_fluxes_vs_integration(allclose, \
 
 
 def test_integrate_reservoir_equation(allclose, reservoir_function):
-    fname, fun, dfun, sol, inflow = reservoir_function
+    fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     if sol is None:
         pytest.skip("No analytical solution")
-
-    pytest.skip("TODO : Work in progress")
 
     inp = lambda x: inflow
     sfun = lambda x: inflow+fun(x)
@@ -821,13 +819,16 @@ def test_integrate_reservoir_equation(allclose, reservoir_function):
     dsfun = lambda x: dinp(x)+dfun(x)
     dfuns = [dsfun, dinp, dfun]
 
-    nalphas = 500
+    nalphas = 5
     alphas = np.linspace(0., 1., nalphas)
     nus, alphase, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
                                                                 alphas, nus=1)
-    s0 = [-5, 0, 0]
-    t0, Tmax = 0, 10
-    t_eval = np.linspace(t0, Tmax, 500)
-    te, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, t0, s0, t_eval)
-
+    s0 = 5
+    t0, t1 = 0, 10
+    delta, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, \
+                                    t0, [s0]+[0]*2, [t1])
+    scalings = np.ones(len(funs))
+    niter, s1, fluxes = rezeq.integrate(delta, alphas, scalings, nus, \
+                            amat, bmat, cmat, s0)
+    import pdb; pdb.set_trace()
 

@@ -15,6 +15,7 @@ int c_run(int nalphas, int nfluxes, int nval, double delta,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
                             double s0,
+                            int * niter,
                             double * s1,
                             double * fluxes) {
     int ierr, t;
@@ -28,6 +29,7 @@ int c_run(int nalphas, int nfluxes, int nval, double delta,
                             b_matrix_noscaling,
                             c_matrix_noscaling,
                             s0,
+                            &(niter[t]),
                             &(s1[t]),
                             &(fluxes[nfluxes*t]));
         if(ierr>0)

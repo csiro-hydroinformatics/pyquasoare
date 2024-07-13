@@ -47,6 +47,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
                             double s0,
+                            int * niter,
                             double * s1,
                             double * fluxes);
 

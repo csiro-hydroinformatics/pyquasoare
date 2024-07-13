@@ -7,8 +7,14 @@
 #include <string.h>
 #include <errno.h>
 
-/* Define Error message */
+/* Define Error messages */
 #define REZEQ_ERROR 100000
+
+#define REZEQ_ERROR_INTEGRATE_WRONG_NU 1
+#define REZEQ_ERROR_INTEGRATE_NAN_COEFF 2
+#define REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS 3
+#define REZEQ_ERROR_INTEGRATE_NAN_SIM 4
+#define REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE 5
 
 /* Define small number */
 #define REZEQ_EPS 1e-10
@@ -25,5 +31,7 @@ int ispos(double x);
 int isneg(double x);
 
 int c_find_alpha(int nalphas, double * alphas, double s0);
+
+int c_get_error_message(int err_code, char message[100]);
 
 #endif

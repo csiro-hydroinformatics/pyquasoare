@@ -322,16 +322,18 @@ def integrate(delta, alphas, scalings, nus, \
                 s0):
     # Initialise
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
+    niter = np.zeros(1, dtype=np.int32)
     s1 = np.zeros(1, dtype=np.float64)
 
     # run
     ierr = c_pyrezeq.integrate(delta, alphas, scalings, nus, \
                     a_matrix_noscaling, b_matrix_noscaling, \
-                    c_matrix_noscaling, s0, s1, fluxes)
+                    c_matrix_noscaling, s0, niter, s1, fluxes)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.integrate returns {ierr}")
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.integrate returns {ierr} ({mess})")
 
-    return u1[0], fluxes
+    return niter[0], s1[0], fluxes
 
 
 
@@ -342,17 +344,18 @@ def run(delta, alphas, scalings, \
                 c_matrix_noscaling, \
                 s0):
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
+    niter = np.zeros(scalings.shape[0], dtype=np.int32)
     s1 = np.zeros(scalings.shape[0], dtype=np.float64)
     ierr = c_pyrezeq.run(delta, alphas, scalings, \
                     nu_vector, \
                     a_matrix_noscaling, \
                     b_matrix_noscaling, \
                     c_matrix_noscaling, \
-                    s0, s1, fluxes)
+                    s0, niter, s1, fluxes)
     if ierr>0:
         raise ValueError(f"c_pyrezeq.run returns {ierr}")
 
-    return u1, fluxes
+    return niter, s1, fluxes
 
 
 def quadrouting(delta, theta, q0, s0, inflows, \

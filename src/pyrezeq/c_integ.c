@@ -273,7 +273,8 @@ int c_integrate(int nalphas, int nfluxes, double delta,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
-                            double s0, double * s1, double * fluxes) {
+                            double s0,
+                            int *niter, double * s1, double * fluxes) {
     int i, jalpha_next;
     double aoj=0., boj=0., coj=0., nu;
     double a=0, b=0, c=0;
@@ -287,7 +288,6 @@ int c_integrate(int nalphas, int nfluxes, double delta,
     int is_low = s0<alphas[0];
     int is_high = s0>alphas[nalphas-1];
     double t0 = 0.;
-    int niter = 0;
     double aoj_prev=0., boj_prev=0., coj_prev=0.;
 
     /* Inialise fluxes */
@@ -296,13 +296,13 @@ int c_integrate(int nalphas, int nfluxes, double delta,
 
     /* Time loop */
     while (t0<delta-1e-10 && niter<nalphas) {
-        niter += 1;
+        niter[0] += 1;
 
         /* Exponential factor */
         nu = nu_vector[jalpha];
 
         if(isnan(nu) || nu<0)
-            return REZEQ_ERROR + __LINE__;
+            return REZEQ_ERROR_INTEGRATE_WRONG_NU;
 
         /* Store previous coefficients */
         aoj_prev = aoj;
@@ -333,14 +333,14 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         }
 
         if(isnan(aoj) || isnan(boj) || isnan(coj))
-            return REZEQ_ERROR + __LINE__;
+            return REZEQ_ERROR_INTEGRATE_NAN_COEFF;
 
         /* Check continuity */
-        if(niter>1){
+        if(niter[0]>1){
             ds1 = c_approx_fun(nu, aoj_prev, boj_prev, coj_prev, s0);
             ds2 = c_approx_fun(nu, aoj, boj, coj, s0);
             if(notnull(ds1-ds2))
-                return REZEQ_ERROR + __LINE__;
+                return REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS;
         }
 
         /* Get band limits */
@@ -348,12 +348,12 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         alpha1 = alphas[jalpha+1];
 
         /* integrate ODE up to the end of the time step */
-        *s1 = c_integrate_forward(t0, s0, nu, aoj, boj, coj, delta);
+        *s1 = c_integrate_forward(nu, aoj, boj, coj, t0, s0, delta);
 
         /* divergent solution */
-        if(isnan(*s1))
-            return REZEQ_ERROR + __LINE__;
-
+        if(isnan(*s1)){
+            return REZEQ_ERROR_INTEGRATE_NAN_SIM;
+        }
         /** Check if integration stays in the band or
         * if we are below lowest alphas or above highest alpha
         * In these cases, complete integration straight away.
@@ -409,7 +409,7 @@ int c_integrate(int nalphas, int nfluxes, double delta,
 
     /* Convergence problem */
     if(notnull(t0-delta))
-        return REZEQ_ERROR + __LINE__;
+        return REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE;
 
     return 0;
 }

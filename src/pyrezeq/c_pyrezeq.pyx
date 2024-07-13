@@ -9,6 +9,9 @@ cdef extern from 'c_utils.h':
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
+    int c_get_error_message(int err_code, char message[100]);
+
+
 cdef extern from 'c_integ.h':
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
@@ -44,6 +47,7 @@ cdef extern from 'c_integ.h':
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
                                 double s0,
+                                int * niter,
                                 double * s1,
                                 double * fluxes);
 
@@ -56,6 +60,7 @@ cdef extern from 'c_run.h':
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
                                 double s0,
+                                int * niter,
                                 double * s1,
                                 double * fluxes);
 
@@ -73,6 +78,12 @@ def __cinit__(self):
 
 def get_eps():
     return c_get_eps()
+
+
+def get_error_message(int err_code):
+    cdef char message[100]
+    c_get_error_message(err_code, message)
+    return message
 
 
 def approx_fun(double nu, double a, double b, double c, double s):
@@ -216,6 +227,7 @@ def integrate(double delta,
                         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
                         double s0, \
+                        np.ndarray[int, ndim=1, mode='c'] niter not None,\
                         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                         np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
@@ -258,6 +270,7 @@ def integrate(double delta,
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
                                 s0,
+                                <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
 
@@ -270,6 +283,7 @@ def run(double delta, \
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
         double s0, \
+        np.ndarray[int, ndim=1, mode='c'] niter not None,\
         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
         np.ndarray[double, ndim=2, mode='c'] fluxes not None):
 
@@ -302,6 +316,9 @@ def run(double delta, \
     if s1.shape[0] != nval:
         raise ValueError("s1.shape[0] != nval")
 
+    if niter.shape[0] != nval:
+        raise ValueError("niter.shape[0] != nval")
+
     if fluxes.shape[0] != nval:
         raise ValueError("fluxes.shape[0] != nval")
 
@@ -317,6 +334,7 @@ def run(double delta, \
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
                                 s0,
+                                <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
 

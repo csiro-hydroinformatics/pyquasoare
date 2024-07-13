@@ -48,3 +48,28 @@ int c_find_alpha(int nalphas, double * alphas, double s0){
 }
 
 
+int c_get_error_message(int err_code, char message[100]){
+    int ierr=0;
+    int len=100;
+
+    if(err_code == REZEQ_ERROR_INTEGRATE_WRONG_NU)
+        strncpy(message, "Wrong nu", len);
+
+    if(err_code == REZEQ_ERROR_INTEGRATE_NAN_COEFF)
+        strncpy(message, "NaN values in coeffs", len);
+
+    else if(err_code == REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS)
+        strncpy(message, "Approx coeffs not continuous", len);
+
+    else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_SIM)
+        strncpy(message, "Simulation produces nan", len);
+
+    else if(err_code == REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE)
+        strncpy(message, "Algorithm did not converge", len);
+
+    else
+        strncpy(message, "Error code not found", len);
+
+    return ierr;
+
+}
