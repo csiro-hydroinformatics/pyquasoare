@@ -61,14 +61,14 @@ def reservoir_function(request, selfun):
 
     elif name == "tanh":
         a, b = 0.5, 10
-        sol = lambda t, s0: (np.asinh(2*np.exp(-t/b)+np.sinh(a+b*s0))-a)/b
+        sol = lambda t, s0: (np.arcsinh(np.exp(-t*b)*np.sinh(a+b*s0))-a)/b
         alpha0, alpha1 = (-1., 1.)
         return name, lambda x: -np.tanh(a+b*x), \
                             lambda x: b*(np.tanh(a+b*x)**2-1), sol, 0., \
                             (alpha0, alpha1)
 
     elif name == "exp":
-        sol = lambda t, s0: s0+t-np.log(1-(1+np.exp(t))/math.exp(s0))
+        sol = lambda t, s0: s0+t-np.log(1-(1-np.exp(t))*math.exp(s0))
         return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1., \
                     (alpha0, alpha1)
 
@@ -79,8 +79,11 @@ def reservoir_function(request, selfun):
                     (alpha0, alpha1)
 
     elif name == "sin":
+        alpha0, alpha1 = (0.0, 1.0)
         w = 2*math.pi
-        sol = lambda t, s0: -2./w*np.atan(np.exp(w*t)+np.tan(w*s0/2))
+        tmp = lambda t, s0: np.arccos((np.cos(w*s0)-np.tanh(w*t)) \
+                                        /(1-np.cos(w*s0)*np.tanh(w*t)))/w
+        sol = lambda t, s0: tmp(t, s0) if math.sin(w*s0)>0 else 2*math.pi/w-tmp(t, s0)
         return name, lambda x: np.sin(w*x), lambda x: -w*np.cos(w*x), sol, 0.,\
                     (alpha0, alpha1)
 
@@ -806,11 +809,16 @@ def test_increment_fluxes_vs_integration(allclose, \
     print("")
 
 
-def test_integrate_reservoir_equation(allclose, reservoir_function):
+def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     if sol is None:
         pytest.skip("No analytical solution")
-    return
+
+    pytest.skip("-- WORK IN PROGRESS --")
+
+    print("")
+    print(" "*4+f"Testing rezeq integrete - fun {fname}")
+
     inp = lambda x: inflow
     sfun = lambda x: inflow+fun(x)
     funs = [sfun, inp, fun]
@@ -819,16 +827,79 @@ def test_integrate_reservoir_equation(allclose, reservoir_function):
     dsfun = lambda x: dinp(x)+dfun(x)
     dfuns = [dsfun, dinp, dfun]
 
-    nalphas = 5
-    alphas = np.linspace(0., 1., nalphas)
-    nus, alphase, amat, bmat, cmat = rezeq.get_coefficients_matrix(funs, \
-                                                                alphas, nus=1)
-    s0 = 5
-    t0, t1 = 0, 10
-    delta, expected = rezeq_slow.integrate_forward_numerical(funs, dfuns, \
-                                    t0, [s0]+[0]*2, [t1])
-    scalings = np.ones(len(funs))
-    niter, s1, fluxes = rezeq.integrate(delta, alphas, scalings, nus, \
-                            amat, bmat, cmat, s0)
-    import pdb; pdb.set_trace()
+    # Approximate coefficients
+    nalphas = 3
+    nus = 3
+    alphas = np.linspace(alpha0, alpha1, nalphas)
+    nus, amat, bmat, cmat, _ = rezeq.get_coefficients_matrix([inp, fun], \
+                                                                alphas, nus=nus)
+    scalings = np.ones(2)
+
+    t0 = 0 # Analytical solution always integrated from t0=0!
+    errmax_app_max = 0.
+    time_app = 0.
+    niter_app = 0
+    errmax_num_max = 0.
+    time_num = 0.
+    niter_num = 0
+
+    for itry in range(ntry):
+        # Numerical integration
+        s0 = np.random.uniform(alpha0, alpha1)
+        t1 = np.random.uniform(t0+1e-2, 10)
+
+        # Analytical solution
+        s1_ana = sol(t1, s0)
+        expected = np.array([s1_ana, inflow*(t1-t0)+s0-s1_ana])
+
+        # Approximate method
+        start = time.time()
+        niter, s1, fluxes = rezeq.integrate(t1, alphas, scalings, nus, \
+                                amat, bmat, cmat, s0)
+        end = time.time()
+        time_app += (end-start)*1e3
+        niter_app = max(niter_app, niter)
+        approx = np.array([s1, -fluxes[-1]])
+
+        tt = np.linspace(t0, 10, 500)
+        s = np.array([rezeq.integrate(t, alphas, scalings, nus, \
+                                amat, bmat, cmat, s0)[1] for t in tt])
+        ds = rezeq.approx_fun_from_matrix(alphas, nus, amat, bmat, cmat, s)
+        sa = sol(tt, s0)
+
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(ncols=2)
+        ax = axs[0]
+        ax.plot(fun(sa), sa, "b-")
+        ax.plot(ds, s, "g-")
+        ax.plot(fun(s0), s0, "or")
+        ax = axs[1]
+        ax.plot(tt, sa, "b-")
+        ax.plot(tt, s, "g-")
+        ax.plot(0, s0, "or")
+        plt.show()
+        import pdb; pdb.set_trace()
+
+        # Numerical method
+        start = time.time()
+        t1n, fluxes_n, nev, njac = rezeq_slow.integrate_forward_numerical(\
+                                        funs, dfuns, \
+                                        t0, [s0]+[0]*2, [t1])
+        end = time.time()
+        time_num += (end-start)*1e3
+        niter_num = max(niter_num, nev+njac)
+        numerical = np.array([fluxes_n[0], -fluxes_n[-1]])
+
+        #import pdb; pdb.set_trace()
+
+        # Errors
+        errmax_app_max = max(np.abs(approx-expected).max(), errmax_num_max)
+        errmax_num_max = max(np.abs(numerical-expected).max(), errmax_num_max)
+
+    tab = " "*8
+    print(f"{tab}Errmax approx vs analytical = {errmax_app_max:3.2e}"\
+                    +f" time={time_app:3.3e} msec/niter={niter_app}")
+    print(f"{tab}Errmax numer  vs analytical = {errmax_num_max:3.2e}"\
+                    +f" time={time_num:3.3e} msec/niter={niter_num}")
+    print("")
 

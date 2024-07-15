@@ -9,7 +9,6 @@
 
 #include "c_utils.h"
 
-
 double c_approx_fun(double nu, double a, double b, double c, double s);
 
 double c_approx_jac(double nu, double a, double b, double c, double s);

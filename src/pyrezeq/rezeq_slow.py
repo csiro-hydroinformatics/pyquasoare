@@ -35,7 +35,11 @@ def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
             t_eval=t, \
             args=fun_args)
 
-    return res.t, res.y.T.squeeze()
+    # Function evaluation
+    nev = res.nfev
+    njac = res.njev if hasattr(res, "njev") else 0
+
+    return res.t, res.y.T.squeeze(), nev, njac
 
 
 def routing_numerical(delta, theta, q0, s0, \

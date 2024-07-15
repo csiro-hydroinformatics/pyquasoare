@@ -149,6 +149,7 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     a_matrix = np.zeros((nalphas-1, nfluxes))
     b_matrix = np.zeros((nalphas-1, nfluxes))
     c_matrix = np.zeros((nalphas-1, nfluxes))
+    delta_t_max = np.zeros(nalphas-1)
     for j in range(nalphas-1):
         nu = nus[j]
         alphaj, alphajp1 = alphas[[j, j+1]]

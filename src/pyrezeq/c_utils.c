@@ -55,7 +55,10 @@ int c_get_error_message(int err_code, char message[100]){
     if(err_code == REZEQ_ERROR_INTEGRATE_WRONG_NU)
         strncpy(message, "Wrong nu", len);
 
-    if(err_code == REZEQ_ERROR_INTEGRATE_NAN_COEFF)
+    else if(err_code == REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS)
+        strncpy(message, "j index out of bounds", len);
+
+    else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_COEFF)
         strncpy(message, "NaN values in coeffs", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS)
