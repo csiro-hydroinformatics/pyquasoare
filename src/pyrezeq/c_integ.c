@@ -20,7 +20,7 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c,
                                 double s0){
     double e0 = exp(-nu*s0);
     double Delta = a*a-4*b*c;
-    double delta_tmax, tmp=0, lam0=0, sqD=0;
+    double delta_tmax=0, tmp=0, lam0=0, sqD=0;
 
     if(nu<0 || isnan(nu))
         return c_get_nan();
@@ -72,7 +72,7 @@ double c_integrate_forward(double nu, double a, double b, double c,
     double e0 = exp(-nu*s0);
     double sgn=1,omeg=0, lam0=0, sqD=0;
     double Delta = a*a-4*b*c;
-    double ra2b, s1;
+    double ra2b, s1=0;
 
     if(nu<0 || isnan(nu))
         return c_get_nan();
@@ -176,7 +176,6 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
                         double * fluxes){
     int i;
     double dt = t1-t0;
-    double ds = s1-s0;
     double e0 = exp(-nu*s0);
     double expint=0;
     double a = aoj, a_check=0;
@@ -184,7 +183,7 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
     double c = coj, c_check=0;
     double A, B, C;
     double Delta = aoj*aoj-4*boj*coj;
-    double sqD, aij, bij, cij, gam, lam0, u0, u1, w;
+    double sqD, aij, bij, cij, lam0, u0, u1, w;
 
     if(t1<t0 || nu<0 || isnan(nu))
         return REZEQ_ERROR + __LINE__;
@@ -295,8 +294,8 @@ int c_integrate(int nalphas, int nfluxes, double delta,
         fluxes[i] = 0;
 
     /* Time loop */
-    while (t0<delta-1e-10 && niter<nalphas) {
-        niter[0] += 1;
+    while (t0<delta-1e-10 && *niter<nalphas) {
+        *niter += 1;
 
         /* Exponential factor */
         nu = nu_vector[jalpha];
