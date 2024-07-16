@@ -276,7 +276,7 @@ int c_integrate(int nalphas, int nfluxes,
                             double s0,
                             double delta,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=1;
+    int REZEQ_DEBUG=0;
 
     int i, nit=0, jalpha_next;
     int reached_alpha_bounds=0;
@@ -295,6 +295,7 @@ int c_integrate(int nalphas, int nfluxes,
     double aoj_prev=0., boj_prev=0., coj_prev=0.;
 
     /* Inialise */
+    double t_final = t0+delta;
     double t_start=t0, t_end=t0;
     double s_start=s0, s_end=s0;
     for(i=0; i<nfluxes; i++)
@@ -305,7 +306,7 @@ int c_integrate(int nalphas, int nfluxes,
     }
 
     /* Time loop */
-    while (ispos(delta+t0-t_end) && nit<nalphas) {
+    while (ispos(t_final-t_end) && nit<nalphas) {
         nit += 1;
 
         if(jalpha<0 || jalpha>nalphas-2)
@@ -382,12 +383,9 @@ int c_integrate(int nalphas, int nfluxes,
             /* Compute time for which s(t) = s_end */
             t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_end);
 
-            /* If this time is beyond time step, clip at time step */
-            t_end = t_end-t0>delta ? t0+delta : t_end;
-
         } else {
             /* derivative is null -> finish iteration */
-            t_end = t0+delta;
+            t_end = t_final;
             s_end = s_start;
         }
 
@@ -395,13 +393,20 @@ int c_integrate(int nalphas, int nfluxes,
         reached_alpha_bounds = jalpha_next<0 || jalpha_next > nalphas-2;
         jalpha_next = jalpha_next<0 ? 0 : jalpha_next>nalphas-2 ? nalphas-2 :  jalpha_next;
 
-        /* Compute correct s1 if not finished iteration (t_end<t0+delta)
+        /* Compute correct s_end if not finished iteration (t_end<t0+delta)
             or if t1 is nan (i.e. close to steady)/
             or if we are beyond alpha bounds */
-
-        if(t_end-t0<delta || isnan(t_end) || reached_alpha_bounds){
-            t_end = isnan(t_end) || reached_alpha_bounds ? t0+delta : t_end;
+        if(t_end>t0+delta || isnan(t_end) || t_end<t_start || reached_alpha_bounds){
+            t_end = t_final;
             s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
+        }
+
+        if(REZEQ_DEBUG==1){
+            fprintf(stdout, "  [%d] j=%d->%d  nu=%0.5f a=%0.5f, b=%0.5f c=%0.5f f=%0.5f\n",
+                                        nit, jalpha, jalpha_next, nu, aoj, boj,
+                                        coj, funval);
+            fprintf(stdout, "        t=%0.5f->%0.5f  s=%0.5f->%0.5f\n\n",
+                                        t_start, t_end, s_start, s_end);
         }
 
         /* Increment fluxes during the last interval */
@@ -413,14 +418,6 @@ int c_integrate(int nalphas, int nfluxes,
 
         /* Loop for next band */
         funval_prev = c_approx_fun(nu, aoj, boj, coj, s_end);
-
-        if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\n[%3d] t=%0.5f->%0.5f(<%0.5f)  s=%0.5f->%0.5f f=%0.5f\n", nit,
-                                    t_start, t_end, t0+delta, s_start, s_end, funval_prev);
-            fprintf(stdout, "       [j=%d/%d a0=%0.3f a1=%0.3f] ", jalpha, nalphas-2, alpha0, alpha1);
-            fprintf(stdout, " nu=%0.3f a=%0.3f b=%0.3f c=%0.3f\n", nu, aoj, boj, coj);
-        }
-
         t_start = t_end;
         s_start = s_end;
         jalpha = jalpha_next;

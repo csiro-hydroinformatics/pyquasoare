@@ -270,6 +270,34 @@ def get_coefficients_matrix_optimize(funs, alpha0, alpha1, nalphas, \
     return alphas, nus
 
 
+def get_coefficients_matrix_optimize_nu(funs, alpha0, alpha1, nalphas, \
+                                        nexplore=1000, \
+                                        errfun="max"):
+    """ Optimize single nu. """
+    assert alpha0<alpha1
+    alphas = np.linspace(alpha0, alpha1, nalphas)
+
+    # sum function
+    def sfun(x):
+        y = np.zeros_like(x)
+        for f in funs:
+            y += f(x)
+        return y
+
+    ones = np.ones(nalphas-1)
+    def ofun(theta):
+        nus = ones*math.exp(theta)
+        _, amat, bmat, cmat, _ = get_coefficients_matrix([sfun], alphas, nus)
+        return approx_error([sfun], alphas, nus, amat, bmat, cmat, \
+                                        errfun=errfun)
+
+    opts = dict(maxiter=1000)
+    opt = minimize_scalar(ofun, bracket=[-3, 2], bounds=[-3, 2], \
+                                options=opts)
+    nus = ones*math.exp(opt.x[0])
+    return alphas, nus
+
+
 def steady_state_scalings(alphas, nus, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \

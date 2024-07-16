@@ -814,11 +814,7 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     if sol is None:
         pytest.skip("No analytical solution")
 
-
-    pytest.skip("WIP")
-    print("")
-    print(" "*4+f"Testing rezeq integrate - fun {fname} ntry={ntry}")
-
+    #pytest.skip("WIP")
     inp = lambda x: inflow
     sfun = lambda x: inflow+fun(x)
     funs = [sfun, inp, fun]
@@ -827,38 +823,46 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     dsfun = lambda x: dinp(x)+dfun(x)
     dfuns = [dsfun, dinp, dfun]
 
+    # Optimize nu
+    nalphas = 20
+    alphas, nus = rezeq.get_coefficients_matrix_optimize_nu([inp, fun], \
+                                    alpha0, alpha1, nalphas)
+
+    print("")
+    print(" "*4+f"Testing rezeq integrate - fun {fname} "\
+                +f"ntry={ntry} nu={nus[0]:0.2f}")
+
     # Approximate coefficients
-    nalphas = 5
-    nus = 0.01
-    alphas = np.linspace(alpha0, alpha1, nalphas)
     nus, amat, bmat, cmat, _ = rezeq.get_coefficients_matrix([inp, fun], \
                                                                 alphas, nus=nus)
     aojs, bojs, cojs = amat.sum(axis=1), bmat.sum(axis=1), cmat.sum(axis=1)
     scalings = np.ones(2)
 
     t0 = 0 # Analytical solution always integrated from t0=0!
-    nval = 5
-    t1 = np.linspace(t0, 5, nval)[1:]
+    nval = 500
+    Tmax = 5
+    t1 = np.linspace(t0, Tmax, nval)
 
     errmax_app_max, time_app, niter_app = 0., 0., 0
     errmax_num_max, time_num, niter_num = 0., 0., 0
 
     for itry in range(ntry):
-        s0 = np.random.uniform(alpha0, alpha1)
-        s0 = 1.108
+        if fname == "runge":
+            s0 = np.random.uniform(-1, 1)
+        else:
+            s0 = np.random.uniform(alpha0, alpha1)
 
         # Analytical solution
         expected = sol(t1, s0)
 
         # Approximate method
         end = time.time()
-        niter, approx = [], []
-        fxout = 0
-        tstart = time.time()
+        niter, approx = [0], [s0]
         s_start = s0
-        for i in range(len(t1)):
-            start = t0 if i==0 else t1[i-1]
-            delta = t1[i]-start
+        tstart = time.time()
+        for i in range(len(t1)-1):
+            start = t1[i]
+            delta = t1[i+1]-start
             n, s_end, _ = rezeq.integrate(alphas, scalings, nus, \
                                                 amat, bmat, cmat, start, \
                                                 s_start, delta)
@@ -872,34 +876,28 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
         approx = np.array(approx)
         niter_app = max(niter_app, niter.sum())
 
-        import matplotlib.pyplot as plt
-        plt.plot(np.insert(t1,0, t0), np.insert(expected, 0, s0))
-        plt.plot(np.insert(t1,0, t0), np.insert(approx, 0, s0))
-        plt.show()
-        import pdb; pdb.set_trace()
-
-
         # Numerical method
-        tstart = time.time()
-        tn, fn, nev, njac = rezeq_slow.integrate_forward_numerical(\
-                                        funs, dfuns, \
-                                        t0, [s0]+[0]*2, t1)
-        tend = time.time()
-        time_num += (tend-tstart)*1e3
-        niter_num = max(niter_num, nev+njac)
-        numerical = fn[:, 0]
+        #tstart = time.time()
+        #tn, fn, nev, njac = rezeq_slow.integrate_forward_numerical(\
+        #                                funs, dfuns, \
+        #                                t0, [s0]+[0]*2, t1)
+        #tend = time.time()
+        #time_num += (tend-tstart)*1e3
+        #niter_num = max(niter_num, nev+njac)
+        #numerical = fn[:, 0]
 
         # Errors
         errmax = np.abs(approx-expected).max()
         errmax_app_max = max(errmax, errmax_app_max)
 
-        errmax = np.abs(numerical-expected).max()
-        errmax_num_max = max(errmax, errmax_num_max)
+        #errmax = np.abs(numerical-expected).max()
+        #errmax_num_max = max(errmax, errmax_num_max)
 
+    assert errmax_app_max<1e-3
     tab = " "*8
     print(f"{tab}Errmax approx vs analytical = {errmax_app_max:3.2e}"\
                     +f" time={time_app:3.3e} msec/niter={niter_app}")
-    print(f"{tab}Errmax numer  vs analytical = {errmax_num_max:3.2e}"\
-                    +f" time={time_num:3.3e} msec/niter={niter_num}")
+    #print(f"{tab}Errmax numer  vs analytical = {errmax_num_max:3.2e}"\
+    #                +f" time={time_num:3.3e} msec/niter={niter_num}")
     print("")
 
