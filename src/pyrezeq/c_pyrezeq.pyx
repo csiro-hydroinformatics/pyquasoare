@@ -39,14 +39,16 @@ cdef extern from 'c_integ.h':
                             double s1,
                             double * fluxes);
 
-    int c_integrate(int nalphas, int nfluxes, double delta,
+    int c_integrate(int nalphas, int nfluxes,
                                 double * alphas,
                                 double * scalings,
                                 double * nu_vector,
                                 double * a_matrix_noscaling,
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
+                                double t0,
                                 double s0,
+                                double delta,
                                 int * niter,
                                 double * s1,
                                 double * fluxes);
@@ -61,7 +63,7 @@ cdef extern from 'c_run.h':
                                 double * c_matrix_noscaling,
                                 double s0,
                                 int * niter,
-                                double * s1,
+                                double * s_end,
                                 double * fluxes);
 
 cdef extern from 'c_steady.h':
@@ -219,14 +221,13 @@ def increment_fluxes(np.ndarray[double, ndim=1, mode='c'] scalings not None,
                             <double*> np.PyArray_DATA(fluxes))
 
 
-def integrate(double delta,
-                        np.ndarray[double, ndim=1, mode='c'] alphas not None,\
+def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                         np.ndarray[double, ndim=1, mode='c'] scalings not None,
                         np.ndarray[double, ndim=1, mode='c'] nu_vector not None,
                         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
-                        double s0, \
+                        double t0, double s0, double delta, \
                         np.ndarray[int, ndim=1, mode='c'] niter not None,\
                         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                         np.ndarray[double, ndim=1, mode='c'] fluxes not None):
@@ -262,14 +263,14 @@ def integrate(double delta,
         raise ValueError("fluxes.shape[0] != nfluxes")
 
     # Run C code
-    return c_integrate(nalphas, nfluxes, delta,
+    return c_integrate(nalphas, nfluxes,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
                                 <double*> np.PyArray_DATA(nu_vector),
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
-                                s0,
+                                t0, s0, delta,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))

@@ -17,9 +17,6 @@
 #define REZEQ_ERROR_INTEGRATE_NAN_SIM 5
 #define REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE 6
 
-#define REZEQ_DEBUG 0
-
-
 /* Define small number */
 #define REZEQ_EPS 1e-10
 

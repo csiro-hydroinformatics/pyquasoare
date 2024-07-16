@@ -814,10 +814,10 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     if sol is None:
         pytest.skip("No analytical solution")
 
-    pytest.skip("-- WORK IN PROGRESS --")
 
+    pytest.skip("WIP")
     print("")
-    print(" "*4+f"Testing rezeq integrete - fun {fname}")
+    print(" "*4+f"Testing rezeq integrate - fun {fname} ntry={ntry}")
 
     inp = lambda x: inflow
     sfun = lambda x: inflow+fun(x)
@@ -828,73 +828,73 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     dfuns = [dsfun, dinp, dfun]
 
     # Approximate coefficients
-    nalphas = 3
-    nus = 3
+    nalphas = 5
+    nus = 0.01
     alphas = np.linspace(alpha0, alpha1, nalphas)
     nus, amat, bmat, cmat, _ = rezeq.get_coefficients_matrix([inp, fun], \
                                                                 alphas, nus=nus)
+    aojs, bojs, cojs = amat.sum(axis=1), bmat.sum(axis=1), cmat.sum(axis=1)
     scalings = np.ones(2)
 
     t0 = 0 # Analytical solution always integrated from t0=0!
-    errmax_app_max = 0.
-    time_app = 0.
-    niter_app = 0
-    errmax_num_max = 0.
-    time_num = 0.
-    niter_num = 0
+    nval = 5
+    t1 = np.linspace(t0, 5, nval)[1:]
+
+    errmax_app_max, time_app, niter_app = 0., 0., 0
+    errmax_num_max, time_num, niter_num = 0., 0., 0
 
     for itry in range(ntry):
-        # Numerical integration
         s0 = np.random.uniform(alpha0, alpha1)
-        t1 = np.random.uniform(t0+1e-2, 10)
+        s0 = 1.108
 
         # Analytical solution
-        s1_ana = sol(t1, s0)
-        expected = np.array([s1_ana, inflow*(t1-t0)+s0-s1_ana])
+        expected = sol(t1, s0)
 
         # Approximate method
-        start = time.time()
-        niter, s1, fluxes = rezeq.integrate(t1, alphas, scalings, nus, \
-                                amat, bmat, cmat, s0)
         end = time.time()
-        time_app += (end-start)*1e3
-        niter_app = max(niter_app, niter)
-        approx = np.array([s1, -fluxes[-1]])
+        niter, approx = [], []
+        fxout = 0
+        tstart = time.time()
+        s_start = s0
+        for i in range(len(t1)):
+            start = t0 if i==0 else t1[i-1]
+            delta = t1[i]-start
+            n, s_end, _ = rezeq.integrate(alphas, scalings, nus, \
+                                                amat, bmat, cmat, start, \
+                                                s_start, delta)
+            niter.append(n)
+            approx.append(s_end)
+            s_start = s_end
 
-        tt = np.linspace(t0, 10, 500)
-        s = np.array([rezeq.integrate(t, alphas, scalings, nus, \
-                                amat, bmat, cmat, s0)[1] for t in tt])
-        ds = rezeq.approx_fun_from_matrix(alphas, nus, amat, bmat, cmat, s)
-        sa = sol(tt, s0)
+        tend = time.time()
+        time_app += (tend-tstart)*1e3
+        niter = np.array(niter)
+        approx = np.array(approx)
+        niter_app = max(niter_app, niter.sum())
 
         import matplotlib.pyplot as plt
-        fig, axs = plt.subplots(ncols=2)
-        ax = axs[0]
-        ax.plot(fun(sa), sa, "b-")
-        ax.plot(ds, s, "g-")
-        ax.plot(fun(s0), s0, "or")
-        ax = axs[1]
-        ax.plot(tt, sa, "b-")
-        ax.plot(tt, s, "g-")
-        ax.plot(0, s0, "or")
+        plt.plot(np.insert(t1,0, t0), np.insert(expected, 0, s0))
+        plt.plot(np.insert(t1,0, t0), np.insert(approx, 0, s0))
         plt.show()
         import pdb; pdb.set_trace()
 
-        # Numerical method
-        start = time.time()
-        t1n, fluxes_n, nev, njac = rezeq_slow.integrate_forward_numerical(\
-                                        funs, dfuns, \
-                                        t0, [s0]+[0]*2, [t1])
-        end = time.time()
-        time_num += (end-start)*1e3
-        niter_num = max(niter_num, nev+njac)
-        numerical = np.array([fluxes_n[0], -fluxes_n[-1]])
 
-        #import pdb; pdb.set_trace()
+        # Numerical method
+        tstart = time.time()
+        tn, fn, nev, njac = rezeq_slow.integrate_forward_numerical(\
+                                        funs, dfuns, \
+                                        t0, [s0]+[0]*2, t1)
+        tend = time.time()
+        time_num += (tend-tstart)*1e3
+        niter_num = max(niter_num, nev+njac)
+        numerical = fn[:, 0]
 
         # Errors
-        errmax_app_max = max(np.abs(approx-expected).max(), errmax_num_max)
-        errmax_num_max = max(np.abs(numerical-expected).max(), errmax_num_max)
+        errmax = np.abs(approx-expected).max()
+        errmax_app_max = max(errmax, errmax_app_max)
+
+        errmax = np.abs(numerical-expected).max()
+        errmax_num_max = max(errmax, errmax_num_max)
 
     tab = " "*8
     print(f"{tab}Errmax approx vs analytical = {errmax_app_max:3.2e}"\

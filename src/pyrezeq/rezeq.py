@@ -316,20 +316,20 @@ def increment_fluxes(scalings, nu, \
         raise ValueError(f"c_pyrezeq.increment_fluxes returns {ierr}")
 
 
-def integrate(delta, alphas, scalings, nus, \
+def integrate(alphas, scalings, nus, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, \
-                s0):
+                t0, s0, delta):
     # Initialise
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
     niter = np.zeros(1, dtype=np.int32)
     s1 = np.zeros(1, dtype=np.float64)
 
     # run
-    ierr = c_pyrezeq.integrate(delta, alphas, scalings, nus, \
+    ierr = c_pyrezeq.integrate(alphas, scalings, nus, \
                     a_matrix_noscaling, b_matrix_noscaling, \
-                    c_matrix_noscaling, s0, niter, s1, fluxes)
+                    c_matrix_noscaling, t0, s0, delta, niter, s1, fluxes)
     if ierr>0:
         mess = c_pyrezeq.get_error_message(ierr).decode()
         raise ValueError(f"c_pyrezeq.integrate returns {ierr} ({mess})")

@@ -38,16 +38,18 @@ int c_increment_fluxes(int nfluxes,
                         double s1,
                         double * fluxes);
 
-int c_integrate(int nalphas, int nfluxes, double delta,
+int c_integrate(int nalphas, int nfluxes,
                             double * alphas,
                             double * scalings,
                             double * nu_vector,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
+                            double t0,
                             double s0,
+                            double delta,
                             int * niter,
-                            double * s1,
+                            double * s_end,
                             double * fluxes);
 
 #endif

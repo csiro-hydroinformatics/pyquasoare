@@ -266,21 +266,25 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
 
 
 /* Integrate reservoir equation over 1 time step and compute associated fluxes */
-int c_integrate(int nalphas, int nfluxes, double delta,
+int c_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
                             double * nu_vector,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
+                            double t0,
                             double s0,
+                            double delta,
                             int *niter, double * s1, double * fluxes) {
-    int i, jalpha_next;
+    int REZEQ_DEBUG=1;
+
+    int i, nit=0, jalpha_next;
     int reached_alpha_bounds=0;
     int is_below_alpha_min=0;
     double aoj=0., boj=0., coj=0., nu;
     double a=0, b=0, c=0;
-    double fun_s0=0, fun_s1_prev=0;
-    double alpha0, alpha1, t1;
+    double funval=0, funval_prev=0;
+    double alpha0, alpha1;
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
 
@@ -288,18 +292,23 @@ int c_integrate(int nalphas, int nfluxes, double delta,
     int jalpha = c_find_alpha(nalphas, alphas, s0);
 
     /* Initialise iteration */
-    double t0 = 0.;
     double aoj_prev=0., boj_prev=0., coj_prev=0.;
 
-    /* Inialise fluxes */
+    /* Inialise */
+    double t_start=t0, t_end=t0;
+    double s_start=s0, s_end=s0;
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0;
 
-    /* Time loop */
-    while (ispos(delta-t0) && *niter<nalphas) {
-        *niter += 1;
+    if(REZEQ_DEBUG==1){
+        fprintf(stdout, "\n\nStart integrate s0=%0.3f j=%d\n", s0, jalpha);
+    }
 
-        if(jalpha<0 || jalpha>=nalphas)
+    /* Time loop */
+    while (ispos(delta+t0-t_end) && nit<nalphas) {
+        nit += 1;
+
+        if(jalpha<0 || jalpha>nalphas-2)
             return REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS;
 
         /* Exponential factor */
@@ -340,76 +349,93 @@ int c_integrate(int nalphas, int nfluxes, double delta,
             }
         }
 
-        if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\n\n[%3d] nu=%0.3f a=%0.3f b=%0.3f c=%0.3f s0=%0.3f "
-                            "(j=%d/%d: a0=%0.3f a1=%0.3f)\n",
-                            *niter, nu, aoj, boj, coj, s0, jalpha, nalphas,
-                            alpha0, alpha1);
-        }
-
         if(isnan(aoj) || isnan(boj) || isnan(coj))
             return REZEQ_ERROR_INTEGRATE_NAN_COEFF;
 
         /* Get derivative at beginning of time step */
-        fun_s0 = c_approx_fun(nu, aoj, boj, coj, s0);
+        funval = c_approx_fun(nu, aoj, boj, coj, s_start);
 
         /* Check continuity */
-        if(*niter>1){
-            if(notnull(fun_s0-fun_s1_prev)) {
+        if(nit>1){
+            if(notnull(funval-funval_prev)) {
+                if(REZEQ_DEBUG==1){
+                    fprintf(stdout, "    funval=%0.5f   funvel_prev=%0.5f\n",
+                                funval, funval_prev);
+                }
                 return REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS;
             }
         }
 
        /* Check integration up to the next band limit */
-        if(notnull(fun_s0)){
-            if(isneg(fun_s0)){
+        if(notnull(funval)){
+            if(isneg(funval)){
                 /* non-increasing function -> move to lower band */
                 jalpha_next = jalpha-1;
-                *s1 = alpha0;
-            } else if (ispos(fun_s0)){
+                s_end = alpha0;
+
+            } else if (ispos(funval)){
                 /* increasing function -> move to upper band */
                 jalpha_next = jalpha+1;
-                *s1 = alpha1;
+                s_end = alpha1;
             }
-            t1 = t0+c_integrate_inverse(nu, aoj, boj, coj, s0, *s1);
-            t1 = t1>delta ? delta : t1;
+
+            /* Compute time for which s(t) = s_end */
+            t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_end);
+
+            /* If this time is beyond time step, clip at time step */
+            t_end = t_end-t0>delta ? t0+delta : t_end;
+
         } else {
             /* derivative is null -> finish iteration */
-            t1 = delta;
-            *s1 = s0;
+            t_end = t0+delta;
+            s_end = s_start;
         }
 
-        /* Compute correct s1 if not leaving the band or
-            if t1 is nan (i.e. close to steady) */
-        reached_alpha_bounds = jalpha_next<0 || jalpha_next > nalphas-1;
-        if(t1<delta || isnan(t1) || reached_alpha_bounds){
-            t1 = isnan(t1) || reached_alpha_bounds ? delta : t1;
-            *s1 = c_integrate_forward(nu, aoj, boj, coj, t0, s0, t1);
+        /* Check if we reached alpha bounds */
+        reached_alpha_bounds = jalpha_next<0 || jalpha_next > nalphas-2;
+        jalpha_next = jalpha_next<0 ? 0 : jalpha_next>nalphas-2 ? nalphas-2 :  jalpha_next;
+
+        /* Compute correct s1 if not finished iteration (t_end<t0+delta)
+            or if t1 is nan (i.e. close to steady)/
+            or if we are beyond alpha bounds */
+
+        if(t_end-t0<delta || isnan(t_end) || reached_alpha_bounds){
+            t_end = isnan(t_end) || reached_alpha_bounds ? t0+delta : t_end;
+            s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
         }
+
         /* Increment fluxes during the last interval */
-        c_increment_fluxes(nfluxes, scalings,
-                    nu_vector[jalpha],
+        c_increment_fluxes(nfluxes, scalings, nu,
                     &(a_matrix_noscaling[nfluxes*jalpha]),
                     &(b_matrix_noscaling[nfluxes*jalpha]),
                     &(c_matrix_noscaling[nfluxes*jalpha]),
-                    aoj, boj, coj, t0, t1, s0, *s1, fluxes);
+                    aoj, boj, coj, t_start, t_end, s_start, s_end, fluxes);
 
         /* Loop for next band */
+        funval_prev = c_approx_fun(nu, aoj, boj, coj, s_end);
+
         if(REZEQ_DEBUG==1){
-            fprintf(stdout, "    t0=%0.3f t1=%0.3f s1=%0.3f (delta=%0.3f)\n",
-                                    t0, t1, *s1, delta);
-            for(i=0; i<nfluxes; i++)
-                fprintf(stdout, "      fx[%d]=%0.1f\n", i, fluxes[1]);
+            fprintf(stdout, "\n[%3d] t=%0.5f->%0.5f(<%0.5f)  s=%0.5f->%0.5f f=%0.5f\n", nit,
+                                    t_start, t_end, t0+delta, s_start, s_end, funval_prev);
+            fprintf(stdout, "       [j=%d/%d a0=%0.3f a1=%0.3f] ", jalpha, nalphas-2, alpha0, alpha1);
+            fprintf(stdout, " nu=%0.3f a=%0.3f b=%0.3f c=%0.3f\n", nu, aoj, boj, coj);
         }
 
-        t0 = t1;
-        s0 = *s1;
+        t_start = t_end;
+        s_start = s_end;
         jalpha = jalpha_next;
-        fun_s1_prev = c_approx_fun(nu, aoj, boj, coj, *s1);
+    }
+
+    /* Store results */
+    *s1 = s_end;
+    *niter = nit;
+
+    if(REZEQ_DEBUG==1){
+        fprintf(stdout, "\nEnd integrate s1=%0.5f j=%d\n", s_end, jalpha);
     }
 
     /* Convergence problem */
-    if(ispos(delta-t0)) {
+    if(ispos(delta+t0-t_end)) {
         //fprintf(stdout, "\ndelta=%0.3f t0=%0.3f\n", delta, t0);
         return REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE;
     }

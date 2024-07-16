@@ -19,16 +19,19 @@ int c_run(int nalphas, int nfluxes, int nval, double delta,
                             double * s1,
                             double * fluxes) {
     int ierr, t;
+    double t0=0;
 
     for(t=0; t<nval; t++){
-        ierr = c_integrate(nalphas, nfluxes, delta,
+        ierr = c_integrate(nalphas, nfluxes,
                             alphas,
                             &(scalings[nfluxes*t]),
                             nu_vector,
                             a_matrix_noscaling,
                             b_matrix_noscaling,
                             c_matrix_noscaling,
+                            t0,
                             s0,
+                            delta,
                             &(niter[t]),
                             &(s1[t]),
                             &(fluxes[nfluxes*t]));
