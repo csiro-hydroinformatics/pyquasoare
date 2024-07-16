@@ -258,7 +258,7 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
         t0 = 0
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, ns1 = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
+        te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
 
         # Check tmax < end of sim
         if te.max()<Tmax and te.max()>0 and len(te)>3:
@@ -269,7 +269,7 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
             t0, t1 = te[[-3, -1]]
             te = np.linspace(t0, 2*t1-t0, 1000)
             s0 = ns1[-3]
-            te, ns1 = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], te)
+            te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], te)
             expected = te.max()
 
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, te)
@@ -435,7 +435,7 @@ def test_integrate_forward_vs_numerical(allclose, generate_samples, printout):
 
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, expected = rezeq_slow.integrate_forward_numerical([f], [df], \
+        te, expected, nev, njac = rezeq_slow.integrate_forward_numerical([f], [df], \
                                                             t0, [s0], t_eval)
         if len(te)<3:
             nskipped += 1
