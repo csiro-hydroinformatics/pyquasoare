@@ -6,6 +6,8 @@ np.import_array()
 # -- HEADERS --
 cdef extern from 'c_utils.h':
     double c_get_eps()
+    double c_get_inf()
+    double c_get_nan()
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
@@ -81,6 +83,11 @@ def __cinit__(self):
 def get_eps():
     return c_get_eps()
 
+def get_nan():
+    return c_get_nan()
+
+def get_inf():
+    return c_get_inf()
 
 def get_error_message(int err_code):
     cdef char message[100]

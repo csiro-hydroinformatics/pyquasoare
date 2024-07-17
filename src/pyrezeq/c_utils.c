@@ -7,7 +7,7 @@ double c_get_eps() {
 double c_get_nan() {
     static double zero=0.;
     double nan=zero/zero;
-    return nan;
+    return isnan(nan) ? nan : 0.0/0.0;
 }
 
 double c_get_inf() {

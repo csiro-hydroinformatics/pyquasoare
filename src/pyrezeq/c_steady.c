@@ -14,8 +14,9 @@ int c_steady_state(double nu, double a, double b, double c, double steady[2]){
     */
     if((ispos(a) && ispos(b) && ispos(c))
                 || (isnan(a)||isnan(b)||isnan(c))
-                || (isnull(b)&&isnull(c)) )
+                || (isnull(b)&&isnull(c)) ) {
         return 0;
+    }
 
     if(notnull(b) && isnull(c)){
         steady[0] = notnull(a) ? -log(-a/b)/nu : s1;

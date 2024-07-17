@@ -20,6 +20,7 @@ import warnings
 
 from hydrodiy.io import csv
 from pyrezeq import rezeq, rezeq_slow
+import c_pyrezeq
 
 np.random.seed(5446)
 
@@ -216,6 +217,17 @@ def plot_solution(t, s1, expected=None, title="", params=None, \
 
 
 # ----- TEST FUNCTIONS --------------------------------------------
+
+def test_get_nan():
+    nan = c_pyrezeq.get_nan()
+    assert np.isnan(nan)
+
+
+def test_get_inf():
+    inf = c_pyrezeq.get_inf()
+    assert inf>0
+    assert np.isinf(inf)
+
 
 def test_approx_fun(allclose, generate_samples):
     cname, case, params, nus, s0s, Tmax = generate_samples
