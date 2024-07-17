@@ -8,9 +8,13 @@ int c_steady_state(double nu, double a, double b, double c, double steady[2]){
     steady[0] = s1;
     steady[1] = s2;
 
-    /* Cannot have a steady state when all params are pos */
+    /* Cannot have a steady state when
+        - all params are pos
+        - b and c are zeros
+    */
     if((ispos(a) && ispos(b) && ispos(c))
-        || (isnull(a)&&(isnull(b)||isnull(c))) )
+                || (isnan(a)||isnan(b)||isnan(c))
+                || (isnull(b)&&isnull(c)) )
         return 0;
 
     if(notnull(b) && isnull(c)){
