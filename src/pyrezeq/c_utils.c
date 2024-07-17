@@ -5,9 +5,10 @@ double c_get_eps() {
 }
 
 double c_get_nan() {
-    static double zero=0.;
-    double nan=zero/zero;
-    return isnan(nan) ? nan : 0.0/0.0;
+    /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
+    static double zero1=0.;
+    static double zero2=0.;
+    return zero1/zero2;
 }
 
 double c_get_inf() {
