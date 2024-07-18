@@ -58,7 +58,8 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c,
         }
         else {
             delta_tmax = lam0<-1 ? atanh(-1./lam0)*2/nu/sqD : c_get_inf();
-            tmp = atanh((lam0*sqD-a)/(a*lam0-sqD))*2/nu/sqD;
+            tmp = (lam0*sqD-a)/(a*lam0-sqD);
+            tmp = fabs(tmp)<1 ? atanh(tmp)*2/nu/sqD : -c_get_inf();
             tmp = tmp>0 ? tmp : c_get_inf();
             delta_tmax = fmin(delta_tmax, tmp);
         }
@@ -191,10 +192,10 @@ int c_increment_fluxes(int nfluxes, double * scalings, double nu,
     /* Integrate exp(-nuS) if needed */
     if(notnull(b) || notnull(c)){
         if(isnull(a) && isnull(b) && notnull(c)){
-            expint = dt*e0-nu*c/2*(t1-t0)*(t1-t0);
+            expint = dt*e0-nu*c/2*dt*dt;
         }
         else if(isnull(a) && notnull(b) && isnull(c)){
-            expint = dt/e0+nu*b/2*(t1-t0)*(t1-t0);
+            expint = dt/e0+nu*b/2*dt*dt;
         }
         else if(notnull(a) && isnull(b) && notnull(c)){
             expint = (e0+c/a)/nu/a*(1-exp(-nu*a*dt))-c/a*dt;

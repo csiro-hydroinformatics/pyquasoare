@@ -241,9 +241,15 @@ def test_approx_fun(allclose, generate_samples):
         expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
         assert allclose(ds, expected)
 
+        ds_slow = [rezeq_slow.approx_fun(nu, a, b, c, s) for s in s0s]
+        assert allclose(ds_slow, expected)
+
         jac = rezeq.approx_jac(nu, a, b, c, s0s)
         expected = -nu*b*np.exp(-nu*s0s)+nu*c*np.exp(nu*s0s)
         assert allclose(jac, expected)
+
+        jac_slow = [rezeq_slow.approx_jac(nu, a, b, c, s) for s in s0s]
+        assert allclose(jac_slow, expected)
 
 
 def test_integrate_delta_t_max(allclose, generate_samples, printout):
@@ -270,7 +276,8 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
         t0 = 0
         f = lambda x: rezeq.approx_fun(nu, a, b, c, x)
         df = lambda x: rezeq.approx_jac(nu, a, b, c, x)
-        te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], t_eval)
+        te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical(\
+                                    [f], [df], t0, [s0], t_eval)
 
         # Check tmax < end of sim
         if te.max()<Tmax and te.max()>0 and len(te)>3:
@@ -281,7 +288,8 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
             t0, t1 = te[[-3, -1]]
             te = np.linspace(t0, 2*t1-t0, 1000)
             s0 = ns1[-3]
-            te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical([f], [df], t0, [s0], te)
+            te, ns1, nev, njac = rezeq_slow.integrate_forward_numerical(\
+                                                    [f], [df], t0, [s0], te)
             expected = te.max()
 
             s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, te)
@@ -293,6 +301,10 @@ def test_integrate_delta_t_max(allclose, generate_samples, printout):
             assert err<2e-3
             #plot_solution(te, s1, ns1, show=True, params=[nu, a, b, c])
             err_max = max(err, err_max)
+
+            dtm_slow = rezeq_slow.integrate_delta_t_max(nu, a, b, c, s0)
+            assert np.isclose(dtm, dtm_slow)
+
         else:
             nskipped += 1
 
@@ -378,11 +390,18 @@ def test_integrate_forward_vs_finite_difference(allclose, generate_samples, prin
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval)
         if np.all(np.isnan(s1)):
             continue
+
         Tmax_rev = t_eval[~np.isnan(s1)].max()
         if Tmax_rev<1e-10:
             continue
+
         t_eval_rev = np.linspace(0, Tmax_rev, 10000)
         s1 = rezeq.integrate_forward(nu, a, b, c, t0, s0, t_eval_rev)
+
+        # Compare with slow
+        s1_slow = [rezeq_slow.integrate_forward(nu, a, b, c, t0, s0, t) \
+                            for t in t_eval_rev]
+        assert allclose(s1, s1_slow)
 
         # Test if s1 is monotone
         ds1 = np.round(np.diff(s1), decimals=6)
@@ -522,6 +541,10 @@ def test_integrate_inverse(allclose, generate_samples, printout):
         errmax = np.nanmax(err[iok])
         assert errmax< 5e-6 if case in [9, 12] else 1e-8
         errmax_max = max(errmax, errmax_max)
+
+        # Compare with slow
+        ta_slow = [rezeq_slow.integrate_inverse(nu, a, b, c, s0, s) for s in s1]
+        assert allclose(ta, ta_slow)
 
     perc_skipped = nskipped*100/ntry
     mess = f"Errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
@@ -812,6 +835,14 @@ def test_increment_fluxes_vs_integration(allclose, \
         # integration not trusted when overflow becomes really bad
         if w<1000:
             errmax_max = max(errmax, errmax_max)
+
+        # Compare against slow
+        fluxes_slow = np.zeros(3)
+        rezeq_slow.increment_fluxes(scalings, nu, avect, bvect, cvect, \
+                        aoj, boj, coj, t0, t1, s0, s1, fluxes)
+
+        # TODO !!
+
 
     # We should not skip any simulation because we stop at t=tmax
     #assert nskipped == 0
