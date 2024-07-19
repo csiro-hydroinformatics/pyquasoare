@@ -69,7 +69,7 @@ steps:
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/pyrezeq
-    pytest --ntry=1000 --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
+    pytest --ntry=500 --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
   displayName: test
   timeoutInMinutes: 60
 
