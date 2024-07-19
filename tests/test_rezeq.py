@@ -334,8 +334,10 @@ def test_steady_state(allclose, generate_samples):
     if case<4:
         # No steady state
         assert np.all(np.isnan(steady))
-        print(" "*4 +">> No steady state for this case")
-        return
+        pytest.skip("No steady state for this case")
+
+    if np.all(np.isnan(steady)):
+        pytest.skip("No steady state found")
 
     # check nan values
     iboth = np.isnan(steady).sum(axis=1)==0
@@ -839,9 +841,8 @@ def test_increment_fluxes_vs_integration(allclose, \
         # Compare against slow
         fluxes_slow = np.zeros(3)
         rezeq_slow.increment_fluxes(scalings, nu, avect, bvect, cvect, \
-                        aoj, boj, coj, t0, t1, s0, s1, fluxes)
-
-        # TODO !!
+                        aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
+        assert allclose(fluxes, fluxes_slow)
 
 
     # We should not skip any simulation because we stop at t=tmax
@@ -912,6 +913,12 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
             niter.append(n)
             approx.append(s_end)
             s_start = s_end
+
+            # Against slow
+            n_slow, s_end_slow, _ = rezeq_slow.integrate(alphas, scalings, nus, \
+                                                amat, bmat, cmat, start, \
+                                                s_start, delta)
+            assert np.isclose(s_end, s_end_slow)
 
         tend = time.time()
         time_app += (tend-tstart)*1e3

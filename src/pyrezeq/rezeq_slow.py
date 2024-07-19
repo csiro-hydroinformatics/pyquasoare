@@ -255,7 +255,7 @@ def increment_fluxes(scalings, nu, \
                 lam0 = (2*b*e0+a)/sqD
                 if ispos(Delta):
                     w = nu*sqD/2*dt
-                    #/* Care with overflow */
+                    # Care with overflow
                     if w>100:
                         expint = (math.log((lam0+1)/2)+w)/nu/b-a/2/b*dt
 
@@ -289,7 +289,7 @@ def increment_fluxes(scalings, nu, \
                 fluxes[i] += A*dt+B*(s1-s0)+C*expint
 
 
-#/* Integrate reservoir equation over 1 time step and compute associated fluxes */
+# Integrate reservoir equation over 1 time step and compute associated fluxes
 def integrate(alphas, scalings, nu_vector, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
@@ -300,44 +300,46 @@ def integrate(alphas, scalings, nu_vector, \
     alpha_min=alphas[0]
     alpha_max=alphas[nalphas-1]
 
-    #/* Initial interval */
-    jalpha = find_alpha(nalphas, alphas, s0)
+    # Initial interval
+    jalpha = np.sum(s0-alphas>0)-1
+    jalpha = max(0, min(nalphas-2, jalpha))
 
-    #/* Initialise iteration */
-    aoj_prev=0.
-    boj_prev=0.
-    coj_prev=0.
+    # Initialise iteration
+    aoj, aoj_prev = 0., 0.
+    boj, boj_prev = 0., 0.
+    coj, coj_prev = 0., 0.
 
+    nit = 0
     t_final = t0+delta
-    t_start=t0, t_end=t0
-    s_start=s0, s_end=s0
+    t_start, t_end = t0, t0
+    s_start, s_end = s0, s0
     nfluxes = a_matrix_noscaling.shape[1]
     fluxes = np.zeros(nfluxes)
 
-    #/* Time loop */
+    # Time loop
     while ispos(t_final-t_end) and nit<nalphas:
         nit += 1
 
         nu = nu_vector[jalpha]
 
-        #/* Get band limits */
+        # Get band limits
         alpha0 = alphas[jalpha]
         alpha1 = alphas[jalpha+1]
 
-        #/* Store previous coefficients */
+        # Store previous coefficients
         aoj_prev = aoj
         boj_prev = boj
         coj_prev = coj
 
-        #/* Sum coefficients accross fluxes */
+        # Sum coefficients accross fluxes
         aoj = 0
         boj = 0
         coj = 0
         for i in range(nfluxes):
-            a = a_matrix_noscaling[nfluxes*jalpha+i]*scalings[i]
-            b = b_matrix_noscaling[nfluxes*jalpha+i]*scalings[i]
-            c = c_matrix_noscaling[nfluxes*jalpha+i]*scalings[i]
-            #/* if s is lower than alpha1 or higher than alpham
+            a = a_matrix_noscaling[jalpha, i]*scalings[i]
+            b = b_matrix_noscaling[jalpha, i]*scalings[i]
+            c = c_matrix_noscaling[jalpha, i]*scalings[i]
+            # if s is lower than alpha1 or higher than alpham
             #    then set approx_fun to constant
             if s0<alpha_min:
                 aoj += c_approx_fun(nu, a, b, c, alphas[0])
@@ -349,67 +351,62 @@ def integrate(alphas, scalings, nu_vector, \
                 boj += b
                 coj += c
 
-        #/* Get derivative at beginning of time step */
+        # Get derivative at beginning of time step
         funval = approx_fun(nu, aoj, boj, coj, s_start)
 
-        #/* Check continuity */
+        # Check continuity
         if nit>1:
             if notnull(funval-funval_prev):
                 raise ValueError("continuity problem")
 
-        #/* Check integration up to the next band limit */
+        # Check integration up to the next band limit
         if notnull(funval):
             if isneg(funval):
-                #/* non-increasing function -> move to lower band */
+                # non-increasing function -> move to lower band
                 jalpha_next = jalpha-1
                 s_end = alpha0
 
             elif ispos(funval):
-                #/* increasing function -> move to upper band */
+                # increasing function -> move to upper band
                 jalpha_next = jalpha+1
                 s_end = alpha1
 
-            #/* Compute time for which s(t) = s_end */
+            # Compute time for which s(t) = s_end
             t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
 
         else:
-            #/* derivative is null -> finish iteration */
+            # derivative is null -> finish iteration
             t_end = t_final
             s_end = s_start
 
-        #/* Check if we reached alpha bounds */
+        # Check if we reached alpha bounds
         reached_alpha_bounds = jalpha_next<0 or jalpha_next > nalphas-2
         jalpha_next = 0 if jalpha_next<0 else nalphas-2 if jalpha_next>nalphas-2 else jalpha_next
 
-        #/* Compute correct s_end if not finished iteration (t_end<t0+delta)
+        # Compute correct s_end if not finished iteration (t_end<t0+delta)
         #    or if t1 is nan (i.e. close to steady)/
-        #    or if we are beyond alpha bounds */
+        #    or if we are beyond alpha bounds
         if t_end>t0+delta or isnan(t_end) or t_end<t_start or reached_alpha_bounds:
             t_end = t_final
             s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
 
-        #/* Increment fluxes during the last interval */
-        increment_fluxes(nfluxes, scalings, nu,
-                    a_matrix_noscaling[nfluxes*jalpha],
-                    b_matrix_noscaling[nfluxes*jalpha],
-                    c_matrix_noscaling[nfluxes*jalpha],
+        # Increment fluxes during the last interval
+        increment_fluxes(scalings, nu,
+                    a_matrix_noscaling[jalpha],
+                    b_matrix_noscaling[jalpha],
+                    c_matrix_noscaling[jalpha],
                     aoj, boj, coj, t_start, t_end, s_start, s_end, fluxes)
 
-        #/* Loop for next band */
+        # Loop for next band
         funval_prev = approx_fun(nu, aoj, boj, coj, s_end)
         t_start = t_end
         s_start = s_end
         jalpha = jalpha_next
 
-
-    #/* Store results */
-    s1 = s_end
-    niter = nit
-
-    #/* Convergence problem */
+    # Convergence problem
     if ispos(delta+t0-t_end):
         raise ValueError("No convergence")
 
-    return s1, fluxes
+    return nit, s_end, fluxes
 
 
