@@ -17,6 +17,10 @@ double c_get_inf() {
     return inf;
 }
 
+int c_get_nfluxes_max(){
+    return REZEQ_NFLUXES_MAX;
+}
+
 int isnull(double x){
     return fabs(x)<REZEQ_EPS ? 1 : 0;
 }
@@ -31,6 +35,14 @@ int ispos(double x){
 
 int isneg(double x){
     return x<-REZEQ_EPS ? 1 : 0;
+}
+
+int isequal(double x, double y){
+    return ispos(fabs(x-y));
+}
+
+int notequal(double x, double y){
+    return 1-isequal(x, y);
 }
 
 int c_find_alpha(int nalphas, double * alphas, double s0){
@@ -63,13 +75,16 @@ int c_get_error_message(int err_code, char message[100]){
         strncpy(message, "NaN values in coeffs", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS)
-        strncpy(message, "Approx coeffs not continuous", len);
+        strncpy(message, "Approx function not continuous", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_SIM)
         strncpy(message, "Simulation produces nan", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
+
+    else if(err_code == REZEQ_ERROR_NFLUXES_TOO_LARGE)
+        strncpy(message, "Number of fluxes too large", len);
 
     else
         strncpy(message, "Error code not found", len);

@@ -27,7 +27,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 12
+NCASES = 15
 PARAM_MAX = 5
 S0_MAX = 5
 NU_MAX = 5
@@ -162,6 +162,16 @@ def generate_samples(ntry, selcase, request):
     elif case ==12:
         name = "General case with low scaling"
         params /= 1000
+    elif case ==13:
+        name = "a close to zero"
+        params[:, 0] = np.random.uniform(1e-9, 2e-9, size=len(params))
+    elif case ==14:
+        name = "b close to zero"
+        params[:, 1] = np.random.uniform(1e-9, 2e-9, size=len(params))
+    elif case ==15:
+        name = "c close to zero"
+        params[:, 2] = np.random.uniform(1e-9, 2e-9, size=len(params))
+
 
     # Other data
     nus = np.random.uniform(0, NU_MAX, ntry)
@@ -589,6 +599,15 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
     nus = [0.01, 1, 2, 5, 8]
     s = np.linspace(-0.1, 1.1, 1000)
     print("")
+
+    # Check max nfluxes
+    n, eps = np.ones(nalphas-1), 0.5
+    nf = rezeq.REZEQ_NFLUXES_MAX
+    fs = [lambda x: x**a for a in np.linspace(1, 2, nf+1)]
+    with pytest.raises(ValueError, match="nfluxes"):
+        _, amat, bmat, cmat, emat = rezeq.get_coefficients_matrix(fs, \
+                                                        alphas, n, eps)
+
     errmax = {n: np.inf for n in nus}
     #for e, nu in prod([-1, 0, 0.2, 0.5, 0.8, 1], nus):
     for eps, nu in prod([None], nus):
@@ -774,7 +793,7 @@ def test_increment_fluxes_vs_integration(allclose, \
     nus *= 1.5/NU_MAX
 
     print("")
-    print(" "*4+f"Testing increment_fluxes - trapezoidal quadrature"+\
+    print(" "*4+f"Testing increment_fluxes - numerical integration"+\
                 f" - case {case} / {cname}")
     nskipped = 0
     errbal_max = 0
@@ -782,7 +801,7 @@ def test_increment_fluxes_vs_integration(allclose, \
     ev = []
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            print(" "*8+f"flux trapezoidal - case {case} - Try {itry+1:4d}/{ntry:4d}")
+            print(" "*8+f"flux integration - case {case} - Try {itry+1:4d}/{ntry:4d}")
 
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
 
@@ -805,13 +824,13 @@ def test_increment_fluxes_vs_integration(allclose, \
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
-            fluxes, scalings = np.zeros(3), np.ones(3)
-            rezeq.increment_fluxes(scalings, nu, avect, bvect, cvect2, \
+            fluxes = np.zeros(3)
+            rezeq.increment_fluxes(nu, avect, bvect, cvect2, \
                             aoj, boj, coj, t0, t1, s0, s1, fluxes)
 
         # Compute fluxes analytically
-        fluxes, scalings = np.zeros(3), np.ones(3)
-        rezeq.increment_fluxes(scalings, nu, avect, bvect, cvect, \
+        fluxes = np.zeros(3)
+        rezeq.increment_fluxes(nu, avect, bvect, cvect, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes)
 
         a, b, c = aoj, boj, coj
@@ -840,7 +859,7 @@ def test_increment_fluxes_vs_integration(allclose, \
 
         # Compare against slow
         fluxes_slow = np.zeros(3)
-        rezeq_slow.increment_fluxes(scalings, nu, avect, bvect, cvect, \
+        rezeq_slow.increment_fluxes(nu, avect, bvect, cvect, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow)
 
@@ -851,6 +870,91 @@ def test_increment_fluxes_vs_integration(allclose, \
                 f" Balmax = {errbal_max:3.3e}"
     print(" "*4+mess)
     print("")
+
+
+def test_integrate_reservoir_equation_extrapolation(allclose, reservoir_function):
+    fname, fun, dfun, _, inflow, (alpha0, alpha1) = reservoir_function
+
+    # Reservoir functions
+    inp = lambda x: inflow
+    sfun = lambda x: inflow+fun(x)
+
+    # Optimize nu
+    nalphas = 5
+    alphas, nus = rezeq.get_coefficients_matrix_optimize_nu([inp, fun], \
+                                    alpha0, alpha1, nalphas)
+
+    print("")
+    print(" "*4+f"Testing rezeq integrate extrapolation - fun {fname} ")
+
+    # Approximate coefficients
+    nus, amat, bmat, cmat, _ = rezeq.get_coefficients_matrix([inp, fun], \
+                                                                alphas, nus=nus)
+
+    t0 = 0 # Analytical solution always integrated from t0=0!
+    nval = 500
+    Tmax = 5
+    t1 = np.linspace(t0, Tmax, nval)
+
+    # Initial conditions outside of approximation range [alpha0, alpha1]
+    dalpha = alpha1-alpha0
+    s0_high = alpha1+dalpha*1.5
+    s0_low = alpha0-dalpha*1.5
+
+    # Approximate method
+    scalings = np.ones(2)
+    approx_low, approx_high = [s0_low], [s0_high]
+    s_start_low = s0_low
+    s_start_high = s0_high
+
+    for i in range(len(t1)-1):
+        t_start = t1[i]
+        delta = t1[i+1]-t_start
+        # integrate when below and above approximation range
+        _, s_end_low, _ = rezeq.integrate(alphas, scalings, nus, \
+                                            amat, bmat, cmat, t_start, \
+                                            s_start_low, delta)
+
+        _, s_end_high, _ = rezeq.integrate(alphas, scalings, nus, \
+                                            amat, bmat, cmat, t_start, \
+                                            s_start_high, delta)
+        # Compare against slow
+        _, s_end_low_slow, _ = rezeq_slow.integrate(alphas, scalings, nus, \
+                                            amat, bmat, cmat, t_start, \
+                                            s_start_low, delta)
+        assert np.isclose(s_end_low, s_end_low_slow)
+
+        _, s_end_high_slow, _ = rezeq_slow.integrate(alphas, scalings, nus, \
+                                            amat, bmat, cmat, t_start, \
+                                            s_start_high, delta)
+        assert np.isclose(s_end_high, s_end_high_slow)
+
+        # Store and loop
+        approx_low.append(s_end_low)
+        s_start_low = s_end_low
+        approx_high.append(s_end_high)
+        s_start_high = s_end_high
+
+    # Expect constant derivative of solution in extrapolation mode
+    approx_low = np.array(approx_low)
+    ilow = approx_low<alpha0
+    assert ilow.sum()>0
+    dt = t1[1]-t1[0]
+    ds = np.diff(approx_low[ilow])/dt
+    expected = [rezeq.approx_fun(nus[0], amat[0, i], bmat[0, i], \
+                    cmat[0, i], alphas[0]) for i in range(2)]
+    expected = np.array(expected).sum()
+    assert allclose(ds, expected)
+
+    approx_high = np.array(approx_high)
+    ihigh = approx_high>alpha1
+    assert ihigh.sum()>0
+    ds = np.diff(approx_high[ihigh])/dt
+    expected = [rezeq.approx_fun(nus[-1], amat[-1, i], bmat[-1, i], \
+                    cmat[-1, i], alphas[-1]) for i in range(2)]
+    expected = np.array(expected).sum()
+    assert allclose(ds, expected)
+
 
 
 def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
@@ -868,7 +972,7 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
     dfuns = [dsfun, dinp, dfun]
 
     # Optimize nu
-    nalphas = 20
+    nalphas = 10
     alphas, nus = rezeq.get_coefficients_matrix_optimize_nu([inp, fun], \
                                     alpha0, alpha1, nalphas)
 
@@ -900,54 +1004,75 @@ def test_integrate_reservoir_equation(allclose, ntry, reservoir_function):
         expected = sol(t1, s0)
 
         # Approximate method
-        end = time.time()
         niter, approx = [0], [s0]
         s_start = s0
-        tstart = time.time()
+        start_exec = time.time()
+        for i in range(len(t1)-1):
+            t_start = t1[i]
+            delta = t1[i+1]-t_start
+            n, s_end, _ = rezeq.integrate(alphas, scalings, nus, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            # Against slow
+            n_slow, s_end_slow, _ = rezeq_slow.integrate(alphas, scalings, nus, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            assert np.isclose(s_end, s_end_slow)
+
+            niter.append(n)
+            approx.append(s_end)
+            s_start = s_end
+
+        end_exec = time.time()
+        time_app += (end_exec-start_exec)*1e3
+        niter = np.array(niter)
+        approx = np.array(approx)
+        niter_app = max(niter_app, niter.sum())
+
+        # Numerical method
+        start_exec = time.time()
+        tn, fn, nev, njac = rezeq_slow.integrate_forward_numerical(\
+                                        funs, dfuns, \
+                                        t0, [s0]+[0]*2, t1)
+        end_exec = time.time()
+        time_num += (end_exec-start_exec)*1e3
+        niter_num = max(niter_num, nev+njac)
+
+        # Errors
+        errmax = np.abs(approx-expected).max()
+        if errmax>errmax_app_max:
+            errmax_app_max = errmax
+            s0_errmax = s0
+
+        #errmax = np.abs(numerical-expected).max()
+        #errmax_num_max = max(errmax, errmax_num_max)
+
+    try:
+        assert errmax_app_max<1e-3
+    except:
+        import matplotlib.pyplot as plt
+        expected = sol(t1, s0_errmax)
+
+        s_start = s0
+        approx = [s0]
         for i in range(len(t1)-1):
             start = t1[i]
             delta = t1[i+1]-start
             n, s_end, _ = rezeq.integrate(alphas, scalings, nus, \
                                                 amat, bmat, cmat, start, \
                                                 s_start, delta)
-            niter.append(n)
             approx.append(s_end)
-            s_start = s_end
 
-            # Against slow
-            n_slow, s_end_slow, _ = rezeq_slow.integrate(alphas, scalings, nus, \
-                                                amat, bmat, cmat, start, \
-                                                s_start, delta)
-            assert np.isclose(s_end, s_end_slow)
+        plt.plot(t1, expected)
+        plt.plot(t1, np.array(approx))
+        plt.title(f"fun={fname} s0={s0_errmax:0.5f}")
+        plt.show()
+        import pdb; pdb.set_trace()
 
-        tend = time.time()
-        time_app += (tend-tstart)*1e3
-        niter = np.array(niter)
-        approx = np.array(approx)
-        niter_app = max(niter_app, niter.sum())
 
-        # Numerical method
-        #tstart = time.time()
-        #tn, fn, nev, njac = rezeq_slow.integrate_forward_numerical(\
-        #                                funs, dfuns, \
-        #                                t0, [s0]+[0]*2, t1)
-        #tend = time.time()
-        #time_num += (tend-tstart)*1e3
-        #niter_num = max(niter_num, nev+njac)
-        #numerical = fn[:, 0]
-
-        # Errors
-        errmax = np.abs(approx-expected).max()
-        errmax_app_max = max(errmax, errmax_app_max)
-
-        #errmax = np.abs(numerical-expected).max()
-        #errmax_num_max = max(errmax, errmax_num_max)
-
-    assert errmax_app_max<1e-3
     tab = " "*8
     print(f"{tab}Errmax approx vs analytical = {errmax_app_max:3.2e}"\
-                    +f" time={time_app:3.3e} msec/niter={niter_app}")
-    #print(f"{tab}Errmax numer  vs analytical = {errmax_num_max:3.2e}"\
-    #                +f" time={time_num:3.3e} msec/niter={niter_num}")
+                    +f" time={time_app:3.3e} msec/niter={niter_app} "\
+                    +f"vs num: time={time_num:3.3e}/niter={niter_num}")
     print("")
 

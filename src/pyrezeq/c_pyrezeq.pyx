@@ -8,6 +8,7 @@ cdef extern from 'c_utils.h':
     double c_get_eps()
     double c_get_inf()
     double c_get_nan()
+    int c_get_nfluxes_max()
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
@@ -27,11 +28,10 @@ cdef extern from 'c_integ.h':
                                         double s0, double s1);
 
     int c_increment_fluxes(int nfluxes,
-                            double * scalings,
                             double nu,
-                            double * aj_vector_noscaling,
-                            double * bj_vector_noscaling,
-                            double * cj_vector_noscaling,
+                            double * aj_vector,
+                            double * bj_vector,
+                            double * cj_vector,
                             double aoj,
                             double boj,
                             double coj,
@@ -88,6 +88,9 @@ def get_nan():
 
 def get_inf():
     return c_get_inf()
+
+def get_nfluxes_max():
+    return c_get_nfluxes_max()
 
 def get_error_message(int err_code):
     cdef char message[100]
@@ -196,34 +199,28 @@ def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     return c_find_alpha(nalphas, <double*> np.PyArray_DATA(alphas), s0)
 
 
-def increment_fluxes(np.ndarray[double, ndim=1, mode='c'] scalings not None,
-                    double nu, \
-                    np.ndarray[double, ndim=1, mode='c'] aj_vector_noscaling not None,
-                    np.ndarray[double, ndim=1, mode='c'] bj_vector_noscaling not None,
-                    np.ndarray[double, ndim=1, mode='c'] cj_vector_noscaling not None,
+def increment_fluxes(double nu, \
+                    np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
+                    np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
+                    np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
                     double aoj, double boj, double coj, \
                     double t0, double t1, \
                     double s0, double s1, \
                     np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
-    cdef int nfluxes = aj_vector_noscaling.shape[0]
+    cdef int nfluxes = aj_vector.shape[0]
 
-    if scalings.shape[0] != nfluxes:
-        raise ValueError("scalings.shape[0] != nfluxes")
+    if bj_vector.shape[0] != nfluxes:
+        raise ValueError("bj_vector.shape[0] != nfluxes")
 
-    if bj_vector_noscaling.shape[0] != nfluxes:
-        raise ValueError("bj_vector_noscaling.shape[0] != nfluxes")
-
-    if cj_vector_noscaling.shape[0] != nfluxes:
-        raise ValueError("cj_vector_noscaling.shape[0] != nfluxes")
+    if cj_vector.shape[0] != nfluxes:
+        raise ValueError("cj_vector.shape[0] != nfluxes")
 
     # Run C code
-    return c_increment_fluxes(nfluxes,
-                            <double*> np.PyArray_DATA(scalings),
-                            nu,
-                            <double*> np.PyArray_DATA(aj_vector_noscaling),
-                            <double*> np.PyArray_DATA(bj_vector_noscaling),
-                            <double*> np.PyArray_DATA(cj_vector_noscaling),
+    return c_increment_fluxes(nfluxes, nu,
+                            <double*> np.PyArray_DATA(aj_vector),
+                            <double*> np.PyArray_DATA(bj_vector),
+                            <double*> np.PyArray_DATA(cj_vector),
                             aoj, boj, coj, t0, t1, s0, s1, \
                             <double*> np.PyArray_DATA(fluxes))
 

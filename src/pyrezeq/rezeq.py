@@ -9,8 +9,11 @@ from pyrezeq import has_c_module
 if has_c_module():
     import c_pyrezeq
     REZEQ_EPS = c_pyrezeq.get_eps()
+    REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
 else:
     REZEQ_EPS = 1e-10
+    REZEQ_NFLUXES_MAX = 20
+
 
 def check_alphas(alphas):
     assert len(alphas)>2, "Expected len(alphas)>2"
@@ -130,6 +133,10 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     nalphas = len(alphas)
     nfluxes = len(funs)
 
+    if nfluxes>REZEQ_NFLUXES_MAX:
+        raise ValueError(f"Expected nfluxes<{REZEQ_NFLUXES_MAX}, "\
+                            +f"got {nfluxes}.")
+
     # Default
     # .. option to optimize?
     nus = np.ones(nalphas-1) if nus is None else nus
@@ -139,11 +146,12 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
     assert len(nus) == nalphas-1
     has_epsilons = not epsilons is None
     if has_epsilons:
-        if np.isscalar(epsilon):
+        if np.isscalar(epsilons):
             epsilons = epsilons*np.ones((nalphas-1, nfluxes))
-        assert epsilons.shape == (nalphas-1, nfluxes)
     else:
         epsilons = 0.5*np.ones((nalphas-1, nfluxes))
+
+    assert epsilons.shape == (nalphas-1, nfluxes)
 
     # we add one row at the top end bottom for continuity extension
     a_matrix = np.zeros((nalphas-1, nfluxes))
@@ -155,7 +163,7 @@ def get_coefficients_matrix(funs, alphas, nus=1, epsilons=None):
         alphaj, alphajp1 = alphas[[j, j+1]]
 
         for ifun, f in enumerate(funs):
-            epsilon = epsilons[j] if has_epsilons else None
+            epsilon = epsilons[j, ifun] if has_epsilons else None
             (a, b, c), e = get_coefficients(f, alphaj, alphajp1,\
                                                     nu, epsilon)
             a_matrix[j, ifun] = a
@@ -286,7 +294,7 @@ def get_coefficients_matrix_optimize_nu(funs, alpha0, alpha1, nalphas, \
 
     ones = np.ones(nalphas-1)
     def ofun(theta):
-        nus = ones*math.exp(theta)
+        nus = ones*np.exp(theta)
         _, amat, bmat, cmat, _ = get_coefficients_matrix([sfun], alphas, nus)
         return approx_error([sfun], alphas, nus, amat, bmat, cmat, \
                                         errfun=errfun)
@@ -327,17 +335,12 @@ def steady_state_scalings(alphas, nus, scalings, \
     return np.array(steady)
 
 
-def increment_fluxes(scalings, nu, \
-                        a_vector_noscaling, \
-                        b_vector_noscaling, \
-                        c_vector_noscaling, \
+def increment_fluxes(nu, a_vector, b_vector, c_vector, \
                         aoj, boj, coj, \
                         t0, t1, s0, s1, fluxes):
 
-    ierr = c_pyrezeq.increment_fluxes(scalings, nu, \
-                            a_vector_noscaling, \
-                            b_vector_noscaling, \
-                            c_vector_noscaling, \
+    ierr = c_pyrezeq.increment_fluxes(nu, \
+                            a_vector, b_vector, c_vector, \
                             aoj, boj, coj, \
                             t0, t1, s0, s1, fluxes)
     if ierr>0:

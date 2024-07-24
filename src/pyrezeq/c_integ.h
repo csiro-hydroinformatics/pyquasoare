@@ -23,12 +23,10 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c, double s
 double c_integrate_inverse(double nu, double a, double b, double c,
                                 double s0, double s1);
 
-int c_increment_fluxes(int nfluxes,
-                        double * scalings,
-                        double nu,
-                        double * aj_vector_noscaling,
-                        double * bj_vector_noscaling,
-                        double * cj_vector_noscaling,
+int c_increment_fluxes(int nfluxes, double nu,
+                        double * aj_vector,
+                        double * bj_vector,
+                        double * cj_vector,
                         double aoj,
                         double boj,
                         double coj,
