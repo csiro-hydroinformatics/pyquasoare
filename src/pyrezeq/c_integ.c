@@ -306,7 +306,7 @@ int c_integrate(int nalphas, int nfluxes,
     int extrapolating_high = 0;
     double t_final = t0+delta;
     double t_start=t0, t_end=t0;
-    double s_start=s0, s_end=s0;
+    double s_start=s0, s_interm=s0, s_end=s0;
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0;
 
@@ -321,8 +321,8 @@ int c_integrate(int nalphas, int nfluxes,
     while (ispos(t_final-t_end) && nit<nalphas) {
         nit += 1;
 
-        extrapolating_low = s_start<alpha_min ? 1 : 0;
-        extrapolating_high = s_start>alpha_max ? 1 : 0;
+        extrapolating_low = notequal(s_start, alpha_min);
+        extrapolating_high = notequal(s_start, alpha_max);
 
         if(jalpha<0 || jalpha>nalphas-2)
             return REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS;
@@ -398,16 +398,16 @@ int c_integrate(int nalphas, int nfluxes,
             if(isneg(funval)){
                 /* non-increasing function -> move to lower band if not extrapolating*/
                 jalpha_next = extrapolating_high ? jalpha : jalpha>jmin ? jalpha-1 : jmin;
-                s_end = extrapolating_high ? alpha_max : alpha0;
+                s_interm = extrapolating_high ? alpha_max : alpha0;
 
             } else if (ispos(funval)){
                 /* increasing function -> move to upper band if not extrapolating */
                 jalpha_next = extrapolating_low ? jalpha : jalpha<jmax ? jalpha+1 : jmax;
-                s_end = extrapolating_low ? alpha_min : alpha1;
+                s_interm = extrapolating_low ? alpha_min : alpha1;
             }
 
             /* Compute time for which s(t) = s_end */
-            t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_end);
+            t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_interm);
 
         } else {
             /* derivative is null -> finish iteration */
@@ -429,9 +429,11 @@ int c_integrate(int nalphas, int nfluxes,
             fprintf(stdout, "  [%d] j=%d->%d  nu=%0.5f a=%0.5f b=%0.5f c=%0.5f f=%0.5f ex_l=%d ex_h=%d\n",
                                         nit, jalpha, jalpha_next, nu, aoj, boj,
                                         coj, funval, extrapolating_low, extrapolating_high);
-            fprintf(stdout, "        t=%0.5f->%0.5f/%0.5f  s=%0.5f->%0.5f\n\n",
-                                        t_start, t_end, t_final, s_start, s_end);
+            fprintf(stdout, "        t=%0.5f->%0.5f/%0.5f  s=%4.4e->(%4.4e)->%4.4e\n\n",
+                                        t_start, t_end, t_final, s_start, s_interm, s_end);
         }
+        if(isnull(t_end-t_start))
+            return REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE;
 
         /* Increment fluxes during the last interval */
         c_increment_fluxes(nfluxes, nu,
@@ -456,7 +458,7 @@ int c_integrate(int nalphas, int nfluxes,
     }
 
     /* Convergence problem */
-    if(ispos(delta+t0-t_end)) {
+    if(ispos(t_final-t_end)) {
         //fprintf(stdout, "\ndelta=%0.3f t0=%0.3f\n", delta, t0);
         return REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE;
     }

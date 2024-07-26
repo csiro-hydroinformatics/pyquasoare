@@ -288,7 +288,7 @@ def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
 
 
 # Integrate reservoir equation over 1 time step and compute associated fluxes
-def integrate(alphas, scalings, nu_vector, \
+def integrate(alphas, scalings, nu, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, \
@@ -320,10 +320,8 @@ def integrate(alphas, scalings, nu_vector, \
     while ispos(t_final-t_end) and nit<nalphas:
         nit += 1
 
-        extrapolating_low = s_start<alpha_min
-        extrapolating_high = s_start>alpha_max
-
-        nu = nu_vector[jalpha]
+        extrapolating_low = isneg(s_start-alpha_min)
+        extrapolating_high = ispos(s_start-alpha_max)
 
         # Get band limits
         alpha0 = alphas[jalpha]
