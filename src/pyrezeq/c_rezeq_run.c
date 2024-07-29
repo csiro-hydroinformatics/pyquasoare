@@ -1,4 +1,4 @@
-#include "c_run.h"
+#include "c_rezeq_run.h"
 
 /**
 * Integrate reservoir equation over multiple time steps:

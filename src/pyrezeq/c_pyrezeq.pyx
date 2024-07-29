@@ -4,7 +4,7 @@ cimport numpy as np
 np.import_array()
 
 # -- HEADERS --
-cdef extern from 'c_utils.h':
+cdef extern from 'c_rezeq_utils.h':
     double c_get_eps()
     double c_get_inf()
     double c_get_nan()
@@ -15,7 +15,7 @@ cdef extern from 'c_utils.h':
     int c_get_error_message(int err_code, char message[100]);
 
 
-cdef extern from 'c_integ.h':
+cdef extern from 'c_rezeq_core.h':
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
     double c_approx_jac(double nu, double a, double b, double c, double s);
@@ -55,7 +55,7 @@ cdef extern from 'c_integ.h':
                                 double * s1,
                                 double * fluxes);
 
-cdef extern from 'c_run.h':
+cdef extern from 'c_rezeq_run.h':
     int c_run(int nalphas, int nfluxes, int nval, double delta,
                                 double * alphas,
                                 double * scalings,
@@ -68,7 +68,7 @@ cdef extern from 'c_run.h':
                                 double * s_end,
                                 double * fluxes);
 
-cdef extern from 'c_steady.h':
+cdef extern from 'c_rezeq_steady.h':
     int c_steady_state(double nu, double a, double b, double c, double steady[2]);
 
 

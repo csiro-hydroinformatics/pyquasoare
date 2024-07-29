@@ -7,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_utils.h"
+#include "c_rezeq_utils.h"
 
 double c_approx_fun(double nu, double a, double b, double c, double s);
 

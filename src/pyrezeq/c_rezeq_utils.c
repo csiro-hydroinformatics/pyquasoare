@@ -1,4 +1,4 @@
-#include "c_utils.h"
+#include "c_rezeq_utils.h"
 
 double c_get_eps() {
     return REZEQ_EPS;

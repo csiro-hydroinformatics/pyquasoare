@@ -7,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_integ.h"
+#include "c_rezeq_core.h"
 
 int c_run(int nalphas, int nfluxes, int nval, double delta,
                             double * alphas,

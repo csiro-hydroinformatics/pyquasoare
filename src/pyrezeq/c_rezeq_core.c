@@ -1,4 +1,4 @@
-#include "c_integ.h"
+#include "c_rezeq_core.h"
 
 /* Approximation functions */
 double c_approx_fun(double nu, double a, double b, double c, double s){

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.rezeq import REZEQ_EPS
+from pyrezeq.approx import REZEQ_EPS
 
 def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
                             method="Radau", max_step=np.inf, \

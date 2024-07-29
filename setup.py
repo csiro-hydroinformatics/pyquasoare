@@ -19,10 +19,10 @@ def read(fname):
 ext_rezeq=Extension(name="c_pyrezeq",
     sources=[
         "src/pyrezeq/c_pyrezeq.pyx",
-        "src/pyrezeq/c_utils.c",
-        "src/pyrezeq/c_integ.c",
-        "src/pyrezeq/c_run.c",
-        "src/pyrezeq/c_steady.c",
+        "src/pyrezeq/c_rezeq_utils.c",
+        "src/pyrezeq/c_rezeq_core.c",
+        "src/pyrezeq/c_rezeq_run.c",
+        "src/pyrezeq/c_rezeq_steady.c",
         "src/pyrezeq/c_quadrouting.c"
     ],
     extra_cflags=["-O3"],
