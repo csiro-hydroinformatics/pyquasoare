@@ -12,7 +12,7 @@
 int c_run(int nalphas, int nfluxes, int nval, double delta,
                             double * alphas,
                             double * scalings,
-                            double * nu_vector,
+                            double nu,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,

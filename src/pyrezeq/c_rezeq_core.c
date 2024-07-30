@@ -273,7 +273,7 @@ int c_increment_fluxes(int nfluxes, double nu,
 /* Integrate reservoir equation over 1 time step and compute associated fluxes */
 int c_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
-                            double * nu_vector,
+                            double nu,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
@@ -286,7 +286,7 @@ int c_integrate(int nalphas, int nfluxes,
     int i, nit=0, jalpha_next;
     int outside_alpha_bounds=0;
     int is_below_alpha_min=0;
-    double aoj=0., boj=0., coj=0., nu;
+    double aoj=0., boj=0., coj=0.;
     double a=0, b=0, c=0;
     double funval=0, funval_prev=0;
     double alpha0, alpha1;
@@ -324,17 +324,11 @@ int c_integrate(int nalphas, int nfluxes,
     while (ispos(t_final-t_end) && nit<nalphas) {
         nit += 1;
 
-        extrapolating_low = notequal(s_start, alpha_min);
-        extrapolating_high = notequal(s_start, alpha_max);
+        extrapolating_low = isneg(s_start-alpha_min);
+        extrapolating_high = ispos(s_start-alpha_max);
 
         if(jalpha<0 || jalpha>nalphas-2)
             return REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS;
-
-        /* Exponential factor */
-        nu = nu_vector[jalpha];
-
-        if(isnan(nu) || nu<0)
-            return REZEQ_ERROR_INTEGRATE_WRONG_NU;
 
         /* Get band limits */
         alpha0 = alphas[jalpha];

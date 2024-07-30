@@ -54,10 +54,9 @@ def integrate(alphas, scalings, nu, \
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
     niter = np.zeros(1, dtype=np.int32)
     s1 = np.zeros(1, dtype=np.float64)
-    nus = nu*np.ones(len(alphas)-1)
 
     # run
-    ierr = c_pyrezeq.integrate(alphas, scalings, nus, \
+    ierr = c_pyrezeq.integrate(alphas, scalings, nu, \
                     a_matrix_noscaling, b_matrix_noscaling, \
                     c_matrix_noscaling, t0, s0, delta, niter, s1, fluxes)
     if ierr>0:

@@ -42,7 +42,7 @@ cdef extern from 'c_rezeq_core.h':
     int c_integrate(int nalphas, int nfluxes,
                                 double * alphas,
                                 double * scalings,
-                                double * nu_vector,
+                                double nu,
                                 double * a_matrix_noscaling,
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
@@ -57,7 +57,7 @@ cdef extern from 'c_rezeq_run.h':
     int c_run(int nalphas, int nfluxes, int nval, double delta,
                                 double * alphas,
                                 double * scalings,
-                                double * nu_vector,
+                                double nu,
                                 double * a_matrix_noscaling,
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
@@ -217,7 +217,7 @@ def increment_fluxes(double nu, \
 
 def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                         np.ndarray[double, ndim=1, mode='c'] scalings not None,
-                        np.ndarray[double, ndim=1, mode='c'] nu_vector not None,
+                        double nu, \
                         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
@@ -238,9 +238,6 @@ def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     if c_matrix_noscaling.shape[1] != nfluxes:
         raise ValueError("c_matrix_noscaling.shape[1] != nfluxes")
 
-    if nu_vector.shape[0] != nalphas-1:
-        raise ValueError("nu_vector.shape[0] != nalphas-1")
-
     if a_matrix_noscaling.shape[0] != nalphas-1:
         raise ValueError("a_matrix_noscaling.shape[0] != nalphas-1")
 
@@ -260,7 +257,7 @@ def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     return c_integrate(nalphas, nfluxes,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
-                                <double*> np.PyArray_DATA(nu_vector),
+                                nu,
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
@@ -273,7 +270,7 @@ def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
 def run(double delta, \
         np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         np.ndarray[double, ndim=2, mode='c'] scalings not None,
-        np.ndarray[double, ndim=1, mode='c'] nu_vector not None,
+        double nu,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
@@ -295,9 +292,6 @@ def run(double delta, \
 
     if c_matrix_noscaling.shape[1] != nfluxes:
         raise ValueError("c_matrix_noscaling.shape[1] != nfluxes")
-
-    if nu_vector.shape[0] != nalphas-1:
-        raise ValueError("nu_vector.shape[0] != nalphas-1")
 
     if a_matrix_noscaling.shape[0] != nalphas-1:
         raise ValueError("a_matrix_noscaling.shape[0] != nalphas-1")
@@ -324,7 +318,7 @@ def run(double delta, \
     return c_run(nalphas, nfluxes, nval, delta,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
-                                <double*> np.PyArray_DATA(nu_vector),
+                                nu,
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),

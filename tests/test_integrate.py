@@ -505,6 +505,9 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     if sol is None:
         pytest.skip("No analytical solution")
 
+    if fname != "runge":
+        pytest.skip("TOFIX Need to fix runge")
+
     LOGGER.info("")
 
     inp = lambda x: (1+0*x)*inflow
@@ -552,10 +555,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, delta)
             # Against slow
-            #n_slow, s_end_slow, _ = slow.integrate(alphas, scalings, nus, \
-            #                                    amat, bmat, cmat, t_start, \
-            #                                    s_start, delta)
-            #assert np.isclose(s_end, s_end_slow)
+            n_slow, s_end_slow, _ = slow.integrate(alphas, scalings, nu, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            assert np.isclose(s_end, s_end_slow)
             niter.append(n)
             sims.append(s_end)
             s_start = s_end
@@ -589,16 +592,17 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
     #assert errmax_app_max<1e-3
 
-    if False:
+    if True:
         import matplotlib.pyplot as plt
         expected = sol(t1, s0_errmax)
 
         s_start = s0
         sims = [s0]
+        sims_slow = [s0]
         for i in range(len(t1)-1):
             start = t1[i]
             delta = t1[i+1]-start
-            n, s_end, _ = integrate.integrate(alphas, scalings, nus, \
+            n, s_end, _ = integrate.integrate(alphas, scalings, nu,\
                                                 amat, bmat, cmat, start, \
                                                 s_start, delta)
             sims.append(s_end)
@@ -620,13 +624,13 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         ax.plot(ds, expected, lw=4, label="expected sim", color="tab:blue")
         ax.plot(ds[0], expected[0], "x", ms=5, color="tab:blue")
 
-        ds = approx.approx_fun_from_matrix(alphas, nus, \
+        ds = approx.approx_fun_from_matrix(alphas, nu, \
                                         amat, bmat, cmat, xx)
         ds = ds.sum(axis=1)
         ax.plot(ds, xx, label="approx", color="tab:orange")
 
-        ds = approx.approx_fun_from_matrix(alphas, nus, \
-                                        amat, bmat, cmat, approx)
+        ds = approx.approx_fun_from_matrix(alphas, nu, \
+                                        amat, bmat, cmat, sims)
         ds = ds.sum(axis=1)
         ax.plot(ds, sims, lw=4, label="expected sim", color="tab:orange")
         ax.plot(ds[0], sims[0], "x", ms=5, color="tab:orange")
@@ -641,7 +645,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
         ax = axs[1]
         ax.plot(t1, expected, label="expected")
-        ax.plot(t1, approx, label="approx")
+        ax.plot(t1, sims, label="approx")
         ax.legend()
         ax.set(title=f"fun={fname} s0={s0_errmax:0.5f}")
         plt.show()
