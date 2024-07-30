@@ -20,7 +20,7 @@
 #define REZEQ_ERROR_NFLUXES_TOO_LARGE 10
 
 /* Define small number */
-#define REZEQ_EPS 1e-10
+#define REZEQ_EPS 1e-9
 
 #define REZEQ_PI 3.1415926535897936
 

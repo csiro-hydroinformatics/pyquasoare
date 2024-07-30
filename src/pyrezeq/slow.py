@@ -74,6 +74,9 @@ def routing_numerical(delta, theta, q0, s0, \
 def isnull(x):
     return 1 if abs(x)<REZEQ_EPS else 0
 
+def isequal(x, y):
+    return 1 if abs(x-y)<REZEQ_EPS else 0
+
 def notnull(x):
     return 1-isnull(x)
 
@@ -141,6 +144,9 @@ def integrate_forward(nu, a, b, c, t0, s0, t):
     dtmax = integrate_delta_t_max(nu, a, b, c, s0)
     if t-t0>dtmax:
         return np.nan
+
+    if isequal(t0, t):
+        return s0
 
     if isnull(b) and isnull(c):
         s1 = s0+a*(t-t0)

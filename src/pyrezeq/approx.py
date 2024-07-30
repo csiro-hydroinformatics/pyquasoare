@@ -7,8 +7,8 @@ if has_c_module():
     REZEQ_EPS = c_pyrezeq.get_eps()
     REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
 else:
-    REZEQ_EPS = 1e-10
-    REZEQ_NFLUXES_MAX = 20
+    raise ImportError("Cannot run rezeq without C code. Please compile C code.")
+
 
 def approx_fun(nu, a, b, c, s):
     is_scalar = [np.isscalar(v) for v in [a, b, c, s]]
@@ -175,31 +175,26 @@ def optimize_nu(funs, alphas, nexplore=1000):
 
     # Golden ratio minimization
     fobjexp = lambda x: fobj(math.exp(x))
-    # .. systematic search
-    xx = np.linspace(-5, 5, 10)
-    ff = np.array([fobjexp(x) for x in xx])
-    imin = max(1, np.argmin(ff))
-    x0, x1, x3 = xx[imin-1], xx[imin], xx[imin+1]
-    # .. define initial x2 point
-    C = (3-math.sqrt(5))/2
-    x2 = x1+C*(x3-x1)
-    f1, f2 = fobjexp(x1), fobjexp(x2)
-    # .. algorithm parameters
-    tol, niter, niter_max, R = 1e-3, 0, 100, 1-C
-
-    while abs(x3-x0)>tol*(abs(x1)+abs(x2)) and niter<niter_max:
-        if f2<f1:
-            x0, x1, x2 = x1, x2, R*x1+C*x3
-            f1, f2 = f2, fobjexp(x2)
+    xa, xb = -5, 5
+    dx = 10
+    niter = 0
+    niter_max = 500
+    tol = 1e-2
+    invphi = (math.sqrt(5)-1)/2
+    while abs(dx)>tol and niter<niter_max:
+        dx = xb-xa
+        xc = xb-dx*invphi
+        xd = xa+dx*invphi
+        if fobjexp(xc)<fobjexp(xd):
+            xb = xd
         else:
-            x3, x2, x1 = x2, x1, R*x2+C*x0
-            f2, f1 = f1, fobjexp(x1)
+            xa = xc
 
         niter += 1
 
-    theta, fopt = (x1, f1) if f1<f2 else (x2, f2)
+    theta = (xa+xb)/2
+    fopt = fobjexp(theta)
     nu = math.exp(theta)
     amat, bmat, cmat = get_coefficients_matrix(funs, alphas, nu)
-
     return nu, amat, bmat, cmat, niter, fopt
 

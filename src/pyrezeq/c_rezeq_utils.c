@@ -38,12 +38,13 @@ int isneg(double x){
 }
 
 int isequal(double x, double y){
-    return ispos(fabs(x-y));
+    return fabs(x-y)<REZEQ_EPS ? 1 : 0;
 }
 
 int notequal(double x, double y){
     return 1-isequal(x, y);
 }
+
 
 int c_find_alpha(int nalphas, double * alphas, double s0){
     int i=0;

@@ -11,8 +11,7 @@ if has_c_module():
     REZEQ_EPS = c_pyrezeq.get_eps()
     REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
 else:
-    REZEQ_EPS = 1e-10
-    REZEQ_NFLUXES_MAX = 20
+    raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
 # --- approximation functions ----
 

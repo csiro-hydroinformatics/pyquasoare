@@ -78,8 +78,11 @@ double c_integrate_forward(double nu, double a, double b, double c,
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    if(t<t0)
+    if(isneg(t-t0))
         return c_get_nan();
+
+    if(isequal(t, t0))
+        return s0;
 
     double dtmax = c_integrate_delta_t_max(nu, a, b, c, s0);
     if(t-t0>dtmax)

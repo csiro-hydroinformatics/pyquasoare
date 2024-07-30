@@ -33,7 +33,6 @@ def find_alpha(alphas, u0):
     return c_pyrezeq.find_alpha(alphas, u0)
 
 
-
 def increment_fluxes(nu, a_vector, b_vector, c_vector, \
                         aoj, boj, coj, \
                         t0, t1, s0, s1, fluxes):

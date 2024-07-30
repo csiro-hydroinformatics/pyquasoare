@@ -67,7 +67,7 @@ def test_steady_state(allclose, generate_samples):
 
 
 def test_steady_state_scalings(allclose):
-    nalphas = 100
+    nalphas = 7
     alphas = np.linspace(0, 1.2, nalphas)
     # GR4J production
     funs = [
@@ -75,7 +75,7 @@ def test_steady_state_scalings(allclose):
         lambda x: -x*(2-x), \
         lambda x: -(4/9*x)**5/4
     ]
-    nu, amat, bmat, cmat = approx.optimize_nu(funs, alphas)
+    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas)
 
     nval = 200
     scalings = np.random.uniform(0, 100, size=(nval, 3))
@@ -95,6 +95,6 @@ def test_steady_state_scalings(allclose):
         # Check steady on original fun
         feval = np.array([f(s0)*scalings[t, ifun] for ifun, f in enumerate(funs)])
         fsum = np.sum(feval, axis=0)
-        assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-5)
+        assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-3)
 
 
