@@ -11,25 +11,24 @@ else:
     REZEQ_NFLUXES_MAX = 20
 
 def approx_fun(nu, a, b, c, s):
-    if isinstance(s, np.ndarray):
-        ds = np.zeros_like(s)
-        ierr = c_pyrezeq.approx_fun_vect(nu, a, b, c, s, ds)
-        return ds
-    else:
+    is_scalar = [np.isscalar(v) for v in [a, b, c, s]]
+    if all(is_scalar):
         return c_pyrezeq.approx_fun(nu, a, b, c, s)
-
-
-def approx_jac(nu, a, b, c, s):
-    if isinstance(s, np.ndarray):
-        ds = np.zeros_like(s)
-        ierr = c_pyrezeq.approx_jac_vect(nu, a, b, c, s, ds)
-        return ds
     else:
-        return c_pyrezeq.approx_jac(nu, a, b, c, s)
+        a, b, c = np.atleast_1d(a), np.atleast_1d(b), np.atleast_1d(c)
+        s = np.atleast_1d(s)
+        nval = max([len(v) for v in [a, b, c, s]])
+        ones = np.ones(nval)
+        a = a[0]*ones if len(a)==1 else a
+        b = b[0]*ones if len(b)==1 else b
+        c = c[0]*ones if len(c)==1 else c
+        s = s[0]*ones if len(s)==1 else s
+        o = np.nan*ones
+        ierr = c_pyrezeq.approx_fun_vect(nu, a, b, c, s, o)
+        return o
 
 
-
-def get_coefficients(fun, alphaj, alphajp1, nu):
+def get_coefficients(fun, alphaj, alphajp1, nu, enforce_monotonous=False):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         Fits the approx fun at x=a0, x=a1 and x=(a0+a1)/2.
         nu is the non-linearity coefficient.
@@ -45,9 +44,8 @@ def get_coefficients(fun, alphaj, alphajp1, nu):
     # Points to be matched
     x0, x1 = alphaj, alphajp1
     xm = (x0+x1)/2
-    f0, f1, fm = fun(x0), fun(x1), fun(xm)
-
     e0, e1, em = math.exp(-nu*x0), math.exp(-nu*x1), math.exp(-nu*xm)
+    f0, f1, fm = fun(x0), fun(x1), fun(xm)
 
     # Solution
     Uc, Vc = (f1-f0)/(1./e1-1./e0), -(e1-e0)/(1./e1-1./e0)
@@ -55,18 +53,23 @@ def get_coefficients(fun, alphaj, alphajp1, nu):
 
     bplus = (fm-Ua-Uc/em)/(Va+em+Vc/em)
 
-    # Check function is monotone
-    # !!! case uc=0
-    B1, B2 = (e0**2-Vc)/Uc, (e1**2-Vc)/Uc
-    B1, B2 = min(B1, B2), max(B1, B2)
+    # Potential correction of b to enforce the function
+    # to be monotonous
+    corrected = False
+    if ((fm-f0)*(f1-fm)>-REZEQ_EPS or enforce_monotonous) and abs(f1-f0)>REZEQ_EPS:
+        # f0<fm<f1 hence the function seems monotonous
+        # Check function is monotone
+        B1, B2 = (e0**2-Vc)/Uc, (e1**2-Vc)/Uc
+        B1, B2 = min(B1, B2), max(B1, B2)
 
-    invbp = 1/bplus
-    if invbp>B1 and invbp<B2:
-        b = 1/B1 if abs(invbp-B1)<abs(invbp-B2) else 1/B2
-        corrected = True
+        invbp = 1/bplus
+        if invbp>B1 and invbp<B2:
+            b = 1/B1 if abs(invbp-B1)<abs(invbp-B2) else 1/B2
+            corrected = True
+        else:
+            b = bplus
     else:
         b = bplus
-        corrected = False
 
     a = Ua+Va*b
     c = Uc+Vc*b
@@ -96,7 +99,6 @@ def get_coefficients_matrix(funs, alphas, nu):
             c_matrix[j, ifun] = c
 
     return a_matrix, b_matrix, c_matrix
-
 
 
 def approx_fun_from_matrix(alphas, nu, a_matrix, b_matrix, c_matrix, x):
@@ -139,7 +141,6 @@ def approx_fun_from_matrix(alphas, nu, a_matrix, b_matrix, c_matrix, x):
     return outputs
 
 
-
 def optimize_nu(funs, alphas, nexplore=1000):
     """ Optimize nu and compute corresponding coefficients """
 
@@ -148,37 +149,57 @@ def optimize_nu(funs, alphas, nexplore=1000):
     theta_min = -theta_max
     nalphas = len(alphas)
 
-    # Error evaluation points
-    x_eval = np.array([(1-eps)*alphas[j]+eps*alphas[j+1] \
-                for j in range(nalphas-1) for eps in [1./4, 0.5, 3./4]])
+    # Error evaluation points for each band
+    eps = np.array([1./4, 0.5, 3./4])[None, :]
+    a = alphas[:, None]
+    x_eval = a[:-1]*(1-eps)+a[1:]*eps
 
-    # True value to be approximated
+    # Flux sum function to be approximated
     sfun = lambda x: sum([f(x) for f in funs])
-    y_true = sfun(x_eval)
+    y_true = np.array([[sfun(x) for x in xe] for xe in x_eval])
 
-    # Systematic exploration of nu
-    err_min = np.inf
-    for theta in np.linspace(theta_min, theta_max, nexplore):
-        nu = math.exp(theta)
+    # Objective functions and derivatives
+    def fobj(nu):
+        of = 0
+        for j in range(nalphas-1):
+            # Process band j
+            alphaj, alphajp1 = alphas[[j, j+1]]
+            x = x_eval[j]
+            # Get coefficients
+            a, b, c, _ = get_coefficients(sfun, alphaj, alphajp1, nu)
+            # Compute error
+            yt = y_true[j]
+            err = approx_fun(nu, a, b, c, x)-yt
+            of += (err*err).mean()
+        return of
 
-        # Get coefficients
-        try:
-            amat, bmat, cmat = get_coefficients_matrix(funs, alphas, nu)
-        except:
-            continue
+    # Golden ratio minimization
+    fobjexp = lambda x: fobj(math.exp(x))
+    # .. systematic search
+    xx = np.linspace(-5, 5, 10)
+    ff = np.array([fobjexp(x) for x in xx])
+    imin = max(1, np.argmin(ff))
+    x0, x1, x3 = xx[imin-1], xx[imin], xx[imin+1]
+    # .. define initial x2 point
+    C = (3-math.sqrt(5))/2
+    x2 = x1+C*(x3-x1)
+    f1, f2 = fobjexp(x1), fobjexp(x2)
+    # .. algorithm parameters
+    tol, niter, niter_max, R = 1e-3, 0, 100, 1-C
 
-        # Run approximation
-        y_approx = approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, x_eval)
-        y_approx = y_approx.sum(axis=1)
+    while abs(x3-x0)>tol*(abs(x1)+abs(x2)) and niter<niter_max:
+        if f2<f1:
+            x0, x1, x2 = x1, x2, R*x1+C*x3
+            f1, f2 = f2, fobjexp(x2)
+        else:
+            x3, x2, x1 = x2, x1, R*x2+C*x0
+            f2, f1 = f1, fobjexp(x1)
 
-        # Compute objective function
-        err = ((y_approx-y_true)**2).sum()
+        niter += 1
 
-        # Minimize
-        if err<err_min:
-            err_min = err
-            nu_opt = nu
-            amat_opt, bmat_opt, cmat_opt = amat, bmat, cmat
+    theta, fopt = (x1, f1) if f1<f2 else (x2, f2)
+    nu = math.exp(theta)
+    amat, bmat, cmat = get_coefficients_matrix(funs, alphas, nu)
 
-    return nu_opt, amat_opt, bmat_opt, cmat_opt
+    return nu, amat, bmat, cmat, niter, fopt
 

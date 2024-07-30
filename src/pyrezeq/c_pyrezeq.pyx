@@ -18,8 +18,6 @@ cdef extern from 'c_rezeq_utils.h':
 cdef extern from 'c_rezeq_core.h':
     double c_approx_fun(double nu, double a, double b, double c, double s);
 
-    double c_approx_jac(double nu, double a, double b, double c, double s);
-
     double c_integrate_forward(double nu, double a, double b, double c,
                                     double t0, double s0, double t);
     double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
@@ -102,29 +100,21 @@ def approx_fun(double nu, double a, double b, double c, double s):
     return c_approx_fun(nu, a, b, c, s)
 
 
-def approx_jac(double nu, double a, double b, double c, double s):
-    return c_approx_jac(nu, a, b, c, s)
-
-
-def approx_fun_vect(double nu, double a, double b, double c, \
+def approx_fun_vect(double nu,
+                np.ndarray[double, ndim=1, mode='c'] a not None,\
+                np.ndarray[double, ndim=1, mode='c'] b not None,\
+                np.ndarray[double, ndim=1, mode='c'] c not None,\
                 np.ndarray[double, ndim=1, mode='c'] s not None,\
-                np.ndarray[double, ndim=1, mode='c'] ds not None):
-    cdef int nval = s.shape[0]
+                np.ndarray[double, ndim=1, mode='c'] o not None):
+    cdef int nval = a.shape[0]
+    assert nval == b.shape[0]
+    assert nval == c.shape[0]
+    assert nval == s.shape[0]
+    assert nval == o.shape[0]
+
     cdef int k
-
     for k in range(nval):
-        ds[k] = c_approx_fun(nu, a, b, c, s[k])
-
-    return 0
-
-def approx_jac_vect(double nu, double a, double b, double c, \
-                np.ndarray[double, ndim=1, mode='c'] s not None,\
-                np.ndarray[double, ndim=1, mode='c'] ds not None):
-    cdef int nval = s.shape[0]
-    cdef int k
-    assert ds.shape[0] == nval
-    for k in range(nval):
-        ds[k] = c_approx_jac(nu, a, b, c, s[k])
+        o[k] = c_approx_fun(nu, a[k], b[k], c[k], s[k])
 
     return 0
 

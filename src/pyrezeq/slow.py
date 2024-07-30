@@ -88,10 +88,6 @@ def approx_fun(nu, a, b, c, s):
     return a+b*math.exp(-nu*s)+c*math.exp(nu*s)
 
 
-def approx_jac(nu, a, b, c, s):
-    return -nu*b*math.exp(-nu*s)+nu*c*math.exp(nu*s)
-
-
 def integrate_delta_t_max(nu, a, b, c, s0):
     e0 = math.exp(-nu*s0)
     Delta = a*a-4*b*c

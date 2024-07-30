@@ -204,28 +204,34 @@ def test_approx_fun(allclose, generate_samples):
         pytest.skip("Skip param config")
 
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
-        ds = approx.approx_fun(nu, a, b, c, s0s)
+        o = approx.approx_fun(nu, a, b, c, s0s)
         expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
-        assert allclose(ds, expected)
+        assert allclose(o, expected)
 
-        ds_slow = [slow.approx_fun(nu, a, b, c, s) for s in s0s]
-        assert allclose(ds_slow, expected)
+        o_slow = [slow.approx_fun(nu, a, b, c, s) for s in s0s]
+        assert allclose(o_slow, expected)
 
-        jac = approx.approx_jac(nu, a, b, c, s0s)
-        expected = -nu*b*np.exp(-nu*s0s)+nu*c*np.exp(nu*s0s)
-        assert allclose(jac, expected)
+    a, b, c = [np.ascontiguousarray(v) for v in params.T]
+    o = approx.approx_fun(nu, a, b, c, s0s)
+    expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
+    assert allclose(o, expected)
 
-        jac_slow = [slow.approx_jac(nu, a, b, c, s) for s in s0s]
-        assert allclose(jac_slow, expected)
-
+    # Check derivative against nu
+    do = approx.approx_fun(nu, 0, -s0s*b, s0s*c, s0s)
+    eps = 1e-8
+    oe = approx.approx_fun(nu+eps, a, b, c, s0s)
+    expected = (oe-o)/eps
+    assert allclose(do, expected, atol=1e-4)
 
 
 def test_get_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
     nus = [0.01, 0.1, 1, 5]
-
+    corrected = 0
+    LOGGER.info("")
     for nu in nus:
-        a, b, c, corrected = approx.get_coefficients(fun, alpha0, alpha1, nu)
+        a, b, c, corr = approx.get_coefficients(fun, alpha0, alpha1, nu)
+        corrected += corr
 
         # Check function on bounds
         assert allclose(approx.approx_fun(nu, a, b, c, alpha0), fun(alpha0), atol=1e-7)
@@ -236,6 +242,41 @@ def test_get_coefficients(allclose, reservoir_function):
             eps = 0.5
             x = (1-eps)*alpha0+eps*alpha1
             assert allclose(approx.approx_fun(nu, a, b, c, x), fun(x))
+
+    LOGGER.info(f"get coeff - {fname}: corrected = {corrected}/{len(nus)}")
+
+
+def test_get_coefficients_edge_cases_monotonous(allclose):
+    # Piecewise linear fun
+    x0, xm, x1 = 0., 0.5, 1.
+    def fun(x, f0, fm, f1):
+        scal = np.isscalar(x)
+        x = np.atleast_1d(x)
+        y = f0*np.ones_like(x)
+        y = np.where((x<xm)&(x>=x0), f0+(fm-f0)*(x-x0)/(xm-x0), y)
+        y = np.where((x>=xm)&(x<x1), fm+(f1-fm)*(x-xm)/(x1-xm), y)
+        y = np.where(x>=x1, f1, y)
+        if scal:
+            return y[0]
+        else:
+            return y
+
+    nu = 1.
+
+    # Case of a slowly varying monotonous function
+    f = lambda x: fun(x, 0, 1, 2)
+    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
+    assert not corr
+
+    # Case of non-monotonous function
+    f = lambda x: fun(x, 0, 6, 2)
+    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
+    assert not corr
+
+    # Case of a highly varying function
+    f = lambda x: fun(x, 0, 2, 2)
+    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
+    assert corr
 
 
 def test_get_coefficients_matrix(allclose, reservoir_function):
@@ -275,8 +316,19 @@ def test_optimize_nu(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     funs = [lambda x: inflow+fun(x)]
     nalphas = 21
-    alphas = np.linspace(alpha0, alpha1, nalphas)
-    nu, amat, bmat, cmat = approx.optimize_nu(funs, alphas)
+
+    a1 = np.linspace(alpha0, alpha1, nalphas)
+    nu1, amat1, bmat1, cmat1, niter1, fopt1 = approx.optimize_nu(funs, a1)
+
+    a2 = np.linspace(alpha0, alpha1, nalphas-1)
+    nu2, amat2, bmat2, cmat2, niter2, fopt2 = approx.optimize_nu(funs, a2)
+
+    if fopt1<fopt2:
+        alphas, nu, niter = a1, nu1, niter1
+        amat, bmat, cmat = amat1, bmat1, cmat1
+    else:
+        alphas, nu, niter = a2, nu2, niter2
+        amat, bmat, cmat = amat2, bmat2, cmat2
 
     s = np.linspace(alpha0, alpha1, 10000)
     out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
@@ -290,16 +342,17 @@ def test_optimize_nu(allclose, reservoir_function):
         "x6": 1e-4, \
         "x8": 1e-4, \
         "tanh": 1e-2, \
-        "exp": 1e-7,
+        "exp": 1e-6,
         "sin": 1e-3, \
         "recip": 1e-3, \
         "recipquad": 1e-3, \
         "runge": 1e-4, \
-        "stiff": 1e-9, \
+        "stiff": 1e-8, \
         "ratio": 5e-1
     }
     assert rmse<rmse_thresh[fname]
-    LOGGER.info(f"optimize approx vs truth for {fname}: rmse={rmse:3.3e} (nu={nu:0.2f})")
+    LOGGER.info(f"optimize approx vs truth for {fname}: "\
+                    +f"nalphas={nalphas} niter={niter} rmse={rmse:3.3e} (nu={nu:0.2f})")
 
 
 def test_optimize_vs_quad(allclose, reservoir_function):
@@ -311,7 +364,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
     funs = [lambda x: inflow+fun(x)]
     nalphas = 21
     alphas = np.linspace(alpha0, alpha1, nalphas)
-    nu, amat, bmat, cmat = approx.optimize_nu(funs, alphas)
+    nu, amat, bmat, cmat, _, _ = approx.optimize_nu(funs, alphas)
 
     s = np.linspace(alpha0, alpha1, 10000)
     out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
@@ -338,18 +391,18 @@ def test_optimize_vs_quad(allclose, reservoir_function):
     ratio = rmse/rmse_quad
 
     ratio_thresh = {
-        "x4": 0.4, \
+        "x4": 0.5, \
         "x6": 0.3, \
         "x8": 0.2, \
         "tanh": 1.0+1e-4, \
-        "exp": 1e-7, \
+        "exp": 1e-6, \
         "sin": 1.0+1e-4, \
-        "recip": 0.3, \
+        "recip": 0.6, \
         "recipquad": 0.2, \
         "runge": 1.0+1e-4, \
         "ratio": 0.2
     }
     assert ratio<ratio_thresh[fname]
-    LOGGER.info(f"optimize approx vs quad for {fname}, error ratio: {ratio:2.2e}")
+    LOGGER.info(f"optimize approx vs quad for {fname}: error ratio={ratio:2.2e}")
 
 

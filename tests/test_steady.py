@@ -73,7 +73,7 @@ def test_steady_state_scalings(allclose):
     funs = [
         lambda x: 1-x**2, \
         lambda x: -x*(2-x), \
-        lambda x: -x**4/3
+        lambda x: -(4/9*x)**5/4
     ]
     nu, amat, bmat, cmat = approx.optimize_nu(funs, alphas)
 

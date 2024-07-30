@@ -11,8 +11,6 @@
 
 double c_approx_fun(double nu, double a, double b, double c, double s);
 
-double c_approx_jac(double nu, double a, double b, double c, double s);
-
 double c_integrate_forward(double nu, double a, double b, double c,
                         double t0, double s0,
                         double t);
