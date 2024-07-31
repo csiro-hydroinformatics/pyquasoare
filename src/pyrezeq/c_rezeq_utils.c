@@ -49,16 +49,16 @@ int notequal(double x, double y){
 int c_find_alpha(int nalphas, double * alphas, double s0){
     int i=0;
 
-    if(s0<=alphas[0])
+    if(s0<alphas[0])
         return 0;
 
     if(s0>alphas[nalphas-1])
         return nalphas-2;
 
-    while(s0>alphas[i] && i<=nalphas-2){
+    while(s0>=alphas[i] && i<=nalphas-2){
         i++;
     }
-    return i-1;
+    return i>0 ? i-1 : 0;
 }
 
 
@@ -67,16 +67,16 @@ int c_get_error_message(int err_code, char message[100]){
     int len=100;
 
     if(err_code == REZEQ_ERROR_INTEGRATE_WRONG_NU)
-        strncpy(message, "Wrong nu", len);
+        strncpy(message, "Invalid nu", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS)
         strncpy(message, "j index out of bounds", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_COEFF)
-        strncpy(message, "NaN values in coeffs", len);
+        strncpy(message, "NaN values in coefficients", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS)
-        strncpy(message, "Approx function not continuous", len);
+        strncpy(message, "Approx function not continuous, please check coefficients", len);
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_SIM)
         strncpy(message, "Simulation produces nan", len);
@@ -86,6 +86,9 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == REZEQ_ERROR_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes too large", len);
+
+    else if(err_code == REZEQ_ERROR_INTEGRATE_TSTART_EQUAL_TEND)
+        strncpy(message, "end time identical to start time", len);
 
     else
         strncpy(message, "Error code not found", len);

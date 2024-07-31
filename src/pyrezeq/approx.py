@@ -9,21 +9,25 @@ if has_c_module():
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
+def all_scalar(*args):
+    """ Check if all arguments are scalar """
+    return all([np.isscalar(x) for x in args])
+
+
+def get_vectors(*args, dtype=np.float64):
+    """ Convert all arguments to vector of same length """
+    v = [np.atleast_1d(x).astype(dtype) for x in args]
+    nval = max([len(x) for x in v])
+    ones = np.ones(nval)
+    return [x[0]*ones if len(x)==1 else x for x in v]
+
 
 def approx_fun(nu, a, b, c, s):
-    is_scalar = [np.isscalar(v) for v in [a, b, c, s]]
-    if all(is_scalar):
+    """ Approximation exponential function f=a+b*exp(-nu.s)+c*exp(nu.s) """
+    if all_scalar(a, b, c, s):
         return c_pyrezeq.approx_fun(nu, a, b, c, s)
     else:
-        a, b, c = np.atleast_1d(a), np.atleast_1d(b), np.atleast_1d(c)
-        s = np.atleast_1d(s)
-        nval = max([len(v) for v in [a, b, c, s]])
-        ones = np.ones(nval)
-        a = a[0]*ones if len(a)==1 else a
-        b = b[0]*ones if len(b)==1 else b
-        c = c[0]*ones if len(c)==1 else c
-        s = s[0]*ones if len(s)==1 else s
-        o = np.nan*ones
+        a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
         ierr = c_pyrezeq.approx_fun_vect(nu, a, b, c, s, o)
         return o
 
