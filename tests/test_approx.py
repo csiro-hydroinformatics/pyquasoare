@@ -34,80 +34,110 @@ def reservoir_function(request, selfun):
 
     # sol is the analytical solution of ds/dt = inflow+fun(s)
     if name == "x2":
+        fun = lambda x: np.clip(-x**2, -np.inf, 0)
+        dfun = lambda x: np.clip(-2*x, -np.inf, 0)
+        inflow = 1.
         sol = lambda t, s0: (s0+np.tanh(t))/(1+s0*np.tanh(t))
-        return name, lambda x: -x**2, lambda x: -2*x, sol, 1.,\
-                    (alpha0, alpha1)
 
     elif name == "x4":
+        fun = lambda x: np.clip(-x**4, -np.inf, 0)
+        dfun = lambda x: np.clip(-4*x**3, -np.inf, 0)
+        inflow = 0.
         sol = lambda t, s0: s0/(1+3*t*s0**3)**(1./3)
-        return name, lambda x: -x**4, lambda x: -4*x**3, sol, 0., \
-                    (alpha0, alpha1)
 
     elif name == "x6":
+        fun = lambda x: np.clip(-x**6, -np.inf, 0)
+        dfun = lambda x: np.clip(-6*x**5, -np.inf, 0)
+        inflow = 0.
         sol = lambda t, s0: (1./s0**5+5*t)**(-1./5)
-        return name, lambda x: -x**6, lambda x: -6*x**5, sol, 0., \
-                    (alpha0, alpha1)
 
     elif name == "x8":
+        fun = lambda x: np.clip(-x**8, -np.inf, 0)
+        dfun = lambda x: np.clip(-8*x**6, -np.inf, 0)
+        inflow = 0.
         sol = lambda t, s0: (1./s0**7+7*t)**(-1./7)
-        return name, lambda x: -x**8, lambda x: -8*x**6, sol, 0., \
-                    (alpha0, alpha1)
 
     elif name == "tanh":
-        a, b = 0.5, 10
-        sol = lambda t, s0: (np.arcsinh(np.exp(-t*b)*np.sinh(a+b*s0))-a)/b
         alpha0, alpha1 = (-1., 1.)
-        return name, lambda x: -np.tanh(a+b*x), \
-                            lambda x: b*(np.tanh(a+b*x)**2-1), sol, 0., \
-                            (alpha0, alpha1)
+        a, b = 0.5, 10
+        fun = lambda x: -np.tanh(a+b*x)
+        dfun = lambda x: b*(np.tanh(a+b*x)**2-1)
+        inflow = 0.
+        sol = lambda t, s0: (np.arcsinh(np.exp(-t*b)*np.sinh(a+b*s0))-a)/b
 
     elif name == "exp":
+        fun = lambda x: -np.exp(x)
+        dfun = lambda x: -np.exp(x)
+        inflow = 1.
         sol = lambda t, s0: s0+t-np.log(1-(1-np.exp(t))*math.exp(s0))
-        return name, lambda x: -np.exp(x), lambda x: -np.exp(x), sol, 1., \
-                    (alpha0, alpha1)
 
     elif name == "stiff":
         lam = 100
+        fun = lambda x: -lam*x
+        dfun = lambda x: -lam
+        inflow = 1.
         sol = lambda t, s0: 1./lam-(1./lam-s0)*np.exp(-lam*t)
-        return name, lambda x: -lam*x, lambda x: -lam, sol, 1., \
-                    (alpha0, alpha1)
 
     elif name == "sin":
         alpha0, alpha1 = (0.0, 1.0)
         w = 2*math.pi
+        fun = lambda x: np.sin(w*x)
+        dfun = lambda x: -w*np.cos(w*x)
+        inflow = 0.
         tmp = lambda t, s0: np.arccos((np.cos(w*s0)-np.tanh(w*t)) \
                                         /(1-np.cos(w*s0)*np.tanh(w*t)))/w
         sol = lambda t, s0: tmp(t, s0) if math.sin(w*s0)>0 else 2*math.pi/w-tmp(t, s0)
-        return name, lambda x: np.sin(w*x), lambda x: -w*np.cos(w*x), sol, 0.,\
-                    (alpha0, alpha1)
 
     elif name == "recip":
         alpha0, alpha1 = (0., 1.0)
         offset = 0.05
-        return name, lambda x: -offset/(1+offset-x), lambda x: offset/(1+offset-x)**2, \
-                            None, 0., (alpha0, alpha1)
+        fun = lambda x: -offset/(1+offset-x)
+        dfun = lambda x: offset/(1+offset-x)**2
+        inflow = 0.
+        sol = None
 
     elif name == "recipquad":
         alpha0, alpha1 = (0., 1.0)
         offset = 0.05
-        return name, lambda x: -offset**2/(1+offset-x)**2, lambda x: 2*offset**2/(1+offset-x)**3, \
-                            None, 0., (alpha0, alpha1)
+        fun = lambda x: -offset**2/(1+offset-x)**2
+        dfun = lambda x: 2*offset**2/(1+offset-x)**3
+        inflow = 0.
+        sol = None
 
     elif name == "runge":
         alpha0, alpha1 = (-1, 3)
+        fun = lambda x: 1./(1+x**2)
+        dfun = lambda x: -2*x/(1+x**2)**2
+        inflow = 0.
         # solution of s1^3+3s1 = 3t+s0^3+3s0
         Q = lambda t, s0: -3*t-3*s0-s0**3
         sol = lambda t, s0: np.cbrt(-Q(t,s0)/2+np.sqrt(Q(t,s0)**2/4+1))\
                             +np.cbrt(-Q(t,s0)/2-np.sqrt(Q(t,s0)**2/4+1))
-        return name, lambda x: 1./(1+x**2), lambda x: -2*x/(1+x**2)**2, \
-                        sol, 0., (alpha0, alpha1)
 
     elif name == "ratio":
         n = 3
+        fun = lambda x: 1./x**(n-1)-x
+        dfun = lambda x: (1-n)/x**n-1
+        inflow = 0.
         sol = lambda t, s0: (1-np.exp(-n*t)*(1-s0**n))**(1./n)
         alpha0, alpha1 = 5e-2, 1.
-        return name, lambda x: 1./x**(n-1)-x, lambda x: (1-n)/x**n-1, sol, 0., \
-                    (alpha0, alpha1)
+
+    #elif name == "cos":
+    #    e = 1e-5
+    #    fun = lambda x: 1+eps+np.cos(x)
+    #    dfun = lambda x: -np.sin(x)
+    #    inflow = 0.
+    #    C = math.sqrt(e*(e+2))
+    #    # int ( 1/f ) = 2/C*atan(e*sin(x)/C/(cos(x)+1))
+    #    # hence
+    #    # => atan(e*sin(s1)/C/(cos(s1)+1)) = atan(e*sin(s0)/C/(cos(s0)+1))+C/2.t
+    #    #                                  = D+C/2.t
+    #    # => e*sin(s1)/(1+cos(s1)) = tan(D+C/2.t)
+    #    sol = lambda t, s0: (1-np.exp(-n*t)*(1-s0**n))**(1./n)
+    #    alpha0, alpha1 = 0., 3*math.pi
+
+
+    return name, fun, dfun, sol, inflow, (alpha0, alpha1)
 
 
 @pytest.fixture(scope="module", params=list(range(1, NCASES+1)))
@@ -152,18 +182,18 @@ def generate_samples(ntry, selcase, request):
         name = "Determinant is null"
         params[:, 2] = params[:, 0]**2/4/params[:, 1]
     elif case == 8:
-        name = "linear constraint b=-c"
+        name = "Constraint b=-c"
         params[:, 2] = -params[:, 1]
     elif case == 9:
-        name = "linear constraint b=c"
+        name = "Constraint b=c"
         params[:, 2] = params[:, 1]
     elif case ==10:
-        name = "General case"
+        name = "General"
     elif case ==11:
-        name = "General case with large scaling"
+        name = "General+large scale"
         params *= 1000
     elif case ==12:
-        name = "General case with low scaling"
+        name = "General+low scale"
         params /= 1000
     elif case ==13:
         name = "a close to zero"
@@ -180,7 +210,7 @@ def generate_samples(ntry, selcase, request):
     s0s = np.random.uniform(-5, 5, size=ntry)
     Tmax = 20
 
-    return name, case, params, nus, s0s, Tmax
+    return f"{name:20}", case, params, nus, s0s, Tmax
 
 
 
@@ -228,7 +258,6 @@ def test_get_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
     nus = [0.01, 0.1, 1, 5]
     corrected = 0
-    LOGGER.info("")
     for nu in nus:
         a, b, c, corr = approx.get_coefficients(fun, alpha0, alpha1, nu)
         corrected += corr
@@ -243,10 +272,11 @@ def test_get_coefficients(allclose, reservoir_function):
             x = (1-eps)*alpha0+eps*alpha1
             assert allclose(approx.approx_fun(nu, a, b, c, x), fun(x))
 
-    LOGGER.info(f"get coeff - {fname}: corrected = {corrected}/{len(nus)}")
+    LOGGER.info("")
+    LOGGER.info(f"[{fname}] get coeff: corrected = {corrected}/{len(nus)}")
 
 
-def test_get_coefficients_edge_cases_monotonous(allclose):
+def test_get_coefficients_edge_cases(allclose):
     # Piecewise linear fun
     x0, xm, x1 = 0., 0.5, 1.
     def fun(x, f0, fm, f1):
@@ -340,8 +370,9 @@ def test_optimize_nu(allclose, reservoir_function):
         "stiff": 1e-7, \
         "ratio": 1.1
     }
-    #assert rmse<rmse_thresh[fname]
-    LOGGER.info(f"optimize approx vs truth for {fname}: "\
+    assert rmse<rmse_thresh[fname]
+    LOGGER.info("")
+    LOGGER.info(f"[{fname}] optimize approx vs truth: "\
                     +f"nalphas={nalphas} niter={niter} rmse={rmse:3.3e} (nu={nu:0.2f})")
 
 
@@ -393,6 +424,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
         "ratio": 0.2
     }
     assert ratio<ratio_thresh[fname]
-    LOGGER.info(f"optimize approx vs quad for {fname}: error ratio={ratio:2.2e}")
+    LOGGER.info("")
+    LOGGER.info(f"[{fname}] optimize approx vs quad: error ratio={ratio:2.2e}")
 
 

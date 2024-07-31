@@ -28,45 +28,86 @@ def test_steady_state(allclose, generate_samples):
     if ntry==0:
         pytest.skip("Skip param config")
 
-    LOGGER.info("")
-    err_max = 0
+    stdy, feval = [], []
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
-    stdy = steady.steady_state(nus, a, b, c)
+    ones = np.ones(len(a))
+    for nu in nus:
+        s = steady.steady_state(nu, a, b, c)
+        f = np.column_stack([approx.approx_fun(nu, a, b, c, sc)\
+                                for sc in s.T])
+        stdy.append(s)
+        feval.append(f)
+
+    stdy = np.row_stack(stdy)
+    feval = np.row_stack(feval)
 
     if case<4:
         # No steady state
         assert np.all(np.isnan(stdy))
-        pytest.skip("No steady state for this case")
+        return
 
     if np.all(np.isnan(stdy)):
         pytest.skip("No steady state found")
 
-    # check nan values
-    iboth = np.isnan(stdy).sum(axis=1)==0
-    assert np.all(np.diff(stdy[iboth], axis=1)>=0)
-
     if case>=8:
         # 2 distinct roots
         Delta = a**2-4*b*c
-        ipos = Delta>0
+        ipos = np.repeat(Delta>0, ntry)
+        iboth = np.sum(~np.isnan(stdy), axis=1)==2
         assert np.all(np.diff(stdy[iboth&ipos], axis=1)>0)
 
     ione = np.isnan(stdy).sum(axis=1)==1
     assert np.all(~np.isnan(stdy[ione, 0]))
 
     # check steady state
-    f = np.array([[approx.approx_fun(nu, aa, bb, cc, s) for nu, aa, bb, cc, s\
-                        in zip(nus, a, b, c, ss)] for ss in stdy.T]).T
-    err_max = np.nanmax(np.abs(f))
+    err_max = np.nanmax(np.abs(feval))
     assert err_max < 5e-4
 
-    nskipped = np.all(np.isnan(f), axis=1).sum()
-    mess = f"steady - Case {cname}: errmax = {err_max:3.2e}"\
-            f"  skipped={100*(nskipped)/ntry:0.0f}%"
+    nskipped = np.all(np.isnan(feval), axis=1).sum()
+    mess = f"[{case}:{cname}] steady: errmax = {err_max:3.2e}"\
+            f"  skipped={(100.*nskipped)/len(feval):0.0f}%"
     LOGGER.info(mess)
 
 
-def test_steady_state_scalings(allclose):
+def test_steady_state_scalings(allclose, generate_samples):
+    cname, case, params, nus, _, _ = generate_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip("Skip param config")
+
+    stdy, feval = [], []
+    alphas = np.array([-np.inf, 0, np.inf])
+    scalings = np.ones((3, 1))
+    tested = 0
+    for nu, (a, b, c) in zip(nus, params):
+        amat, bmat, cmat = [np.ones((2, 1))*v for v in [a, b, c]]
+        stdy, bands = steady.steady_state_scalings(alphas, nu, scalings, \
+                                            amat, bmat, cmat)
+        if case<4:
+            # No steady state
+            assert stdy.shape[1]==0
+        else:
+            stdy0 = steady.steady_state(nu, a, b, c)
+            notnan = ~np.isnan(stdy0)
+            if stdy.shape[1]>0 or notnan.sum()>0:
+                tested += 1
+
+                # All values are identical in the 0 axis
+                # because the scalings are identical
+                assert allclose(np.diff(stdy, axis=0), 0.)
+                stdy = stdy[0]
+
+                # Compare with simple steady computation
+                assert allclose(stdy, stdy0[~np.isnan(stdy0)])
+
+                # Check steady state value is 0
+                feval = approx.approx_fun(nu, a, b, c, stdy)
+                assert allclose(feval, 0, atol=5e-5)
+
+    LOGGER.info(f"[{case}:{cname}] steady scalings: tested={(100.*tested)/ntry:0.0f}%")
+
+
+def test_steady_state_scalings_gr4j(allclose):
     nalphas = 7
     alphas = np.linspace(0, 1.2, nalphas)
     # GR4J production
@@ -81,7 +122,8 @@ def test_steady_state_scalings(allclose):
     scalings = np.random.uniform(0, 100, size=(nval, 3))
     scalings[:, -1] = 1
 
-    stdy = steady.steady_state_scalings(alphas, nu, scalings, amat, bmat, cmat)
+    stdy, bands = steady.steady_state_scalings(alphas, nu, scalings, amat, bmat, cmat)
+
     for t in range(nval):
         s0 = stdy[t]
         # Check steady on approx fun

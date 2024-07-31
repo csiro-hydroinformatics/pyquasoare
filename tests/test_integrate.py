@@ -22,45 +22,12 @@ FTEST = source_file.parent
 
 LOGGER = iutils.get_logger("integrate", flog=FTEST / "test_integrate.log")
 
-
-# ----- UTILITY FUNCTIONS ------------------------------------------
-def plot_solution(t, s1, expected=None, title="", params=None, \
-                        s0=None, clear=False, show=False):
-    if clear:
-        plt.close("all")
-    fig, ax = plt.subplots()
-
-    ax.plot(t, s1, label="Analytical", color="tab:blue")
-    if not s0 is None:
-        ax.plot(t[0], s0, "o", label="Initial", color="tab:red", ms=8)
-
-    if not expected is None:
-        ax.plot(t, expected, lw=3, label="Numerical", \
-                    zorder=-10, color="tab:orange")
-
-        err = np.abs(s1-expected)
-        tax = ax.twinx()
-        tax.plot(t, err, "k--", lw=0.9)
-        lab = f"Error max={err.max():3.3e}"
-        ax.plot([], [], "k--", lw=0.9, label=lab)
-
-    ax.legend()
-
-    if not params is None:
-        nu, a, b, c = params
-        title = f"{title} - nu={nu:0.2f} a={a:0.2f} b={b:0.2f} c={c:0.2f}"
-    ax.set(title=title, xlabel="time", ylabel="value")
-
-    if show:
-        plt.show()
-
-    return ax
-
-
-# ----- TESTS ------------------------------------------
-
-def test_find_alphas(allclose):
+def test_find_alpha(allclose):
     alphas = np.linspace(0, 1, 4)
+    for ia, a in enumerate(alphas):
+        ialpha = integrate.find_alpha(alphas, a)
+        assert ialpha == min(ia, 2)
+
     u0 = -1.
     ialpha = integrate.find_alpha(alphas, u0)
     assert ialpha == 0
@@ -82,7 +49,6 @@ def test_find_alphas(allclose):
     assert ialpha == 2
 
 
-
 def test_delta_t_max(allclose, generate_samples, printout):
     cname, case, params, nus, s0s, Tmax = generate_samples
     ntry = len(params)
@@ -92,7 +58,6 @@ def test_delta_t_max(allclose, generate_samples, printout):
     if case==1:
         pytest.skip("delta t max is infinite")
 
-    LOGGER.info("")
     nprint = 50
     t_eval = np.linspace(0, Tmax, 1000)
 
@@ -104,7 +69,7 @@ def test_delta_t_max(allclose, generate_samples, printout):
 
         # Log progress
         if itry%nprint==0 and printout:
-            LOGGER.info(f"delta tmax - case {case} - Try {itry+1:4d}/{ntry:4d}")
+            LOGGER.info(f"delta tmax - case [{case}] - Try {itry+1:4d}/{ntry:4d}")
 
         # Run solver first to see how far it goes
         t0 = 0
@@ -142,7 +107,7 @@ def test_delta_t_max(allclose, generate_samples, printout):
         else:
             nskipped += 1
 
-    mess = f"delta tmax - Case {cname}: errmax = {err_max:3.2e}"\
+    mess = f"[{case}:{cname}] delta tmax: errmax = {err_max:3.2e}"\
             f"  skipped={100*nskipped/ntry:0.0f}%"
     if case>=9:
         if nskipped<ntry:
@@ -160,7 +125,6 @@ def test_forward_vs_finite_difference(allclose, generate_samples, printout):
     if case in [14, 15]:
         pytest.skip("Problem - TO FIX")
 
-    LOGGER.info("")
     nprint = 50
     t0 = 0
     errmax_max = 0
@@ -169,7 +133,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples, printout):
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         # Log progress
         if itry%nprint==0 and printout:
-            LOGGER.info(f"forward vs finite diff - case {case} - "\
+            LOGGER.info(f"forward vs finite diff - case [{case}] - "\
                             +f"Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
@@ -221,7 +185,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples, printout):
         assert errmax < 2e-3
         errmax_max = max(errmax, errmax_max)
 
-    LOGGER.info(f"forward vs finite diff - Case {cname}: errmax = {errmax_max:3.2e}"\
+    LOGGER.info(f"[{case}:{cname}] forward vs finite diff: errmax = {errmax_max:3.2e}"\
                 f" skipped={(ntry-notskipped)*100/ntry:0.0f}%")
 
 
@@ -231,7 +195,6 @@ def test_forward_vs_numerical(allclose, generate_samples, printout):
     if ntry==0:
         pytest.skip()
 
-    LOGGER.info("")
     nprint = 50
     t0 = 0
     errmax_max = 0
@@ -247,7 +210,7 @@ def test_forward_vs_numerical(allclose, generate_samples, printout):
 
         # Log progress
         if itry%nprint==0 and printout:
-            LOGGER.info(f"forward vs numerical - {cname} - Try {itry+1:4d}/{ntry:4d}")
+            LOGGER.info(f"forward vs numerical - [{cname}] - Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
         Tmax = min(20, t0+integrate.delta_t_max(nu, a, b, c, s0)*0.99)
@@ -275,7 +238,7 @@ def test_forward_vs_numerical(allclose, generate_samples, printout):
         errmax_max = max(errmax, errmax_max)
 
     perc_skipped = nskipped*100/ntry
-    mess = f"forward vs numerical - Case {cname}: errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
+    mess = f"[{case}:{cname}] forward vs numerical: errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
     if case>=8:
         perc_delta_pos = perc_delta_pos/ndelta*100
         mess += f"  Delta>0 = {perc_delta_pos:0.0f}%"
@@ -288,14 +251,13 @@ def test_inverse(allclose, generate_samples, printout):
     if ntry==0:
         pytest.skip()
 
-    LOGGER.info("")
     nprint = 50
     t0 = 0
     nskipped = 0
     errmax_max = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            LOGGER.info(f"inverse - Case {cname} - Try {itry+1:4d}/{ntry:4d}")
+            LOGGER.info(f"inverse - Case [{cname}] - Try {itry+1:4d}/{ntry:4d}")
 
         # Set integration time
         Tmax = min(20, t0+integrate.delta_t_max(nu, a, b, c, s0)*0.99)
@@ -336,8 +298,7 @@ def test_inverse(allclose, generate_samples, printout):
         assert allclose(ta, ta_slow)
 
     perc_skipped = nskipped*100/ntry
-    mess = f"inverse - Case {cname}: errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
-    LOGGER.info(mess)
+    LOGGER.info(f"[{case}:{cname}] inverse: errmax = {errmax_max:3.2e} Skipped={perc_skipped:0.0f}%")
 
 
 def test_increment_fluxes_vs_integration(allclose, \
@@ -347,7 +308,6 @@ def test_increment_fluxes_vs_integration(allclose, \
     if ntry==0:
         pytest.skip()
 
-    LOGGER.info("")
     nprint = 50
     nskipped = 0
     errbal_max = 0
@@ -355,7 +315,7 @@ def test_increment_fluxes_vs_integration(allclose, \
     ev = []
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            LOGGER.info(f"fluxes vs integration - case {case} - Try {itry+1:4d}/{ntry:4d}")
+            LOGGER.info(f"fluxes vs integration - case [{case}] - Try {itry+1:4d}/{ntry:4d}")
 
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
 
@@ -417,12 +377,12 @@ def test_increment_fluxes_vs_integration(allclose, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow)
 
-    mess = f"fluxes vs integration - Case {cname}: errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
-                f" Balmax = {errbal_max:3.3e}"
+    mess = f"[{case}:{cname}] fluxes vs integration: errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
+                f" balmax = {errbal_max:3.3e}"
     LOGGER.info(mess)
 
 
-def test_reservoir_equation_extrapolation(allclose, reservoir_function):
+def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     fname, fun, dfun, _, inflow, (alpha0, alpha1) = reservoir_function
 
     # Reservoir functions
@@ -439,64 +399,57 @@ def test_reservoir_equation_extrapolation(allclose, reservoir_function):
     t0 = 0 # Analytical solution always integrated from t0=0!
     nval = 500
     Tmax = 5
-    t1 = np.linspace(t0, Tmax, nval)
-
-    # Initial conditions outside of approximation range [alpha0, alpha1]
-    dalpha = alpha1-alpha0
-    s0_high = alpha1+dalpha*1.5
-    s0_low = alpha0-dalpha*1.5
-
-    # Approximate method
     scalings = np.ones(2)
-    approx_low, approx_high = [s0_low], [s0_high]
-    s_start_low = s0_low
-    s_start_high = s0_high
+    t1 = np.linspace(t0, Tmax, nval)
+    dalpha = alpha1-alpha0
 
-    for i in range(len(t1)-1):
-        t_start = t1[i]
-        delta = t1[i+1]-t_start
-        # integrate when below and above approximation range
-        _, s_end_low, _ = integrate.integrate(alphas, scalings, nu, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start_low, delta)
-        # .. compare against slow
-        _, s_end_low_slow, _ = slow.integrate(alphas, scalings, nu, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start_low, delta)
-        assert np.isclose(s_end_low, s_end_low_slow)
-        approx_low.append(s_end_low)
-        s_start_low = s_end_low
+    for itry in range(-ntry, ntry):
+        # Initial conditions outside of approximation range [alpha0, alpha1]
+        if itry<0:
+            # Initial condition below alpha min
+            dd = float(abs(itry+1))/(ntry-1)
+            s0 = alpha0-dalpha*dd
+        else:
+            # Initial condition above alpha max
+            dd = float(itry)/(ntry-1)
+            s0 = alpha1+dalpha*dd
 
-        _, s_end_high, _ = integrate.integrate(alphas, scalings, nu, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start_high, delta)
-        # .. compare against slow
-        _, s_end_high_slow, _ = slow.integrate(alphas, scalings, nu, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start_high, delta)
-        assert np.isclose(s_end_high, s_end_high_slow)
-        approx_high.append(s_end_high)
-        s_start_high = s_end_high
+        # Solve
+        sims = [s0]
+        s_start = s0
+        for i in range(len(t1)-1):
+            t_start = t1[i]
+            delta = t1[i+1]-t_start
 
-    # Expect constant derivative of solution in extrapolation mode
-    approx_low = np.array(approx_low)
-    ilow = approx_low<alpha0
-    assert ilow.sum()>0
-    dt = t1[1]-t1[0]
-    ds_low = np.diff(approx_low[ilow])/dt
-    expected_low = [approx.approx_fun(nus[0], amat[0, i], bmat[0, i], \
-                    cmat[0, i], alphas[0]) for i in range(2)]
-    expected_low = np.array(expected_low).sum()
-    assert allclose(ds_low, expected_low)
+            _, s_end, _ = integrate.integrate(alphas, scalings, nu, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            # .. compare against slow
+            _, s_end_slow, _ = slow.integrate(alphas, scalings, nu, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            assert np.isclose(s_end, s_end_slow)
+            sims.append(s_end)
+            s_start = s_end
 
-    approx_high = np.array(approx_high)
-    ihigh = approx_high>alpha1
-    assert ihigh.sum()>0
-    ds_high = np.diff(approx_high[ihigh])/dt
-    expected_high = [approx.approx_fun(nus[-1], amat[-1, i], bmat[-1, i], \
-                    cmat[-1, i], alphas[-1]) for i in range(2)]
-    expected_high = np.array(expected_high).sum()
-    assert allclose(ds_high, expected_high)
+        # Expect constant derivative of solution in extrapolation mode
+        sims = np.array(sims)
+        ilow = sims<alpha0
+        if ilow.sum()>0:
+            dt = t1[1]-t1[0]
+            ds_low = np.diff(sims[ilow])/dt
+            expected_low = [approx.approx_fun(nu, amat[0, i], bmat[0, i], \
+                                            cmat[0, i], alphas[0]) for i in range(2)]
+            expected_low = np.array(expected_low).sum()
+            assert allclose(ds_low, expected_low)
+
+        ihigh = sims>alpha1
+        if ihigh.sum()>0:
+            ds_high = np.diff(sims[ihigh])/dt
+            expected_high = [approx.approx_fun(nu, amat[-1, i], bmat[-1, i], \
+                                            cmat[-1, i], alphas[-1]) for i in range(2)]
+            expected_high = np.array(expected_high).sum()
+            assert allclose(ds_high, expected_high)
 
 
 
@@ -504,11 +457,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     if sol is None:
         pytest.skip("No analytical solution")
-
-    if fname != "runge":
-        pytest.skip("TOFIX Need to fix runge")
-
-    LOGGER.info("")
 
     inp = lambda x: (1+0*x)*inflow
     sfun = lambda x: inflow+fun(x)
@@ -523,22 +471,23 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu([inp, fun], alphas)
 
+    # Adjust bounds to avoid numerical problems with analytical solution
+    if fname.startswith("x"):
+        alpha0 += 1e-3
+    elif fname == "runge":
+        alpha0, alpha1 = -1, 1
+
     # Configure integration
     scalings = np.ones(2)
-    t0 = 0 # Analytical solution always integrated from t0=0!
+    t0 = 0
     nval = 100
-    Tmax = 100
+    Tmax = 10
     t1 = np.linspace(t0, Tmax, nval)
     errmax_app_max, time_app, niter_app = 0., 0., 0
     errmax_num_max, time_num, niter_num = 0., 0., 0
 
     for itry in range(ntry):
-        if fname == "runge":
-            s0 = np.random.uniform(-1, 1)
-        else:
-            s0 = np.random.uniform(alpha0, alpha1)
-
-        s0 = 0.5
+        s0 = alpha0+(alpha1-alpha0)*float(itry)/(ntry-1)
 
         # Analytical solution
         expected = sol(t1, s0)
@@ -549,7 +498,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         start_exec = time.time()
         for i in range(len(t1)-1):
             t_start = t1[i]
-            #LOGGER.info(f"\n### [{i:3d}] t_start = {t_start} / s_start = {s_start:0.5f}###")
             delta = t1[i+1]-t_start
             n, s_end, _ = integrate.integrate(alphas, scalings, nu, \
                                                 amat, bmat, cmat, t_start, \
@@ -563,8 +511,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             sims.append(s_end)
             s_start = s_end
 
-        #LOGGER.info("\n######### Finito ##########")
-
+        # Process run times
         end_exec = time.time()
         time_app += (end_exec-start_exec)*1e3
         niter = np.array(niter)
@@ -590,70 +537,39 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         errmax = np.abs(numerical-expected).max()
         errmax_num_max = max(errmax, errmax_num_max)
 
-    #assert errmax_app_max<1e-3
+    err_thresh = {
+        "x2": 1e-9, \
+        "x4": 1e-3, \
+        "x6": 1e-3, \
+        "x8": 1e-3, \
+        "tanh": 1e-2, \
+        "exp": 1e-7, \
+        "sin": 2e-2, \
+        "runge": 1e-3, \
+        "stiff": 1e-9, \
+        "ratio": 5e-2
+    }
+    assert errmax_app_max < err_thresh[fname]
+    assert time_app<time_num*0.7
 
-    if True:
-        import matplotlib.pyplot as plt
-        expected = sol(t1, s0_errmax)
-
-        s_start = s0
-        sims = [s0]
-        sims_slow = [s0]
-        for i in range(len(t1)-1):
-            start = t1[i]
-            delta = t1[i+1]-start
-            n, s_end, _ = integrate.integrate(alphas, scalings, nu,\
-                                                amat, bmat, cmat, start, \
-                                                s_start, delta)
-            sims.append(s_end)
-            s_start = s_end
-
-        sims = np.array(sims)
-
-        from hydrodiy.plot import putils
-
-        plt.close("all")
-        fig, axs = plt.subplots(ncols=2)
-
-        ax = axs[0]
-        xx = np.linspace(alpha0, 0.5, 500)
-        ds = sfun(xx)
-        ax.plot(ds, xx, label="expected", color="tab:blue")
-
-        ds = sfun(expected)
-        ax.plot(ds, expected, lw=4, label="expected sim", color="tab:blue")
-        ax.plot(ds[0], expected[0], "x", ms=5, color="tab:blue")
-
-        ds = approx.approx_fun_from_matrix(alphas, nu, \
-                                        amat, bmat, cmat, xx)
-        ds = ds.sum(axis=1)
-        ax.plot(ds, xx, label="approx", color="tab:orange")
-
-        ds = approx.approx_fun_from_matrix(alphas, nu, \
-                                        amat, bmat, cmat, sims)
-        ds = ds.sum(axis=1)
-        ax.plot(ds, sims, lw=4, label="expected sim", color="tab:orange")
-        ax.plot(ds[0], sims[0], "x", ms=5, color="tab:orange")
-        putils.line(ax, 0, 1, 0, 0, "k-", lw=0.8)
-
-        #for j in range(nalphas-1):
-        #    nu, a, b, c = nus[j], amat.sum(axis=1)[j], bmat.sum(axis=1)[j], cmat.sum(axis=1)[j]
-        #    ds = approx.approx_fun(nu, a, b, c, xx)
-        #    ax.plot(ds, xx, label=f"approx {j}")
-
-        ax.legend()
-
-        ax = axs[1]
-        ax.plot(t1, expected, label="expected")
-        ax.plot(t1, sims, label="approx")
-        ax.legend()
-        ax.set(title=f"fun={fname} s0={s0_errmax:0.5f}")
-        plt.show()
-        import pdb; pdb.set_trace()
-
-
-    LOGGER.info(f"approx vs analytical {fname}: errmax={errmax_app_max:3.2e}"\
+    LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")
-    LOGGER.info(f"numerical vs analytical {fname}: errmax = {errmax_num_max:3.2e}"\
-                    +f" / time={time_num:3.3e}ms / niter={niter_num}")
+    LOGGER.info(f"[{fname}] numerical vs analytical: "\
+                    +f"errmax = {errmax_num_max:3.2e} (ratio vs app={errmax_app_max/errmax_num_max:0.2f})"\
+                    +f" / time={time_num:3.3e}ms (ratio vs app={time_app/time_num:0.2f})"\
+                    +f" / niter={niter_num}")
 
+
+
+def test_reservoir_equation_gr4j(allclose):
+
+    funs = [
+        lambda x: 1-x**2, \
+        lambda x: -x*(2-x), \
+        lambda x: -(4/9*x)**5/4
+    ]
+    alphas = np.linspace(0., 1.2, 10)
+    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas)
+
+
+    return
