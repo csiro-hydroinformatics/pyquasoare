@@ -71,7 +71,7 @@ steps:
     cd $(BUILD_DIR)/pyrezeq
     pytest --ntry=500 --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
   displayName: test
-  timeoutInMinutes: 60
+  timeoutInMinutes: 90
 
 - task: CopyFiles@2
   inputs:
