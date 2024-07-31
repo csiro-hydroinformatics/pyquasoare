@@ -73,6 +73,18 @@ steps:
   displayName: test
   timeoutInMinutes: 60
 
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(BUILD_DIR)/pyrezeq/tests'
+    contents: '*.log'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+  displayName: copy_test_log
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: test_log
+
 - task: PublishTestResults@2
   condition: succeededOrFailed()
   inputs:
