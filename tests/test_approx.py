@@ -23,7 +23,8 @@ LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \
             params=["x2", "x4", "x6", "x8", "tanh", "exp", "sin", \
-                            "recip", "recipquad", "runge", "stiff", "ratio"])
+                            "recip", "recipquad", "runge", "stiff", \
+                            "ratio", "logistic"])
 def reservoir_function(request, selfun):
     name = request.param
     if name!=selfun and selfun!="":
@@ -121,6 +122,15 @@ def reservoir_function(request, selfun):
         inflow = 0.
         sol = lambda t, s0: (1-np.exp(-n*t)*(1-s0**n))**(1./n)
         alpha0, alpha1 = 5e-2, 1.
+
+    elif name == "logistic":
+        lam = 0.1
+        fun = lambda x: lam*x*(1-x)
+        dfun = lambda x: lam*(1-2*x)
+        inflow = 0.
+        sol = lambda t, s0: s0*np.exp(lam*t)/(1-s0+s0*np.exp(lam*t))
+        alpha0, alpha1 = 0., 3.
+
 
     #elif name == "cos":
     #    e = 1e-5
@@ -368,7 +378,8 @@ def test_optimize_nu(allclose, reservoir_function):
         "recipquad": 5e-3, \
         "runge": 1e-3, \
         "stiff": 1e-7, \
-        "ratio": 1.1
+        "ratio": 1.1, \
+        "logistic": 1e-8
     }
     assert rmse<rmse_thresh[fname]
     LOGGER.info("")
@@ -378,8 +389,8 @@ def test_optimize_nu(allclose, reservoir_function):
 
 def test_optimize_vs_quad(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
-    if fname in ["x2", "stiff"]:
-        # Skip x2 and stiff which are perfect match with quadratic functions
+    if fname in ["x2", "stiff", "logistic"]:
+        # Skip x2, stiff and logistic which are perfect match with quadratic functions
         pytest.skip("Skip function")
 
     funs = [lambda x: inflow+fun(x)]

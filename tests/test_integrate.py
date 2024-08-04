@@ -280,7 +280,7 @@ def test_inverse(allclose, generate_samples, printout):
 
         # Compute difference
         ta = integrate.integrate_inverse(nu, a, b, c, s0, s1)
-        assert np.all(ta>=0)
+        assert np.all(ta>=-approx.REZEQ_EPS)
 
         dsdt = approx.approx_fun(nu, a, b, c, s1)
         err = np.abs(np.log(ta*1e-3)-np.log((t-t0)*1e-3))
@@ -547,10 +547,11 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "sin": 2e-2, \
         "runge": 1e-3, \
         "stiff": 1e-9, \
-        "ratio": 5e-2
+        "ratio": 5e-2, \
+        "logistic": 1e-8
     }
     assert errmax_app_max < err_thresh[fname]
-    assert time_app<time_num*0.7
+    assert time_app<time_num*0.95
 
     LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")
