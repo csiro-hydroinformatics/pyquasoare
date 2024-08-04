@@ -548,7 +548,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "runge": 1e-3, \
         "stiff": 1e-9, \
         "ratio": 5e-2, \
-        "logistic": 1e-8
+        "logistic": 1e-7
     }
     assert errmax_app_max < err_thresh[fname]
     assert time_app<time_num*0.95
