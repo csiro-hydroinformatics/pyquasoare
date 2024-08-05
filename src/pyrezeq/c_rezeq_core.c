@@ -283,9 +283,7 @@ int c_integrate(int nalphas, int nfluxes,
                             int *niter, double * s1, double * fluxes) {
     int REZEQ_DEBUG=0;
 
-    int i, nit=0, jalpha_next;
-    int outside_alpha_bounds=0;
-    int is_below_alpha_min=0;
+    int i, nit=0, jalpha_next=0;
     double aoj=0., boj=0., coj=0.;
     double a=0, b=0, c=0;
     double funval=0, funval_prev=0;
@@ -300,9 +298,6 @@ int c_integrate(int nalphas, int nfluxes,
     /* Initial interval */
     int jmin = 0, jmax=nalphas-2;
     int jalpha = c_find_alpha(nalphas, alphas, s0);
-
-    /* Initialise iteration */
-    double aoj_prev=0., boj_prev=0., coj_prev=0.;
 
     /* Inialise other variables */
     int extrapolating_low = 0;
@@ -337,11 +332,6 @@ int c_integrate(int nalphas, int nfluxes,
         /* Get band limits */
         alpha0 = alphas[jalpha];
         alpha1 = alphas[jalpha+1];
-
-        /* Store previous coefficients */
-        aoj_prev = aoj;
-        boj_prev = boj;
-        coj_prev = coj;
 
         /* Sum coefficients accross fluxes */
         aoj = 0;

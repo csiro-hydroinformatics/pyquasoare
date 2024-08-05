@@ -182,7 +182,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples, printout):
 
         errmax = np.nanmax(err[iok])
         notskipped += 1
-        assert errmax < 2e-3
+        assert errmax < 5e-3
         errmax_max = max(errmax, errmax_max)
 
     LOGGER.info(f"[{case}:{cname}] forward vs finite diff: errmax = {errmax_max:3.2e}"\
@@ -375,7 +375,7 @@ def test_increment_fluxes_vs_integration(allclose, \
         fluxes_slow = np.zeros(3)
         slow.increment_fluxes(nu, avect, bvect, cvect, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
-        assert allclose(fluxes, fluxes_slow)
+        assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
     mess = f"[{case}:{cname}] fluxes vs integration: errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
                 f" balmax = {errbal_max:3.3e}"

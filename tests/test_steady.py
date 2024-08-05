@@ -57,7 +57,9 @@ def test_steady_state(allclose, generate_samples):
         assert np.all(np.diff(stdy[iboth&ipos], axis=1)>0)
 
     ione = np.isnan(stdy).sum(axis=1)==1
-    assert np.all(~np.isnan(stdy[ione, 0]))
+    nbnan = np.isnan(stdy[ione, 0]).sum()
+    errmess = f"Number of nan in first column = {nbnan}"
+    assert nbnan == 0, LOGGER.error(errmess)
 
     # check steady state
     err_max = np.nanmax(np.abs(feval))
