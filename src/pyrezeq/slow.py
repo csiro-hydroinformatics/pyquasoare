@@ -9,6 +9,7 @@ from pyrezeq.approx import REZEQ_EPS
 def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
                             fun_args=None):
+    method = method.title()
     nfluxes = len(funs)
     assert len(dfuns) == nfluxes
     v = np.zeros(nfluxes)
@@ -88,8 +89,12 @@ def isneg(x):
 
 
 def approx_fun(nu, a, b, c, s):
-    return a+b*math.exp(-nu*s)+c*math.exp(nu*s)
-
+    f = a
+    if notnull(b):
+        f += b*math.exp(-nu*s)
+    if notnull(c):
+        f += c*math.exp(nu*s)
+    return f
 
 def integrate_delta_t_max(nu, a, b, c, s0):
     e0 = math.exp(-nu*s0)
@@ -274,8 +279,11 @@ def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
         cij = cj_vector[i]
 
         if isnull(b) and isnull(c):
-            fluxes[i] += aij*dt-bij*e0/nu/a*(math.exp(-nu*a*dt)-1)
-            fluxes[i] += cij/nu/a/e0*(math.exp(nu*a*dt)-1)
+            fluxes[i] += aij*dt
+            if notnull(bij):
+                fluxes[i] += -bij*e0/nu/a*(math.exp(-nu*a*dt)-1)
+            if notnull(cij):
+                fluxes[i] += cij/nu/a/e0*(math.exp(nu*a*dt)-1)
         else:
             if notnull(c):
                 A = aij-cij*a/c
@@ -300,11 +308,17 @@ def integrate(alphas, scalings, nu, \
     alpha_min=alphas[0]
     alpha_max=alphas[nalphas-1]
 
+    #print("")
+    #print("-"*50)
+    #print(f"nalphas = {nalphas}")
+    #txt = " ".join([f"scl[{i}]={s:0.3f}" for i, s in enumerate(scalings)])
+    #print(f"scalings: {txt}")
+
     # Initial interval
     jmin = 0
     jmax = nalphas-2
-    jalpha = np.sum(s0-alphas>0)-1
-    jalpha = max(jmin, min(jmax, jalpha))
+    # jalpha < 0 or jalpha >= nalpha-1 => extrapolation
+    jalpha = np.sum(s0-alphas>0)-1 if s0>=alpha_min else -1
 
     # Initialise iteration
     nfluxes = a_matrix_noscaling.shape[1]
@@ -321,13 +335,13 @@ def integrate(alphas, scalings, nu, \
     # Time loop
     while ispos(t_final-t_end) and nit<nalphas:
         nit += 1
-
-        extrapolating_low = s_start<alpha_min
-        extrapolating_high = s_start>alpha_max
+        extrapolating_low = jalpha<0
+        extrapolating_high = jalpha>=nalphas-1
+        extrapolating = extrapolating_low or extrapolating_high
 
         # Get band limits
-        alpha0 = alphas[jalpha]
-        alpha1 = alphas[jalpha+1]
+        alpha0 = -np.inf if extrapolating_low else alphas[jalpha]
+        alpha1 = np.inf if extrapolating_high else alphas[jalpha+1]
 
         # Store previous coefficients
         aoj_prev = aoj
@@ -339,16 +353,25 @@ def integrate(alphas, scalings, nu, \
         boj = 0
         coj = 0
         for i in range(nfluxes):
-            a = a_matrix_noscaling[jalpha, i]*scalings[i]
-            b = b_matrix_noscaling[jalpha, i]*scalings[i]
-            c = c_matrix_noscaling[jalpha, i]*scalings[i]
-
             if extrapolating_low:
+                # Extrapolate approx as fixed value equal to f(alpha_min)
+                a = a_matrix_noscaling[0, i]*scalings[i]
+                b = b_matrix_noscaling[0, i]*scalings[i]
+                c = c_matrix_noscaling[0, i]*scalings[i]
                 a = approx_fun(nu, a, b, c, alpha_min)
                 b, c = 0, 0
             elif extrapolating_high:
+                # Extrapolate approx as fixed value equal to f(alpha_max)
+                a = a_matrix_noscaling[nalphas-2, i]*scalings[i]
+                b = b_matrix_noscaling[nalphas-2, i]*scalings[i]
+                c = c_matrix_noscaling[nalphas-2, i]*scalings[i]
                 a = approx_fun(nu, a, b, c, alpha_max)
                 b, c = 0, 0
+            else:
+                # No extrapolation, use coefficients as is
+                a = a_matrix_noscaling[jalpha, i]*scalings[i]
+                b = b_matrix_noscaling[jalpha, i]*scalings[i]
+                c = c_matrix_noscaling[jalpha, i]*scalings[i]
 
             a_vect[i] = a
             b_vect[i] = b
@@ -369,43 +392,82 @@ def integrate(alphas, scalings, nu, \
                                     +f"{continuity_error_max:3.3e}")
 
         # Check integration up to the next band limit
-        if notnull(funval):
-            if isneg(funval):
-                # non-increasing function -> move to lower band
-                jalpha_next = jalpha if extrapolating_high else max(jmin, jalpha-1)
-                # .. need to substract 2EPS to avoid being stuck as extrapolation
-                if extrapolating_high:
-                    s_end = alpha_max-2*REZEQ_EPS
-                else:
-                    s_end = alpha0
-                    s_end = alpha0-2*REZEQ_EPS if isequal(s_end, s_start) else alpha0
+        #if notnull(funval):
+        #    if isneg(funval):
+        #        # non-increasing function -> move to lower band
+        #        jalpha_next = jalpha if extrapolating_high else max(jmin, jalpha-1)
+        #        # .. need to substract 2EPS to avoid being stuck as extrapolation
+        #        if extrapolating_high:
+        #            s_end = alpha_max-2*REZEQ_EPS
+        #        else:
+        #            s_end = alpha0
+        #            s_end = alpha0-2*REZEQ_EPS if isequal(s_end, s_start) else alpha0
 
-            elif ispos(funval):
-                # increasing function -> move to upper band
-                jalpha_next = jalpha if extrapolating_low else min(jmax, jalpha+1)
-                # .. need to add 2EPS to avoid being stuck as extrapolation
-                if extrapolating_low:
-                    s_end = alpha_min+2*REZEQ_EPS
-                else:
-                    s_end = alpha1
-                    s_end = alpha1+2*REZEQ_EPS if isequal(s_end, s_start) else alpha1
+        #    elif ispos(funval):
+        #        # increasing function -> move to upper band
+        #        jalpha_next = jalpha if extrapolating_low else min(jmax, jalpha+1)
+        #        # .. need to add 2EPS to avoid being stuck as extrapolation
+        #        if extrapolating_low:
+        #            s_end = alpha_min+2*REZEQ_EPS
+        #        else:
+        #            s_end = alpha1
+        #            s_end = alpha1+2*REZEQ_EPS if isequal(s_end, s_start) else alpha1
 
-            # Compute time for which s(t) = s_end
-            t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
-        else:
-            # derivative is null -> finish iteration
-            jalpha_next = jalpha
+        #    # Compute time for which s(t) = s_end
+        #    t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
+        #else:
+        #    # derivative is null -> finish iteration
+        #    jalpha_next = jalpha
+        #    t_end = t_final
+        #    s_end = s_start
+
+        ## Set time to end of time step if finished iteration (t_end>t_final)
+        ##    or if t1 is nan (i.e. close to steady or never reaching t_final)
+        #t_end = t_final if t_end>t0+delta or np.isnan(t_end) or t_end<t_start else t_end
+
+        ## Recompute s_end - required only if finished iteration or
+        ## extrapolating. Skip if funval is null => steady
+        #if notnull(funval):
+        #    s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
+
+        # Try integrating up to the end of the time step
+        s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final)
+
+        # complete or move band if needed
+        if s_end>=alpha0 and s_end<=alpha1 and not extrapolating:
+            # .. s_end is within band => complete
             t_end = t_final
-            s_end = s_start
+            jalpha_next = jalpha
+        else:
+            # .. find next band depending depending if f is decreasing
+            #    or non-decreasing
+            if funval<0:
+                s_end = alpha0
+                jalpha_next = max(-1, jalpha-1)
+            else:
+                s_end = alpha1
+                jalpha_next = min(nalphas-1, jalpha+1)
 
-        # Set time to end of time step if finished iteration (t_end>t_final)
-        #    or if t1 is nan (i.e. close to steady or never reaching t_final)
-        t_end = t_final if t_end>t0+delta or np.isnan(t_end) or t_end<t_start else t_end
+            # Increment time
+            if extrapolating:
+                # Extrapolation, we cut integration at t_final
+                t_end = t_final
+                # we also need to correct s_end that is infinite
+                s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
+                # Ensure that s_end remains just inside interpolation range
+                if funval<0:
+                    s_end = max(alpha_max-2*REZEQ_EPS, s_end)
+                else:
+                    s_end = min(alpha_min+2*REZEQ_EPS, s_end)
+            else:
+                # No extrapolation, we can reach s_end
+                t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
 
-        # Recompute s_end - required only if finished iteration or
-        # extrapolating. Skip if funval is null => steady
-        if notnull(funval):
-            s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
+        #print(f"[{nit}] low={extrapolating_low} high={extrapolating_high} "\
+        #            +f"/ fun={funval:0.3f}"\
+        #            +f"/ t:={t_start:0.3f}>{t_end:0.3f}"\
+        #            +f"/ j:{jalpha}>{jalpha_next}"\
+        #            +f" / s:{s_start:0.3f}>{s_end:0.3f}")
 
         # Increment fluxes during the last interval
         increment_fluxes(nu, a_vect, b_vect, c_vect, \

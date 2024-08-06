@@ -2,17 +2,31 @@
 
 /* Approximation functions */
 double c_approx_fun(double nu, double a, double b, double c, double s){
+    double f = a;
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    return a+b*exp(-nu*s)+c*exp(nu*s);
+    if(notnull(b))
+        f += b*exp(-nu*s);
+
+    if(notnull(c))
+        f += c*exp(nu*s);
+
+    return f;
 }
 
 double c_approx_jac(double nu, double a, double b, double c, double s){
+    double j = 0;
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    return -nu*b*exp(-nu*s)+nu*c*exp(nu*s);
+    if(notnull(b))
+        j += -nu*b*exp(-nu*s);
+
+    if(notnull(c))
+        j += nu*c*exp(nu*s);
+
+    return j;
 }
 
 /* Validity interval of solution to dS/dt=f*(S) */
@@ -245,8 +259,13 @@ int c_increment_fluxes(int nfluxes, double nu,
         c_check += cij;
 
         if(isnull(b) && isnull(c)){
-            fluxes[i] += aij*dt-bij*e0/nu/a*(exp(-nu*a*dt)-1);
-            fluxes[i] += cij/nu/a/e0*(exp(nu*a*dt)-1);
+            fluxes[i] += aij*dt;
+            if(notnull(bij)){
+                fluxes[i] += -bij*e0/nu/a*(exp(-nu*a*dt)-1);
+            }
+            if(notnull(cij)){
+                fluxes[i] += cij/nu/a/e0*(exp(nu*a*dt)-1);
+            }
         } else {
             if(notnull(c)){
                 A = aij-cij*a/c;
@@ -281,7 +300,7 @@ int c_integrate(int nalphas, int nfluxes,
                             double s0,
                             double delta,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=0;
+    int REZEQ_DEBUG=1;
 
     int i, nit=0, jalpha_next=0;
     double aoj=0., boj=0., coj=0.;
@@ -300,6 +319,7 @@ int c_integrate(int nalphas, int nfluxes,
     int jalpha = c_find_alpha(nalphas, alphas, s0);
 
     /* Inialise other variables */
+    int extrapolating = 0;
     int extrapolating_low = 0;
     int extrapolating_high = 0;
     double t_final = t0+delta;
@@ -323,38 +343,45 @@ int c_integrate(int nalphas, int nfluxes,
         /* Extrapolation is triggered if s_start is
          * below alpha0+EPS for low and
          * above alpha1-EPS for high */
-        extrapolating_low = s_start<alpha_min;
-        extrapolating_high = s_start>alpha_max;
-
-        if(jalpha<0 || jalpha>nalphas-2)
-            return REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS;
+        extrapolating_low = jalpha<0 ? 1 : 0;
+        extrapolating_high = jalpha>=nalphas-1 ? 1 : 0;
+        extrapolating = extrapolating_low+extrapolating_high>0 ? 1 : 0;
 
         /* Get band limits */
-        alpha0 = alphas[jalpha];
-        alpha1 = alphas[jalpha+1];
+        alpha0 = extrapolating_low ? -1*c_get_inf() : alphas[jalpha];
+        alpha1 = extrapolating_high ? c_get_inf() : alphas[jalpha+1];
 
         /* Sum coefficients accross fluxes */
         aoj = 0;
         boj = 0;
         coj = 0;
         for(i=0;i<nfluxes;i++){
-            /* Multiply approximation coefficients by scaling */
-            a = a_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-            b = b_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-            c = c_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-
-            /* if s is lower than alpha1 or higher than alpham
+            /* Multiply approximation coefficients by scaling.
+               if s is lower than alpha1 or higher than alpham
                 then set approx_fun to constant
             */
             if(extrapolating_low){
+                a = a_matrix_noscaling[i]*scalings[i];
+                b = b_matrix_noscaling[i]*scalings[i];
+                c = c_matrix_noscaling[i]*scalings[i];
+
                 a = c_approx_fun(nu, a, b, c, alpha_min);
                 b = 0;
                 c = 0;
             }
             else if(extrapolating_high){
+                a = a_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
+                b = b_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
+                c = c_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
+
                 a = c_approx_fun(nu, a, b, c, alpha_max);
                 b = 0;
                 c = 0;
+            }
+            else {
+                a = a_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
+                b = b_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
+                c = c_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
             }
             a_vect[i] = a;
             b_vect[i] = b;
@@ -378,68 +405,110 @@ int c_integrate(int nalphas, int nfluxes,
             continuity_error_max = REZEQ_EPS*1e2+fabs(funval_prev)*1e-5;
             if(fabs(funval-funval_prev)>continuity_error_max) {
                 if(REZEQ_DEBUG==1)
-                    fprintf(stdout, "    jalpha=%d/%d funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e"
-                                "   funvel_prev=%5.5e diff=%5.5e\n",
+                    fprintf(stdout, "    jalpha=%d/%d funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
+                                    "                 funval_prev=%5.5e diff=%5.5e>%5.5e\n",
                                 jalpha, nalphas-2, nu, aoj, boj, coj, s_start, funval, funval_prev,
-                                            fabs(funval-funval_prev));
+                                            fabs(funval-funval_prev), continuity_error_max);
                 return REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS;
             }
         }
 
-       /* Check integration up to the next band limit */
-        if(notnull(funval)){
-            if(isneg(funval)){
-                /* non-increasing function -> move to lower band if not extrapolating*/
-                jalpha_next = extrapolating_high ? jalpha : jalpha>jmin ? jalpha-1 : jmin;
+        ///* Check integration up to the next band limit */
+        //if(notnull(funval)){
+        //    if(isneg(funval)){
+        //        /* non-increasing function -> move to lower band if not extrapolating*/
+        //        jalpha_next = extrapolating_high ? jalpha : jalpha>jmin ? jalpha-1 : jmin;
 
-                if(extrapolating_high){
-                    s_interm = alpha_max-2*REZEQ_EPS;
-                } else {
-                    s_interm = alpha0;
-                    if(isequal(s_interm, s_start))
-                        s_interm -= 2*REZEQ_EPS;
-                }
+        //        if(extrapolating_high){
+        //            s_interm = alpha_max-2*REZEQ_EPS;
+        //        } else {
+        //            s_interm = alpha0;
+        //            if(isequal(s_interm, s_start))
+        //                s_interm -= 2*REZEQ_EPS;
+        //        }
 
 
-            } else if (ispos(funval)){
-                /* increasing function -> move to upper band if not extrapolating */
-                jalpha_next = extrapolating_low ? jalpha : jalpha<jmax ? jalpha+1 : jmax;
+        //    } else if (ispos(funval)){
+        //        /* increasing function -> move to upper band if not extrapolating */
+        //        jalpha_next = extrapolating_low ? jalpha : jalpha<jmax ? jalpha+1 : jmax;
 
-                if(extrapolating_low) {
-                    s_interm = alpha_min+2*REZEQ_EPS;
-                } else {
-                    s_interm = alpha1;
-                    if(isequal(s_interm, s_start))
-                        s_interm += 2*REZEQ_EPS;
-                }
+        //        if(extrapolating_low) {
+        //            s_interm = alpha_min+2*REZEQ_EPS;
+        //        } else {
+        //            s_interm = alpha1;
+        //            if(isequal(s_interm, s_start))
+        //                s_interm += 2*REZEQ_EPS;
+        //        }
 
+        //    }
+
+        //    /* Compute time for which s(t) = s_end */
+        //    t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_interm);
+
+        //} else {
+        //    /* derivative is null -> finish iteration */
+        //    jalpha_next = jalpha;
+        //    t_end = t_final;
+        //    s_end = s_start;
+        //}
+
+        ///* Set time to end of time step if finished iteration (t_end>t_final)
+        //    or if t1 is nan (i.e. close to steady or never reaching t_final) */
+        //t_end = (t_end>t_final || isnan(t_end) || t_end<t_start) ? t_final : t_end;
+
+        ///* Recompute s_end - required only if finished iteration or
+        // * extrapolating. Skip if funval is null => steady */
+        //if(notnull(funval))
+        //    s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
+
+
+        /* Try integrating up to the end of the time step */
+        s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final);
+
+        /* complete or move band if needed */
+        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating) || isnull(funval)){
+            /* .. s_end is within band => complete */
+            t_end = t_final;
+            jalpha_next = jalpha;
+        }
+        else {
+            /* .. find next band depending depending if f is decreasing
+                or non-decreasing */
+            if(funval<0) {
+                s_end = alpha0;
+                jalpha_next = jalpha>-1 ? jalpha-1 : -1;
+            }
+            else {
+                s_end = alpha1;
+                jalpha_next = jalpha>=nalphas-2 ? nalphas-1 : jalpha+1;
             }
 
-            /* Compute time for which s(t) = s_end */
-            t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_interm);
-
-        } else {
-            /* derivative is null -> finish iteration */
-            jalpha_next = jalpha;
-            t_end = t_final;
-            s_end = s_start;
+            /* Increment time */
+            if(extrapolating) {
+                /* Extrapolation, we cut integration at t_final */
+                t_end = t_final;
+                /* we also need to correct s_end because it is infinite */
+                s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
+                /* Ensure that s_end remains inside interpolation range */
+                if(funval<0){
+                    s_end = s_end < alpha_max-2*REZEQ_EPS ? alpha_max-2*REZEQ_EPS : s_end;
+                }
+                else{
+                    s_end = s_end > alpha_min+2*REZEQ_EPS ? alpha_min+2*REZEQ_EPS : s_end;
+                }
+            }
+            else {
+                /* No extrapolation, we can reach s_end */
+                t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_end);
+            }
         }
 
-        /* Set time to end of time step if finished iteration (t_end>t_final)
-            or if t1 is nan (i.e. close to steady or never reaching t_final) */
-        t_end = (t_end>t_final || isnan(t_end) || t_end<t_start) ? t_final : t_end;
-
-        /* Recompute s_end - required only if finished iteration or
-         * extrapolating. Skip if funval is null => steady */
-        if(notnull(funval))
-            s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
-
         if(REZEQ_DEBUG==1){
-            fprintf(stdout, "  [%d] j=%d(%0.5f, %0.5f) -> %d : nu=%0.5f a=%0.5f b=%0.5f c=%0.5f f=%0.5f"
+            fprintf(stdout, "\t[%d] j=%d(%0.5f, %0.5f) -> %d : nu=%0.5f a=%0.5f b=%0.5f c=%0.5f f=%0.5f"
                                     " ex_l=%d  ex_h=%d\n",
                                         nit, jalpha, alpha0, alpha1, jalpha_next, nu, aoj, boj,
                                         coj, funval, extrapolating_low, extrapolating_high);
-            fprintf(stdout, "        t=%0.5f->%0.5f/%0.5f  s=%4.4e->(%4.4e)->%4.4e\n\n",
+            fprintf(stdout, "\t     t=%0.5f->%0.5f/%0.5f  s=%4.4e->(%4.4e)->%4.4e\n",
                                         t_start, t_end, t_final, s_start, s_interm, s_end);
         }
         if(isnull(t_end-t_start)){
@@ -455,6 +524,10 @@ int c_integrate(int nalphas, int nfluxes,
 
         /* Loop for next band */
         funval_prev = c_approx_fun(nu, aoj, boj, coj, s_end);
+        if(REZEQ_DEBUG==1){
+            fprintf(stdout, "\t     funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n\n",
+                                    nu, aoj, boj, coj, s_end, funval_prev);
+        }
         t_start = t_end;
         s_start = s_end;
         jalpha = jalpha_next;
