@@ -393,7 +393,8 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     # Optimize approx
     nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
-    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas)
+    scr = np.ones(2)
+    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
 
     # Configure integration
     t0 = 0 # Analytical solution always integrated from t0=0!

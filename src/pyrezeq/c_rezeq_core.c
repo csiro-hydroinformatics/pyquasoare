@@ -2,31 +2,37 @@
 
 /* Approximation functions */
 double c_approx_fun(double nu, double a, double b, double c, double s){
-    double f = a;
+    double f1 = a;
+    double f2 = b*exp(-nu*s);
+    double f3 = c*exp(nu*s);
+
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    if(notnull(b))
-        f += b*exp(-nu*s);
+    if(notnull(f2))
+        f1 += f2;
 
-    if(notnull(c))
-        f += c*exp(nu*s);
+    if(notnull(f3))
+        f1 += f3;
 
-    return f;
+    return f1;
 }
 
 double c_approx_jac(double nu, double a, double b, double c, double s){
-    double j = 0;
+    double j1 = 0;
+    double j2 = -nu*b*exp(-nu*s);
+    double j3 = nu*c*exp(nu*s);
+
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    if(notnull(b))
-        j += -nu*b*exp(-nu*s);
+    if(notnull(j2))
+        j1 += j2;
 
-    if(notnull(c))
-        j += nu*c*exp(nu*s);
+    if(notnull(j3))
+        j1 += j3;
 
-    return j;
+    return j1;
 }
 
 /* Validity interval of solution to dS/dt=f*(S) */
@@ -95,7 +101,7 @@ double c_integrate_forward(double nu, double a, double b, double c,
     if(isneg(t-t0))
         return c_get_nan();
 
-    if(isequal(t, t0))
+    if(isequal(t, t0, REZEQ_EPS, 0.))
         return s0;
 
     double dtmax = c_integrate_delta_t_max(nu, a, b, c, s0);
@@ -300,7 +306,7 @@ int c_integrate(int nalphas, int nfluxes,
                             double s0,
                             double delta,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=1;
+    int REZEQ_DEBUG=0;
 
     int i, nit=0, jalpha_next=0;
     double aoj=0., boj=0., coj=0.;
@@ -325,7 +331,6 @@ int c_integrate(int nalphas, int nfluxes,
     double t_final = t0+delta;
     double t_start=t0, t_end=t0;
     double s_start=s0, s_interm=s0, s_end=s0;
-    double continuity_error_max = 0;
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0;
 
@@ -402,13 +407,12 @@ int c_integrate(int nalphas, int nfluxes,
 
         /* Check continuity */
         if(nit>1){
-            continuity_error_max = REZEQ_EPS*1e2+fabs(funval_prev)*1e-5;
-            if(fabs(funval-funval_prev)>continuity_error_max) {
+            if(notequal(funval_prev, funval_prev, REZEQ_EPS*1e2, 1e-5)) {
                 if(REZEQ_DEBUG==1)
                     fprintf(stdout, "    jalpha=%d/%d funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
-                                    "                 funval_prev=%5.5e diff=%5.5e>%5.5e\n",
+                                    "                 funval_prev=%5.5e diff=%5.5e\n",
                                 jalpha, nalphas-2, nu, aoj, boj, coj, s_start, funval, funval_prev,
-                                            fabs(funval-funval_prev), continuity_error_max);
+                                            fabs(funval-funval_prev));
                 return REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS;
             }
         }

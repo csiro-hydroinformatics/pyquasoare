@@ -22,6 +22,8 @@
 
 /* Define small number */
 #define REZEQ_EPS 1e-9
+#define REZEQ_CONTINUITY_ATOL 1e-7
+#define REZEQ_CONTINUITY_RTOL 1e-5
 
 #define REZEQ_PI 3.1415926535897936
 
@@ -29,6 +31,8 @@
 #define REZEQ_NFLUXES_MAX 20
 
 double c_get_eps();
+double c_get_continuity_atol();
+double c_get_continuity_rtol();
 double c_get_inf();
 double c_get_nan();
 int c_get_nfluxes_max();
@@ -37,8 +41,8 @@ int isnull(double x);
 int notnull(double x);
 int ispos(double x);
 int isneg(double x);
-int isequal(double x, double y);
-int notequal(double x, double y);
+int isequal(double x, double y, double atol, double rtol);
+int notequal(double x, double y, double atol, double rtol);
 
 int c_find_alpha(int nalphas, double * alphas, double s0);
 

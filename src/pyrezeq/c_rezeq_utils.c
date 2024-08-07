@@ -4,6 +4,14 @@ double c_get_eps() {
     return REZEQ_EPS;
 }
 
+double c_get_continuity_atol(){
+    return REZEQ_CONTINUITY_ATOL;
+}
+
+double c_get_continuity_rtol(){
+    return REZEQ_CONTINUITY_RTOL;
+}
+
 double c_get_nan() {
     /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
     static double zero1=0.;
@@ -37,12 +45,12 @@ int isneg(double x){
     return x<-REZEQ_EPS ? 1 : 0;
 }
 
-int isequal(double x, double y){
-    return fabs(x-y)<REZEQ_EPS ? 1 : 0;
+int isequal(double x, double y, double atol, double rtol){
+    return fabs(x-y)<atol+rtol*fabs(x) ? 1 : 0;
 }
 
-int notequal(double x, double y){
-    return 1-isequal(x, y);
+int notequal(double x, double y, double atol, double rtol){
+    return 1-isequal(x, y, atol, rtol);
 }
 
 

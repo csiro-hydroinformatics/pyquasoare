@@ -118,7 +118,8 @@ def test_steady_state_scalings_gr4j(allclose):
         lambda x: -x*(2-x), \
         lambda x: -(4/9*x)**5/4
     ]
-    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas)
+    scr = np.ones(3)
+    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
 
     nval = 200
     scalings = np.random.uniform(0, 100, size=(nval, 3))

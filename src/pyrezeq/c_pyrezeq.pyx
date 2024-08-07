@@ -6,6 +6,8 @@ np.import_array()
 # -- HEADERS --
 cdef extern from 'c_rezeq_utils.h':
     double c_get_eps()
+    double c_get_continuity_atol()
+    double c_get_continuity_rtol()
     double c_get_inf()
     double c_get_nan()
     int c_get_nfluxes_max()
@@ -80,6 +82,12 @@ def __cinit__(self):
 
 def get_eps():
     return c_get_eps()
+
+def get_continuity_atol():
+    return c_get_continuity_atol()
+
+def get_continuity_rtol():
+    return c_get_continuity_rtol()
 
 def get_nan():
     return c_get_nan()

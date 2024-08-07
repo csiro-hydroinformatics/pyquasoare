@@ -1,3 +1,4 @@
+from itertools import product as prod
 import math
 import numpy as np
 
@@ -5,6 +6,8 @@ from pyrezeq import has_c_module
 if has_c_module():
     import c_pyrezeq
     REZEQ_EPS = c_pyrezeq.get_eps()
+    REZEQ_CONTINUITY_ATOL = c_pyrezeq.get_continuity_atol()
+    REZEQ_CONTINUITY_RTOL = c_pyrezeq.get_continuity_rtol()
     REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
@@ -145,15 +148,51 @@ def approx_fun_from_matrix(alphas, nu, a_matrix, b_matrix, c_matrix, x):
     return outputs
 
 
+def isequal(f1, f2, atol=REZEQ_CONTINUITY_ATOL, \
+                    rtol=REZEQ_CONTINUITY_RTOL):
+    """ Checking if two values are equal """
+    errmax = atol+rtol*np.abs(f1)
+    return np.abs(f1-f2)<errmax
+
+def notequal(f1, f2, atol=REZEQ_CONTINUITY_ATOL, \
+                    rtol=REZEQ_CONTINUITY_RTOL):
+    return 1-isequal(f1, f2, atol, rtol)
+
+
+def check_continuity(alphas, nu, a_matrix, b_matrix, c_matrix):
+    nalphas = len(alphas)
+    nfluxes = a_matrix.shape[1]
+    fevals = np.zeros((nalphas-1, nfluxes, 2))
+    for i, j in prod(range(nfluxes), range(nalphas-1)):
+        a0, a1 = alphas[[j, j+1]]
+        a, b, c = a_matrix[j, i], b_matrix[j, i], c_matrix[j, i]
+        fevals[j, i, 0] = approx_fun(nu, a, b, c, a0)
+        fevals[j, i, 1] = approx_fun(nu, a, b, c, a1)
+
+    return np.all(isequal(fevals[1:, :, 0], fevals[:-1, :, 1]))
+
+
 def optimize_nu(funs, alphas, scalings_ref, nexplore=1000):
     """ Optimize nu and compute corresponding coefficients """
-
     a0, a1 = alphas.min(), alphas.max()
-    theta_max = max(6., max(abs(math.asinh(a0)), abs(math.asinh(a1))))
-    theta_min = -theta_max
+
+    # nu.S varies from [nu.a0, nu.a1]
+    # if r = [abs(a0), abs(a1)]
+    # hence abs(nu.S) varies in [nu.min(r), nu.max(r)]
+    # we want this to be in [1e-5, 1e2]
+    theta_min = math.log(1e-3)
+    aamin = min(abs(a0), abs(a1))
+    if aamin>1e-3:
+        theta_min += math.log(aamin)
+
+    aamax = max(abs(a0), abs(a1))
+    theta_max = math.log(5e1)-math.log(aamax)
+
     nalphas = len(alphas)
     assert len(funs) == len(scalings_ref)
     assert np.all(np.abs(scalings_ref)>10*REZEQ_EPS)
+
+    nfluxes = len(funs)
 
     # Error evaluation points for each band
     eps = np.array([1./4, 0.5, 3./4])[None, :]
@@ -178,58 +217,50 @@ def optimize_nu(funs, alphas, scalings_ref, nexplore=1000):
             yt = y_true[j]
             err = approx_fun(nu, a, b, c, x)-yt
             of += (err*err).mean()
+            # Check continuity
+            if j>0:
+                f = approx_fun(nu, a, b, c, alphaj)
+                # Eliminate configurations with non continuous
+                # approximation
+                if notequal(fprev, f):
+                    return 1e100
+
+            fprev = approx_fun(nu, a, b, c, alphajp1)
+
         return of
 
     # Systematic exploration
     fobjexp = lambda x: fobj(math.exp(x))
-    xa, xb = -5, 5
-    ntry = 1000
+
+    xa, xb = theta_min, theta_max
+    ntry = 50
     xx = np.linspace(xa, xb, ntry)
     ff = np.array([fobjexp(x) for x in xx])
     imin = np.argmin(ff)
     xa, xb = xx[max(0, imin-1)], xx[min(ntry-1, imin+1)]
 
+    # Golden ratio minimization
+    dx = 10
     niter= ntry
-    theta = xx[imin]
+    niter_max = 500
+    tol = 1e-2
+    invphi = (math.sqrt(5)-1)/2
+    while abs(dx)>tol and niter<niter_max:
+        dx = xb-xa
+        xc = xb-dx*invphi
+        xd = xa+dx*invphi
+        if fobjexp(xc)<fobjexp(xd):
+            xb = xd
+        else:
+            xa = xc
+
+        niter += 1
+
+    theta = (xa+xb)/2
     fopt = fobjexp(theta)
     nu = math.exp(theta)
 
-    ## Golden ratio minimization
-    #dx = 10
-    #niter = 0
-    #niter_max = 500
-    #tol = 1e-2
-    #invphi = (math.sqrt(5)-1)/2
-    #while abs(dx)>tol and niter<niter_max:
-    #    dx = xb-xa
-    #    xc = xb-dx*invphi
-    #    xd = xa+dx*invphi
-    #    if fobjexp(xc)<fobjexp(xd):
-    #        xb = xd
-    #    else:
-    #        xa = xc
-
-    #    niter += 1
-
-    #theta = (xa+xb)/2
-    #fopt = fobjexp(theta)
-    #nu = math.exp(theta)
-
     # Get coefficient for unscaled functions
     amat, bmat, cmat = get_coefficients_matrix(funs, alphas, nu)
-
-    # Check continuity
-    f = []
-    for j in range(nalphas-1):
-        a0, a1 = alphas[[j, j+1]]
-        a, b, c = amat[j].sum(), bmat[j].sum(), cmat[j].sum()
-        f.append([\
-            approx_fun(nu, a, b, c, a0), \
-            approx_fun(nu, a, b, c, a1)
-           ])
-    f = np.array(f)
-    assert np.allclose(f[1:, 0], f[:-1, 1])
-    import pdb; pdb.set_trace()
-
     return nu, amat, bmat, cmat, niter, fopt
 

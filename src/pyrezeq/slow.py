@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS
+from pyrezeq.approx import REZEQ_EPS, isequal
 
 def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -74,9 +74,6 @@ def routing_numerical(delta, theta, q0, s0, \
 # --- REZEQ functions translated from C for slow implementation ---
 def isnull(x):
     return 1 if abs(x)<REZEQ_EPS else 0
-
-def isequal(x, y):
-    return 1 if abs(x-y)<REZEQ_EPS else 0
 
 def notnull(x):
     return 1-isnull(x)
@@ -150,7 +147,7 @@ def integrate_forward(nu, a, b, c, t0, s0, t):
     if t-t0>dtmax:
         return np.nan
 
-    if isequal(t0, t):
+    if isequal(t0, t, REZEQ_EPS, 0.):
         return s0
 
     if isnull(b) and isnull(c):
@@ -386,49 +383,8 @@ def integrate(alphas, scalings, nu, \
 
         # Check continuity
         if nit>1:
-            continuity_error_max = REZEQ_EPS*1e2+abs(funval_prev)*1e-5
-            if abs(funval-funval_prev)> continuity_error_max:
-                raise ValueError("continuity problem, |f-fprev|>"\
-                                    +f"{continuity_error_max:3.3e}")
-
-        # Check integration up to the next band limit
-        #if notnull(funval):
-        #    if isneg(funval):
-        #        # non-increasing function -> move to lower band
-        #        jalpha_next = jalpha if extrapolating_high else max(jmin, jalpha-1)
-        #        # .. need to substract 2EPS to avoid being stuck as extrapolation
-        #        if extrapolating_high:
-        #            s_end = alpha_max-2*REZEQ_EPS
-        #        else:
-        #            s_end = alpha0
-        #            s_end = alpha0-2*REZEQ_EPS if isequal(s_end, s_start) else alpha0
-
-        #    elif ispos(funval):
-        #        # increasing function -> move to upper band
-        #        jalpha_next = jalpha if extrapolating_low else min(jmax, jalpha+1)
-        #        # .. need to add 2EPS to avoid being stuck as extrapolation
-        #        if extrapolating_low:
-        #            s_end = alpha_min+2*REZEQ_EPS
-        #        else:
-        #            s_end = alpha1
-        #            s_end = alpha1+2*REZEQ_EPS if isequal(s_end, s_start) else alpha1
-
-        #    # Compute time for which s(t) = s_end
-        #    t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
-        #else:
-        #    # derivative is null -> finish iteration
-        #    jalpha_next = jalpha
-        #    t_end = t_final
-        #    s_end = s_start
-
-        ## Set time to end of time step if finished iteration (t_end>t_final)
-        ##    or if t1 is nan (i.e. close to steady or never reaching t_final)
-        #t_end = t_final if t_end>t0+delta or np.isnan(t_end) or t_end<t_start else t_end
-
-        ## Recompute s_end - required only if finished iteration or
-        ## extrapolating. Skip if funval is null => steady
-        #if notnull(funval):
-        #    s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
+            if approx.notequal(funval_prev, funval):
+                raise ValueError("continuity problem")
 
         # Try integrating up to the end of the time step
         s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final)

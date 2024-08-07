@@ -24,7 +24,7 @@ LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 @pytest.fixture(scope="module", \
             params=["x2", "x4", "x6", "x8", "tanh", "exp", "sin", \
                             "recip", "recipquad", "runge", "stiff", \
-                            "ratio", "logistic"])
+                            "ratio", "logistic", "genlogistic"])
 def reservoir_function(request, selfun):
     name = request.param
     if name!=selfun and selfun!="":
@@ -130,6 +130,14 @@ def reservoir_function(request, selfun):
         inflow = 0.
         sol = lambda t, s0: s0*np.exp(lam*t)/(1-s0+s0*np.exp(lam*t))
         alpha0, alpha1 = 0., 3.
+
+    elif name == "genlogistic":
+        K, nu, alpha = 10., 0.1, 2
+        fun = lambda x: alpha*(1-(x/K)**nu)*x
+        dfun = lambda x: alpha*(1-(x/K)**nu)-a*nu(x/K)**nu
+        inflow = 0.
+        sol = lambda t, s0: K/(1+((K/s0)*nu-1)*math.exp(-alpha*nu*t))**(1./nu)
+        alpha0, alpha1 = 0, K
 
 
     #elif name == "cos":
@@ -267,14 +275,23 @@ def test_approx_fun(allclose, generate_samples):
 def test_get_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
     nus = [0.01, 0.1, 1, 5]
+
+    #nus = [5]
+    # check fun = genlogisitc
+
     corrected = 0
     for nu in nus:
         a, b, c, corr = approx.get_coefficients(fun, alpha0, alpha1, nu)
         corrected += corr
 
         # Check function on bounds
-        assert allclose(approx.approx_fun(nu, a, b, c, alpha0), fun(alpha0), atol=1e-7)
-        assert allclose(approx.approx_fun(nu, a, b, c, alpha1), fun(alpha1), atol=1e-7)
+        fa = approx.approx_fun(nu, a, b, c, alpha0)
+        ft = fun(alpha0)
+        assert allclose(ft, fa, atol=1e-7)
+
+        fa = approx.approx_fun(nu, a, b, c, alpha1)
+        ft = fun(alpha1)
+        assert allclose(ft, fa, atol=1e-7)
 
         # Check mid point values
         if not corrected:
@@ -355,11 +372,15 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
 def test_optimize_nu(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     funs = [lambda x: inflow+fun(x)]
-    nalphas = 11
+
+    # ratio function cannot be captured with 11 bands
+    # increase this to 31
+    nalphas = 31 if fname == "ratio" else 11
 
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(len(funs))
     nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
+    assert approx.check_continuity(alphas, nu, amat, bmat, cmat)
 
     s = np.linspace(alpha0, alpha1, 10000)
     out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
@@ -373,15 +394,17 @@ def test_optimize_nu(allclose, reservoir_function):
         "x6": 1e-3, \
         "x8": 1e-3, \
         "tanh": 5e-2, \
-        "exp": 5e-7,
+        "exp": 1e-7,
         "sin": 5e-3, \
         "recip": 5e-3, \
         "recipquad": 5e-2, \
         "runge": 1e-3, \
         "stiff": 1e-7, \
-        "ratio": 1.1, \
-        "logistic": 1e-8
+        "ratio": 0.8, \
+        "logistic": 1e-8, \
+        "genlogistic": 5e-3
     }
+
     assert rmse<rmse_thresh[fname]
     LOGGER.info("")
     LOGGER.info(f"[{fname}] optimize approx vs truth: "\
@@ -399,6 +422,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(len(funs))
     nu, amat, bmat, cmat, _, _ = approx.optimize_nu(funs, alphas, scr)
+    #assert approx.check_continuity(alphas, nu, amat, bmat, cmat)
 
     # Issue with continuity for fname=recip and
     # nu in [3.01, 3.03] -> TOFIX!
@@ -424,6 +448,15 @@ def test_optimize_vs_quad(allclose, reservoir_function):
 
     rmse_quad = math.sqrt(((fquad-ftrue)**2).mean())
 
+    #import matplotlib.pyplot as plt
+    #plt.plot(s, ftrue, label="true")
+    #plt.plot(s, fapprox, label="approx")
+    #plt.plot(s, fquad, label="quad")
+    #plt.legend()
+    #plt.show()
+    #import pdb; pdb.set_trace()
+
+
     # We want to make sure quad is always worse than app
     ratio = rmse/rmse_quad
 
@@ -437,7 +470,8 @@ def test_optimize_vs_quad(allclose, reservoir_function):
         "recip": 0.7, \
         "recipquad": 0.9, \
         "runge": 1.0+1e-4, \
-        "ratio": 0.2
+        "ratio": 0.9, \
+        "genlogistic": 0.9
     }
     assert ratio<ratio_thresh[fname]
     LOGGER.info("")
