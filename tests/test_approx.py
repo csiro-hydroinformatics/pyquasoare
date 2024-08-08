@@ -380,7 +380,7 @@ def test_optimize_nu(allclose, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(len(funs))
     nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
-    assert approx.check_continuity(alphas, nu, amat, bmat, cmat)
+    assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
 
     s = np.linspace(alpha0, alpha1, 10000)
     out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
@@ -422,7 +422,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(len(funs))
     nu, amat, bmat, cmat, _, _ = approx.optimize_nu(funs, alphas, scr)
-    #assert approx.check_continuity(alphas, nu, amat, bmat, cmat)
+    assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
 
     # Issue with continuity for fname=recip and
     # nu in [3.01, 3.03] -> TOFIX!

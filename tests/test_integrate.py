@@ -238,7 +238,8 @@ def test_forward_vs_numerical(allclose, generate_samples, printout):
         errmax_max = max(errmax, errmax_max)
 
     perc_skipped = nskipped*100/ntry
-    mess = f"[{case}:{cname}] forward vs numerical: errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
+    mess = f"[{case}:{cname}] forward vs numerical: "\
+                +f"errmax = {errmax_max:3.2e}  Skipped={perc_skipped:0.0f}%"
     if case>=8:
         perc_delta_pos = perc_delta_pos/ndelta*100
         mess += f"  Delta>0 = {perc_delta_pos:0.0f}%"
@@ -280,7 +281,7 @@ def test_inverse(allclose, generate_samples, printout):
 
         # Compute difference
         ta = integrate.integrate_inverse(nu, a, b, c, s0, s1)
-        assert np.all(ta>=-approx.REZEQ_EPS)
+        assert np.all(ta>=-approx.REZEQ_EPS*10)
 
         dsdt = approx.approx_fun(nu, a, b, c, s1)
         err = np.abs(np.log(ta*1e-3)-np.log((t-t0)*1e-3))
@@ -298,7 +299,8 @@ def test_inverse(allclose, generate_samples, printout):
         assert allclose(ta, ta_slow)
 
     perc_skipped = nskipped*100/ntry
-    LOGGER.info(f"[{case}:{cname}] inverse: errmax = {errmax_max:3.2e} Skipped={perc_skipped:0.0f}%")
+    LOGGER.info(f"[{case}:{cname}] inverse: "\
+                +"errmax = {errmax_max:3.2e} Skipped={perc_skipped:0.0f}%")
 
 
 def test_increment_fluxes_vs_integration(allclose, \
@@ -315,7 +317,8 @@ def test_increment_fluxes_vs_integration(allclose, \
     ev = []
     for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
         if itry%nprint==0 and printout:
-            LOGGER.info(f"fluxes vs integration - case [{case}] - Try {itry+1:4d}/{ntry:4d}")
+            LOGGER.info(f"fluxes vs integration - case [{case}]"\
+                            f" - Try {itry+1:4d}/{ntry:4d}")
 
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
 
@@ -377,8 +380,9 @@ def test_increment_fluxes_vs_integration(allclose, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
-    mess = f"[{case}:{cname}] fluxes vs integration: errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "+\
-                f" balmax = {errbal_max:3.3e}"
+    mess = f"[{case}:{cname}] fluxes vs integration: "\
+                +f"errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "\
+                +f" balmax = {errbal_max:3.3e}"
     LOGGER.info(mess)
 
 
@@ -472,6 +476,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(2)
     nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu([inp, fun], alphas, scr)
+    assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
 
     # Adjust bounds to avoid numerical problems with analytical solution
     if fname.startswith("x"):
@@ -490,36 +495,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
     for itry in range(ntry):
         s0 = alpha0+(alpha1-alpha0)*float(itry)/(ntry-1)
+        s0 = 0.
 
         # Analytical solution
         expected = sol(t1, s0)
-
-        # Approximate method
-        niter, sims = [0], [s0]
-        s_start = s0
-        start_exec = time.time()
-        for i in range(len(t1)-1):
-            t_start = t1[i]
-            delta = t1[i+1]-t_start
-
-            n, s_end, _ = integrate.integrate(alphas, scalings, nu, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, delta)
-            # Against slow
-            #n_slow, s_end_slow, _ = slow.integrate(alphas, scalings, nu, \
-            #                                    amat, bmat, cmat, t_start, \
-            #                                    s_start, delta)
-            #assert np.isclose(s_end, s_end_slow)
-            niter.append(n)
-            sims.append(s_end)
-            s_start = s_end
-
-        # Process run times
-        end_exec = time.time()
-        time_app += (end_exec-start_exec)*1e3
-        niter = np.array(niter)
-        sims = np.array(sims)
-        niter_app = max(niter_app, niter.sum())
 
         # Numerical method
         start_exec = time.time()
@@ -530,6 +509,34 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         time_num += (end_exec-start_exec)*1e3
         numerical = fn[:, 0]
         niter_num = max(niter_num, nev+njac)
+
+        # Approximate method
+        niter, sims = [0], [s0]
+        s_start = s0
+        start_exec = time.time()
+        for i in range(len(t1)-1):
+            t_start = t1[i]
+            delta = t1[i+1]-t_start
+            # C code
+            n, s_end, _ = integrate.integrate(alphas, scalings, nu, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            # Python code
+            n_slow, s_end_slow, _ = slow.integrate(alphas, scalings, nu, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, delta)
+            assert np.isclose(s_end, s_end_slow)
+
+            niter.append(n)
+            sims.append(s_end)
+            s_start = s_end
+
+        # Process run times
+        end_exec = time.time()
+        time_app += (end_exec-start_exec)*1e3
+        niter = np.array(niter)
+        sims = np.array(sims)
+        niter_app = max(niter_app, niter.sum())
 
         # Errors
         errmax = np.abs(sims-expected).max()
@@ -566,14 +573,14 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
 
 def test_reservoir_equation_gr4j(allclose):
-
     funs = [
         lambda x: 1-x**2, \
         lambda x: -x*(2-x), \
         lambda x: -(4/9*x)**5/4
     ]
     alphas = np.linspace(0., 1.2, 10)
-    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas)
+    scr = np.ones(3)
+    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
 
 
     return

@@ -409,62 +409,16 @@ int c_integrate(int nalphas, int nfluxes,
         if(nit>1){
             if(notequal(funval_prev, funval_prev, REZEQ_EPS*1e2, 1e-5)) {
                 if(REZEQ_DEBUG==1)
-                    fprintf(stdout, "    jalpha=%d/%d funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
-                                    "                 funval_prev=%5.5e diff=%5.5e\n",
-                                jalpha, nalphas-2, nu, aoj, boj, coj, s_start, funval, funval_prev,
-                                            fabs(funval-funval_prev));
+                    fprintf(stdout, "    jalpha=%d/%d "
+                                "funval(%0.5f, %0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
+                                "                 "
+                                "funval_prev=%5.5e diff=%5.5e\n",
+                                jalpha, nalphas-2, nu, aoj, boj, coj,
+                                s_start, funval, funval_prev,
+                                fabs(funval-funval_prev));
                 return REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS;
             }
         }
-
-        ///* Check integration up to the next band limit */
-        //if(notnull(funval)){
-        //    if(isneg(funval)){
-        //        /* non-increasing function -> move to lower band if not extrapolating*/
-        //        jalpha_next = extrapolating_high ? jalpha : jalpha>jmin ? jalpha-1 : jmin;
-
-        //        if(extrapolating_high){
-        //            s_interm = alpha_max-2*REZEQ_EPS;
-        //        } else {
-        //            s_interm = alpha0;
-        //            if(isequal(s_interm, s_start))
-        //                s_interm -= 2*REZEQ_EPS;
-        //        }
-
-
-        //    } else if (ispos(funval)){
-        //        /* increasing function -> move to upper band if not extrapolating */
-        //        jalpha_next = extrapolating_low ? jalpha : jalpha<jmax ? jalpha+1 : jmax;
-
-        //        if(extrapolating_low) {
-        //            s_interm = alpha_min+2*REZEQ_EPS;
-        //        } else {
-        //            s_interm = alpha1;
-        //            if(isequal(s_interm, s_start))
-        //                s_interm += 2*REZEQ_EPS;
-        //        }
-
-        //    }
-
-        //    /* Compute time for which s(t) = s_end */
-        //    t_end = t_start+c_integrate_inverse(nu, aoj, boj, coj, s_start, s_interm);
-
-        //} else {
-        //    /* derivative is null -> finish iteration */
-        //    jalpha_next = jalpha;
-        //    t_end = t_final;
-        //    s_end = s_start;
-        //}
-
-        ///* Set time to end of time step if finished iteration (t_end>t_final)
-        //    or if t1 is nan (i.e. close to steady or never reaching t_final) */
-        //t_end = (t_end>t_final || isnan(t_end) || t_end<t_start) ? t_final : t_end;
-
-        ///* Recompute s_end - required only if finished iteration or
-        // * extrapolating. Skip if funval is null => steady */
-        //if(notnull(funval))
-        //    s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
-
 
         /* Try integrating up to the end of the time step */
         s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final);
@@ -478,13 +432,17 @@ int c_integrate(int nalphas, int nfluxes,
         else {
             /* .. find next band depending depending if f is decreasing
                 or non-decreasing */
-            if(funval<0) {
+            if(isneg(funval)) {
                 s_end = alpha0;
                 jalpha_next = jalpha>-1 ? jalpha-1 : -1;
             }
-            else {
+            else if (ispos(funval)) {
                 s_end = alpha1;
                 jalpha_next = jalpha>=nalphas-2 ? nalphas-1 : jalpha+1;
+            }
+            else {
+                s_end = s_start;
+                jalpha_next = jalpha;
             }
 
             /* Increment time */
@@ -495,10 +453,12 @@ int c_integrate(int nalphas, int nfluxes,
                 s_end = c_integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end);
                 /* Ensure that s_end remains inside interpolation range */
                 if(funval<0){
-                    s_end = s_end < alpha_max-2*REZEQ_EPS ? alpha_max-2*REZEQ_EPS : s_end;
+                    s_end = s_end < alpha_max-2*REZEQ_EPS ?
+                                        alpha_max-2*REZEQ_EPS : s_end;
                 }
                 else{
-                    s_end = s_end > alpha_min+2*REZEQ_EPS ? alpha_min+2*REZEQ_EPS : s_end;
+                    s_end = s_end > alpha_min+2*REZEQ_EPS ?
+                                        alpha_min+2*REZEQ_EPS : s_end;
                 }
             }
             else {
@@ -508,12 +468,16 @@ int c_integrate(int nalphas, int nfluxes,
         }
 
         if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\t[%d] j=%d(%0.5f, %0.5f) -> %d : nu=%0.5f a=%0.5f b=%0.5f c=%0.5f f=%0.5f"
-                                    " ex_l=%d  ex_h=%d\n",
-                                        nit, jalpha, alpha0, alpha1, jalpha_next, nu, aoj, boj,
-                                        coj, funval, extrapolating_low, extrapolating_high);
-            fprintf(stdout, "\t     t=%0.5f->%0.5f/%0.5f  s=%4.4e->(%4.4e)->%4.4e\n",
-                                        t_start, t_end, t_final, s_start, s_interm, s_end);
+            fprintf(stdout, "\t[%d] nu=%3.3f    ex_l=%d  ex_h=%d\n",
+                            "\t[%d] j=%d(%0.5f, %0.5f) -> %d\n"
+                            "\t     nu=%0.5f\n"
+                            "\t     a=%0.5f b=%0.5f c=%0.5f f=%0.5f\n",
+                            nit, nu, extrapolating_low, extrapolating_high,
+                            jalpha, alpha0, alpha1, jalpha_next, aoj, boj,
+                            coj, funval);
+            fprintf(stdout, "\t     t=%0.5f->%0.5f/%0.5f"
+                            "\t     s=%4.4e->(%4.4e)->%4.4e\n",
+                            t_start, t_end, t_final, s_start, s_interm, s_end);
         }
         if(isnull(t_end-t_start)){
             return REZEQ_ERROR_INTEGRATE_TSTART_EQUAL_TEND;

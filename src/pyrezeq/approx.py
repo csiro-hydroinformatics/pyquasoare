@@ -159,34 +159,13 @@ def notequal(f1, f2, atol=REZEQ_CONTINUITY_ATOL, \
     return 1-isequal(f1, f2, atol, rtol)
 
 
-def check_continuity(alphas, nu, a_matrix, b_matrix, c_matrix):
-    nalphas = len(alphas)
-    nfluxes = a_matrix.shape[1]
-    fevals = np.zeros((nalphas-1, nfluxes, 2))
-    for i, j in prod(range(nfluxes), range(nalphas-1)):
-        a0, a1 = alphas[[j, j+1]]
-        a, b, c = a_matrix[j, i], b_matrix[j, i], c_matrix[j, i]
-        fevals[j, i, 0] = approx_fun(nu, a, b, c, a0)
-        fevals[j, i, 1] = approx_fun(nu, a, b, c, a1)
-
-    return np.all(isequal(fevals[1:, :, 0], fevals[:-1, :, 1]))
-
-
 def optimize_nu(funs, alphas, scalings_ref, nexplore=1000):
     """ Optimize nu and compute corresponding coefficients """
     a0, a1 = alphas.min(), alphas.max()
 
-    # nu.S varies from [nu.a0, nu.a1]
-    # if r = [abs(a0), abs(a1)]
-    # hence abs(nu.S) varies in [nu.min(r), nu.max(r)]
-    # we want this to be in [1e-5, 1e2]
     theta_min = math.log(1e-3)
-    aamin = min(abs(a0), abs(a1))
-    if aamin>1e-3:
-        theta_min += math.log(aamin)
-
-    aamax = max(abs(a0), abs(a1))
-    theta_max = math.log(5e1)-math.log(aamax)
+    amax = max(abs(a0), abs(a1))
+    theta_max = math.log(5e1)-math.log(amax)
 
     nalphas = len(alphas)
     assert len(funs) == len(scalings_ref)
@@ -263,4 +242,29 @@ def optimize_nu(funs, alphas, scalings_ref, nexplore=1000):
     # Get coefficient for unscaled functions
     amat, bmat, cmat = get_coefficients_matrix(funs, alphas, nu)
     return nu, amat, bmat, cmat, niter, fopt
+
+
+def is_continuous(alphas, nu, a_matrix, b_matrix, c_matrix):
+    """ Check coeficient matrices lead to continuous approximated
+    functions.
+    """
+    nalphas = len(alphas)
+    nfluxes = a_matrix.shape[1]
+    fevals = np.zeros((nalphas-1, nfluxes+1, 2))
+    for i, j in prod(range(nfluxes+1), range(nalphas-1)):
+        a0, a1 = alphas[[j, j+1]]
+        if i<nfluxes:
+            a, b, c = a_matrix[j, i], b_matrix[j, i], c_matrix[j, i]
+        else:
+            a = a_matrix[j, :].sum()
+            b = b_matrix[j, :].sum()
+            c = c_matrix[j, :].sum()
+
+        fevals[j, i, 0] = approx_fun(nu, a, b, c, a0)
+        fevals[j, i, 1] = approx_fun(nu, a, b, c, a1)
+
+    # Compare values obtained from each side of a band divide
+    v1 = fevals[1:, :, 0]
+    v2 = fevals[:-1, :, 1]
+    return np.all(isequal(v1, v2))
 

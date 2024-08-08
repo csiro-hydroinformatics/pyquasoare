@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, isequal
+from pyrezeq.approx import REZEQ_EPS, isequal, notequal
 
 def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -86,12 +86,38 @@ def isneg(x):
 
 
 def approx_fun(nu, a, b, c, s):
-    f = a
-    if notnull(b):
-        f += b*math.exp(-nu*s)
-    if notnull(c):
-        f += c*math.exp(nu*s)
-    return f
+    f1 = a
+    f2 = b*math.exp(-nu*s)
+    f3 = c*math.exp(nu*s)
+
+    if nu<0 or np.isnan(nu):
+        return np.nan
+
+    if notnull(f2):
+        f1 += f2;
+
+    if notnull(f3):
+        f1 += f3;
+
+    return f1;
+
+
+def approx_jac(nu, a, b, c, s):
+    j1 = 0;
+    j2 = -nu*b*math.exp(-nu*s)
+    j3 = nu*c*math.exp(nu*s)
+
+    if nu<0 or np.isnan(nu):
+        return np.nan
+
+    if notnull(j2):
+        j1 += j2
+
+    if notnull(j3):
+        j1 += j3
+
+    return j1
+
 
 def integrate_delta_t_max(nu, a, b, c, s0):
     e0 = math.exp(-nu*s0)
@@ -304,18 +330,26 @@ def integrate(alphas, scalings, nu, \
     nalphas = len(alphas)
     alpha_min=alphas[0]
     alpha_max=alphas[nalphas-1]
+    debug = False
 
-    #print("")
-    #print("-"*50)
-    #print(f"nalphas = {nalphas}")
-    #txt = " ".join([f"scl[{i}]={s:0.3f}" for i, s in enumerate(scalings)])
-    #print(f"scalings: {txt}")
+    if debug:
+        print("")
+        print("-"*50)
+        print(f"nalphas = {nalphas}")
+        txt = " ".join([f"scl[{i}]={s:0.3f}" for i, s in enumerate(scalings)])
+        print(f"scalings: {txt}")
 
     # Initial interval
     jmin = 0
     jmax = nalphas-2
-    # jalpha < 0 or jalpha >= nalpha-1 => extrapolation
-    jalpha = np.sum(s0-alphas>0)-1 if s0>=alpha_min else -1
+    if s0<alpha_min:
+        jalpha = -1
+    elif s0>=alpha_min and s0<alpha_max:
+        jalpha = np.sum(s0-alphas>=0)-1
+    elif s0 == alpha_max:
+        jalpha = jmax
+    else:
+        jalpha = jmax+1
 
     # Initialise iteration
     nfluxes = a_matrix_noscaling.shape[1]
@@ -383,8 +417,10 @@ def integrate(alphas, scalings, nu, \
 
         # Check continuity
         if nit>1:
-            if approx.notequal(funval_prev, funval):
-                raise ValueError("continuity problem")
+            if notequal(funval_prev, funval):
+                errmess = f"continuity problem: prev({funval_prev:3.3e})"\
+                        +f"!=new({funval:3.3e})"
+                raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
         s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final)
@@ -419,11 +455,13 @@ def integrate(alphas, scalings, nu, \
                 # No extrapolation, we can reach s_end
                 t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
 
-        #print(f"[{nit}] low={extrapolating_low} high={extrapolating_high} "\
-        #            +f"/ fun={funval:0.3f}"\
-        #            +f"/ t:={t_start:0.3f}>{t_end:0.3f}"\
-        #            +f"/ j:{jalpha}>{jalpha_next}"\
-        #            +f" / s:{s_start:0.3f}>{s_end:0.3f}")
+        if debug:
+            print(f"\n\n[{nit}] low={str(extrapolating_low)[0]}"\
+                    +f" high={str(extrapolating_high)[0]} "\
+                    +f"/ fun={funval:3.3e}"\
+                    +f"/ t:={t_start:3.3e}>{t_end:3.3e}"\
+                    +f"/ j:{jalpha}>{jalpha_next}"\
+                    +f" / s:{s_start:3.3e}>{s_end:3.3e}")
 
         # Increment fluxes during the last interval
         increment_fluxes(nu, a_vect, b_vect, c_vect, \
@@ -431,6 +469,8 @@ def integrate(alphas, scalings, nu, \
 
         # Loop for next band
         funval_prev = approx_fun(nu, aoj, boj, coj, s_end)
+        #print(" "*4+f"f({nu:3.3e}, {aoj:3.3e}, {boj:3.3e}, "\
+        #        +f"{coj:3.3e}, {s_end:3.3e})={funval_prev:3.3e}")
         t_start = t_end
         s_start = s_end
         jalpha = jalpha_next
