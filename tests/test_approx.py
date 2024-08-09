@@ -132,11 +132,11 @@ def reservoir_function(request, selfun):
         alpha0, alpha1 = 0., 3.
 
     elif name == "genlogistic":
-        K, nu, alpha = 10., 0.1, 2
+        K, nu, alpha = 10., 0.8, 2
         fun = lambda x: alpha*(1-(x/K)**nu)*x
-        dfun = lambda x: alpha*(1-(x/K)**nu)-a*nu(x/K)**nu
+        dfun = lambda x: alpha*(1-(x/K)**nu)-alpha*nu*(x/K)**nu
         inflow = 0.
-        sol = lambda t, s0: K/(1+((K/s0)*nu-1)*math.exp(-alpha*nu*t))**(1./nu)
+        sol = lambda t, s0: K/(1+((K/s0)**nu-1)*np.exp(-alpha*nu*t))**(1./nu)
         alpha0, alpha1 = 0, K
 
 
@@ -448,18 +448,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
 
     rmse_quad = math.sqrt(((fquad-ftrue)**2).mean())
 
-    #import matplotlib.pyplot as plt
-    #plt.plot(s, ftrue, label="true")
-    #plt.plot(s, fapprox, label="approx")
-    #plt.plot(s, fquad, label="quad")
-    #plt.legend()
-    #plt.show()
-    #import pdb; pdb.set_trace()
-
-
     # We want to make sure quad is always worse than app
-    ratio = rmse/rmse_quad
-
     ratio_thresh = {
         "x4": 0.5, \
         "x6": 0.3, \
@@ -473,6 +462,7 @@ def test_optimize_vs_quad(allclose, reservoir_function):
         "ratio": 0.9, \
         "genlogistic": 0.9
     }
+    ratio = rmse/rmse_quad
     assert ratio<ratio_thresh[fname]
     LOGGER.info("")
     LOGGER.info(f"[{fname}] optimize approx vs quad: error ratio={ratio:2.2e}")

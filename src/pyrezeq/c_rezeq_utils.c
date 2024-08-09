@@ -58,10 +58,10 @@ int c_find_alpha(int nalphas, double * alphas, double s0){
     int i=0;
 
     if(s0<alphas[0])
-        return 0;
+        return -1;
 
     if(s0>alphas[nalphas-1])
-        return nalphas-2;
+        return nalphas-1;
 
     while(s0>=alphas[i] && i<=nalphas-2){
         i++;

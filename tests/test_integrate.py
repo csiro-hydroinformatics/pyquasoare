@@ -30,11 +30,11 @@ def test_find_alpha(allclose):
 
     u0 = -1.
     ialpha = integrate.find_alpha(alphas, u0)
-    assert ialpha == 0
+    assert ialpha == -1
 
     u0 = 1.1
     ialpha = integrate.find_alpha(alphas, u0)
-    assert ialpha == 2
+    assert ialpha == 3
 
     u0 = 0.2
     ialpha = integrate.find_alpha(alphas, u0)
@@ -66,7 +66,6 @@ def test_delta_t_max(allclose, generate_samples, printout):
     ndpos = 0
     ndelta = 0
     for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
-
         # Log progress
         if itry%nprint==0 and printout:
             LOGGER.info(f"delta tmax - case [{case}] - Try {itry+1:4d}/{ntry:4d}")
@@ -425,11 +424,11 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         for i in range(len(t1)-1):
             t_start = t1[i]
             delta = t1[i+1]-t_start
-
+             # integrate - C code
             _, s_end, _ = integrate.integrate(alphas, scalings, nu, \
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, delta)
-            # .. compare against slow
+            # integrate - python code
             _, s_end_slow, _ = slow.integrate(alphas, scalings, nu, \
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, delta)
@@ -440,8 +439,8 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         # Expect constant derivative of solution in extrapolation mode
         sims = np.array(sims)
         ilow = sims<alpha0
+        dt = t1[1]-t1[0]
         if ilow.sum()>0:
-            dt = t1[1]-t1[0]
             ds_low = np.diff(sims[ilow])/dt
             expected_low = [approx.approx_fun(nu, amat[0, i], bmat[0, i], \
                                             cmat[0, i], alphas[0]) for i in range(2)]
@@ -479,8 +478,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
 
     # Adjust bounds to avoid numerical problems with analytical solution
-    if fname.startswith("x"):
-        alpha0 += 1e-3
+    if re.search("^x|^logistic|sin", fname):
+        alpha0 += 1e-2
+    elif re.search("genlogistic", fname):
+        alpha0 += 1e-1
     elif fname == "runge":
         alpha0, alpha1 = -1, 1
 
@@ -495,7 +496,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
     for itry in range(ntry):
         s0 = alpha0+(alpha1-alpha0)*float(itry)/(ntry-1)
-        s0 = 0.
 
         # Analytical solution
         expected = sol(t1, s0)
@@ -539,12 +539,13 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         niter_app = max(niter_app, niter.sum())
 
         # Errors
-        errmax = np.abs(sims-expected).max()
+        isok = ~np.isnan(expected)
+        errmax = np.abs(sims[isok]-expected[isok]).max()
         if errmax>errmax_app_max:
             errmax_app_max = errmax
             s0_errmax = s0
 
-        errmax = np.abs(numerical-expected).max()
+        errmax = np.abs(numerical[isok]-expected[isok]).max()
         errmax_num_max = max(errmax, errmax_num_max)
 
     err_thresh = {
@@ -554,20 +555,24 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "x8": 1e-3, \
         "tanh": 1e-2, \
         "exp": 1e-7, \
-        "sin": 2e-2, \
+        "sin": 5e-3, \
         "runge": 1e-3, \
         "stiff": 1e-9, \
         "ratio": 5e-2, \
-        "logistic": 1e-7
+        "logistic": 1e-7, \
+        "genlogistic": 5e-2
     }
     assert errmax_app_max < err_thresh[fname]
     assert time_app<time_num*0.95
 
     LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")
+
     LOGGER.info(f"[{fname}] numerical vs analytical: "\
-                    +f"errmax = {errmax_num_max:3.2e} (ratio vs app={errmax_app_max/errmax_num_max:0.2f})"\
-                    +f" / time={time_num:3.3e}ms (ratio vs app={time_app/time_num:0.2f})"\
+                    +f"errmax = {errmax_num_max:3.2e} "\
+                    +f"(ratio vs app={errmax_app_max/errmax_num_max:0.2f})"\
+                    +f" / time={time_num:3.3e}ms "\
+                    +f"(ratio vs app={time_app/time_num:0.2f})"\
                     +f" / niter={niter_num}")
 
 

@@ -358,13 +358,14 @@ def integrate(alphas, scalings, nu, \
     coj, coj_prev, c_vect = 0., 0., np.zeros(nfluxes)
 
     nit = 0
+    niter_max = 2*nalphas
     t_final = t0+delta
     t_start, t_end = t0, t0
     s_start, s_end = s0, s0
     fluxes = np.zeros(nfluxes)
 
     # Time loop
-    while ispos(t_final-t_end) and nit<nalphas:
+    while ispos(t_final-t_end) and nit<niter_max:
         nit += 1
         extrapolating_low = jalpha<0
         extrapolating_high = jalpha>=nalphas-1
@@ -426,10 +427,14 @@ def integrate(alphas, scalings, nu, \
         s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final)
 
         # complete or move band if needed
-        if s_end>=alpha0 and s_end<=alpha1 and not extrapolating:
+        if (s_end>=alpha0 and s_end<=alpha1 and not extrapolating)\
+                        or isnull(funval):
             # .. s_end is within band => complete
             t_end = t_final
             jalpha_next = jalpha
+
+            if isnull(funval):
+                s_end = s_start
         else:
             # .. find next band depending depending if f is decreasing
             #    or non-decreasing
