@@ -15,11 +15,14 @@ from pyrezeq import approx, integrate, slow
 
 from test_approx import generate_samples, reservoir_function
 
+from pygme.models import gr4j
+
+import data_reader
+
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-
 LOGGER = iutils.get_logger("integrate", flog=FTEST / "test_integrate.log")
 
 def test_find_alpha(allclose):
@@ -576,6 +579,25 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                     +f" / niter={niter_num}")
 
 
+def test_gr4jprod(allclose):
+    X1s = np.linspace(10, 1000, 100)
+    mod = gr4j.GR4J()
+
+    for siteid in data_reader.SITEIDS:
+        df = data_reader.get_data(siteid, "daily")
+        inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+        mod.allocate(inputs, noutputs=mod.noutputsmax)
+
+        for X1 in X1s:
+            mod.X1 = X1
+            mod.initialise_fromdata()
+            mod.run()
+            sims = mod.to_dataframe()
+
+
+            import pdb; pdb.set_trace()
+
+
 
 def test_reservoir_equation_gr4j(allclose):
     funs = [
@@ -583,9 +605,20 @@ def test_reservoir_equation_gr4j(allclose):
         lambda x: -x*(2-x), \
         lambda x: -(4/9*x)**5/4
     ]
-    alphas = np.linspace(0., 1.2, 10)
-    scr = np.ones(3)
-    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
+    alphas = np.linspace(0., 1.2, 3)
+
+    start, end = "2022-02", "2022-04"
+
+    for siteid in data_reader.SITEIDS:
+        df = data_reader.get_data(siteid, "daily")
+        df = df.loc[start:end]
+
+        scalings = np.ones((len(df), 3))
+        scalings[:, :2] = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+        scr = scalings.mean(axis=0)
+        nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
+
+        import pdb; pdb.set_trace()
 
 
     return

@@ -9,7 +9,7 @@
 
 #include "c_rezeq_core.h"
 
-int c_run(int nalphas, int nfluxes, int nval, double delta,
+int c_model(int nalphas, int nfluxes, int nval, double delta,
                             double * alphas,
                             double * scalings,
                             double nu,

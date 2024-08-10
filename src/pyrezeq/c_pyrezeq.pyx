@@ -55,8 +55,8 @@ cdef extern from 'c_rezeq_core.h':
                                 double * s1,
                                 double * fluxes);
 
-cdef extern from 'c_rezeq_run.h':
-    int c_run(int nalphas, int nfluxes, int nval, double delta,
+cdef extern from 'c_rezeq_model.h':
+    int c_model(int nalphas, int nfluxes, int nval, double delta,
                                 double * alphas,
                                 double * scalings,
                                 double nu,
@@ -75,6 +75,11 @@ cdef extern from 'c_rezeq_steady.h':
 cdef extern from 'c_quadrouting.h':
     int c_quadrouting(int nval, double delta, double theta, double q0,
                         double s0, double *inflow, double * outflow)
+
+cdef extern from 'c_gr4jprod.h':
+    int c_gr4jprod(int nval, int nsubdiv, double X1, double s0,
+                        double *inputs,
+                        double * outputs)
 
 def __cinit__(self):
     pass
@@ -322,7 +327,7 @@ def run(double delta, \
         raise ValueError("fluxes.shape[0] != nval")
 
     # Run C code
-    return c_run(nalphas, nfluxes, nval, delta,
+    return c_model(nalphas, nfluxes, nval, delta,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
                                 nu,
@@ -346,4 +351,21 @@ def quadrouting(double delta, double theta, double q0, double s0,
     return c_quadrouting(nval, delta, theta, q0, s0,
                                 <double*> np.PyArray_DATA(inflows),
                                 <double*> np.PyArray_DATA(outflows))
+
+
+def gr4jprod(int nsubdiv, double X1, double s0,
+                    np.ndarray[double, ndim=2, mode='c'] inputs not None,
+                    np.ndarray[double, ndim=2, mode='c'] outputs not None):
+
+    cdef int nval = inputs.shape[0]
+    if inputs.shape[1]!=2:
+        raise ValueError("inputs.shape[1]!=2")
+    if nval!=outputs.shape[0]:
+        raise ValueError("rain.shape[0]!=outputs.shape[0]")
+    if outputs.shape[1]!=4:
+        raise ValueError("outputs.shape[1]!=4")
+
+    return c_gr4jprod(nval, nsubdiv, X1, s0,
+                                <double*> np.PyArray_DATA(inputs),
+                                <double*> np.PyArray_DATA(outputs))
 

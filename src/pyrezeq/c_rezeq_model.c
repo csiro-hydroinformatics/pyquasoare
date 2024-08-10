@@ -1,4 +1,4 @@
-#include "c_rezeq_run.h"
+#include "c_rezeq_model.h"
 
 /**
 * Integrate reservoir equation over multiple time steps:
@@ -7,7 +7,7 @@
 * - s1 [nval] : final states
 * - fluxes [nval, nfluxes] : flux computed
 **/
-int c_run(int nalphas, int nfluxes, int nval, double delta,
+int c_model(int nalphas, int nfluxes, int nval, double delta,
                             double * alphas,
                             double * scalings,
                             double nu,

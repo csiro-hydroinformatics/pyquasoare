@@ -132,7 +132,8 @@ def reservoir_function(request, selfun):
         alpha0, alpha1 = 0., 3.
 
     elif name == "genlogistic":
-        K, nu, alpha = 10., 0.8, 2
+        #K, nu, alpha = 10., 0.8, 2
+        K, nu, alpha = 10., 3., 1.
         fun = lambda x: alpha*(1-(x/K)**nu)*x
         dfun = lambda x: alpha*(1-(x/K)**nu)-alpha*nu*(x/K)**nu
         inflow = 0.
@@ -418,7 +419,8 @@ def test_optimize_vs_quad(allclose, reservoir_function):
         pytest.skip("Skip function")
 
     funs = [lambda x: inflow+fun(x)]
-    nalphas = 21
+    #nalphas = 21
+    nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
     scr = np.ones(len(funs))
     nu, amat, bmat, cmat, _, _ = approx.optimize_nu(funs, alphas, scr)
@@ -453,13 +455,13 @@ def test_optimize_vs_quad(allclose, reservoir_function):
         "x4": 0.5, \
         "x6": 0.3, \
         "x8": 0.2, \
-        "tanh": 1.0+1e-4, \
-        "exp": 1e-6, \
+        "tanh": 0.8, \
+        "exp": 1e-8, \
         "sin": 1.0+1e-4, \
-        "recip": 0.7, \
-        "recipquad": 0.9, \
+        "recip": 0.3, \
+        "recipquad": 0.2, \
         "runge": 1.0+1e-4, \
-        "ratio": 0.9, \
+        "ratio": 0.2, \
         "genlogistic": 0.9
     }
     ratio = rmse/rmse_quad

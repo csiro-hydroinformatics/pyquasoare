@@ -21,9 +21,10 @@ ext_rezeq=Extension(name="c_pyrezeq",
         "src/pyrezeq/c_pyrezeq.pyx",
         "src/pyrezeq/c_rezeq_utils.c",
         "src/pyrezeq/c_rezeq_core.c",
-        "src/pyrezeq/c_rezeq_run.c",
+        "src/pyrezeq/c_rezeq_model.c",
         "src/pyrezeq/c_rezeq_steady.c",
-        "src/pyrezeq/c_quadrouting.c"
+        "src/pyrezeq/c_quadrouting.c",
+        "src/pyrezeq/c_gr4jprod.c"
     ],
     extra_cflags=["-O3"],
     extra_compile_args=["-ffast-math"],

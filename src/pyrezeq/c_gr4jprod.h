@@ -10,8 +10,9 @@
 /* Define Error message */
 #define GR4JPROD_ERROR 457000
 
-int c_gr4jprod(int nval, int nsubdiv,double delta, double X1,
+int c_gr4jprod(int nval, int nsubdiv, double X1,
                         double s0,
-                        double *rain, double *pet,
-                        double * storage, double *actual_et, double * effective_rain);
+                        double *inputs,
+                        double * outputs);
+
 #endif
