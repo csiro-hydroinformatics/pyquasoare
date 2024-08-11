@@ -27,12 +27,13 @@ def model(delta, alphas, scalings, nu, \
     return niter, s1, fluxes
 
 
-def quadrouting(delta, theta, q0, s0, inflows):
+def nonlinrouting(nsubdiv, delta, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyrezeq.quadrouting(delta, theta, q0, s0, inflows, outflows)
+    ierr = c_pyrezeq.nonlinrouting(nsubdiv, delta, theta, nu, \
+                                    q0, s0, inflows, outflows)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.quadrouting returns {ierr}")
+        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr}")
 
     return outflows
 

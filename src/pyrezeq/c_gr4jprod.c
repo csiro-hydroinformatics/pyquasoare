@@ -53,6 +53,12 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
             PR += S-S2;
             S = S2;
         }
+
+        /* Store */
+        outputs[4*i] = S;
+        outputs[4*i+1] = PR;
+        outputs[4*i+2] = AE;
+        outputs[4*i+3] = PERC;
     }
 
     return 0;

@@ -72,9 +72,10 @@ cdef extern from 'c_rezeq_steady.h':
     int c_steady_state(double nu, double a, double b, double c, double steady[2]);
 
 
-cdef extern from 'c_quadrouting.h':
-    int c_quadrouting(int nval, double delta, double theta, double q0,
-                        double s0, double *inflow, double * outflow)
+cdef extern from 'c_nonlinrouting.h':
+    int c_nonlinrouting(int nval, int nsubdiv, double delta,
+                        double theta, double nu, double q0,
+                        double s0, double *inflows, double * outflows)
 
 cdef extern from 'c_gr4jprod.h':
     int c_gr4jprod(int nval, int nsubdiv, double X1, double s0,
@@ -340,7 +341,8 @@ def run(double delta, \
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def quadrouting(double delta, double theta, double q0, double s0,
+def nonlinrouting(int nsubdiv, double delta, double theta, double nu, \
+                    double q0, double s0,
                     np.ndarray[double, ndim=1, mode='c'] inflows not None,
                     np.ndarray[double, ndim=1, mode='c'] outflows not None):
 
@@ -348,7 +350,7 @@ def quadrouting(double delta, double theta, double q0, double s0,
     if nval!=outflows.shape[0]:
         raise ValueError("inflows.shape[0]!=outflows.shape[0]")
 
-    return c_quadrouting(nval, delta, theta, q0, s0,
+    return c_nonlinrouting(nval, nsubdiv, delta, theta, nu, q0, s0,
                                 <double*> np.PyArray_DATA(inflows),
                                 <double*> np.PyArray_DATA(outflows))
 
