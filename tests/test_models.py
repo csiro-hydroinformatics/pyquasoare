@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils
 
-from pyrezeq import models
+from pyrezeq import models, slow
 
 from test_approx import generate_samples, reservoir_function
 
@@ -30,10 +30,10 @@ def test_gr4jprod_vs_gr4j(allclose):
     X1s = np.linspace(10, 1000, 100)
     mod = gr4j.GR4J()
     nsubdiv = 1 # this is the config of original gr4j model
+    LOGGER.info("")
 
-    for siteid in data_reader.SITEIDS:
+    for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "daily")
-        #df = df.loc["2022-02-25": "2022-03-01"]
         inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
         mod.allocate(inputs, noutputs=mod.noutputsmax)
 
@@ -48,12 +48,50 @@ def test_gr4jprod_vs_gr4j(allclose):
 
             # Run alternative GR production with 1 subdiv
             gp = models.gr4jprod(nsubdiv, X1, s0, inputs)
+
+            errmax = np.abs(gp-expected).max()
+            if X1 == X1s[len(X1s)//2]:
+                mess = f"gr4jprod for site {isite+1}/x1={X1:0.1f}: errmax={errmax:3.3e}"
+                LOGGER.info(mess)
+
             assert allclose(gp, expected, atol=5e-4, rtol=1e-4)
+
+
+def test_gr4jprod_vs_numerical(allclose):
+    X1s = np.linspace(10, 1000, 10)
+    nsubdiv = 1000
+
+    for siteid in data_reader.SITEIDS:
+        df = data_reader.get_data(siteid, "daily")
+        # just 2022 because it takes too much time otherwise
+        inputs = df.loc["2022", ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+
+        for X1 in X1s:
+            s0 = X1/2
+            gp = models.gr4jprod(nsubdiv, X1, s0, inputs)
+
+            # Numerical simulation
+            numerical = np.zeros(len(gp))
+            s_start = s0
+            for i in range(len(inputs)):
+                p, e = inputs[i]/X1
+                funs = [lambda x: p*(1.-x**2)-e*x*(2.-x)-(4./9.*x)**5/4.]
+                dfuns = [lambda x: -2.*p*x-2.*e*(1.-x)-4./9.*(4./9.*x)**4]
+
+                _, s_end, _, _ = slow.integrate_forward_numerical(funs, dfuns, \
+                                                0, [s_start], [1.])
+
+                numerical[i] = s_end
+                s_start = s_end
+
+            assert allclose(gp[:, 0], numerical, atol=5e-4, rtol=1e-4)
+
 
 
 def test_nonlinrouting_vs_analytical(allclose):
     delta = 3600
     s0 = 0.
+    LOGGER.info("")
 
     for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "hourly")
@@ -61,6 +99,7 @@ def test_nonlinrouting_vs_analytical(allclose):
 
         inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
         q0 = inflows.quantile(0.9)
+        inflows = inflows.values
 
         # Stored volumne in 24h
         theta = q0*24*delta
@@ -83,16 +122,18 @@ def test_nonlinrouting_vs_analytical(allclose):
                 assert allclose(sim, inflows, atol=atol, rtol=rtol)
 
             # Simulation with high number of subdivisions
-            nsubdiv = 1000
+            nsubdiv = 10000
             sim = models.nonlinrouting(nsubdiv, delta, theta,\
                                         nu, q0, s0, inflows)
 
             # Analytical solution
             s_start = s0
+            s_start_split = s0
             expected = np.zeros_like(sim)
+            split = np.zeros_like(sim)
             qi_prev = 0.
             for i in range(len(inflows)):
-                qi = inflows.iloc[i]
+                qi = inflows[i]
 
                 if nu==1:
                     # analytical linear solution
@@ -104,8 +145,9 @@ def test_nonlinrouting_vs_analytical(allclose):
                     # w = exp(-q0/theta.Delta)
                     # u1 = 1+w*(u0-1)
                     # s1 = I.theta/q0*(1+w*(s0.q0/I/theta-1))
+                    # s1 = I.theta/q0.(1-w)+w*s0
                     w = math.exp(-q0/theta*delta)
-                    s_end = qi*theta/q0*(1+w*(s_start*q0/qi/theta-1))
+                    s_end = qi*theta/q0*(1-w)+w*s_start
 
                 elif nu==2:
                     # analytical quadratic solution
@@ -116,15 +158,17 @@ def test_nonlinrouting_vs_analytical(allclose):
                     # w = tanh(sqrt(q0.I)/theta.Delta)
                     # u1 = (u0+w)/(1+w.u0)
                     # A = sqrt(q0/I)/theta
-                    # s1 = (s0+A.w)/(1+w.s0/A)
+                    # s1 = (s0+w/A)/(1+w.A.s0)
                     A = math.sqrt(q0/qi)/theta
                     w = math.tanh(math.sqrt(q0*qi)/theta*delta)
-                    s_end = (s_start+A*w)/(1+w*s_start/A)
+                    s_end = (s_start+w/A)/(1+w*A*s_start)
 
                 expected[i] = (s_start-s_end)/delta+qi
                 s_start = s_end
                 qi_prev = qi
 
-            assert allclose(sim, expected, atol=5e-4, rtol=1e-4)
-
+            errmax = np.abs(sim-expected).max()
+            mess = f"nonlin routing for site {isite+1}/nu={nu}: errmax={errmax:3.3e}"
+            LOGGER.info(mess)
+            assert allclose(sim, expected, atol=1e-5, rtol=1e-4)
 

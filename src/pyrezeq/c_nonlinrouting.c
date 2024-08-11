@@ -5,11 +5,19 @@ int c_nonlinrouting(int nval, int nsubdiv, double delta,
                         double s0, double *inflows, double * outflows){
     int i, j;
     double linear_thresh = 1+1e-10;
-    double dt = 1./(double)nsubdiv;
+    double dt = delta/(double)nsubdiv;
     double s1, qi, qout;
     double qi_prev = 0;
 
-    if(nsubdiv<1 || nsubdiv>1000)
+    /* Constant used in routing model */
+    double omega;
+    if(nu>linear_thresh) {
+        omega = q0*dt/pow(theta, nu)*(nu-1);
+    } else {
+        omega = exp(-q0/theta*dt);
+    }
+
+    if(nsubdiv<1 || nsubdiv>10000)
         return NONLINROUT_ERROR + __LINE__;
 
     if(theta<1e-5)
@@ -32,9 +40,10 @@ int c_nonlinrouting(int nval, int nsubdiv, double delta,
         qi = isnan(qi) || qi<0 ? qi_prev : qi;
 
         /* Integrate */
+        s1 = s0;
         for(j=0; j<nsubdiv; j++){
             /* First operator : fixed inflow */
-            s1 = s0+qi*dt;
+            s1 = s1+qi*dt;
 
             /* Second operator : integrate ds/dt = -q0(s/theta)^nu */
             if(nu>linear_thresh) {
@@ -44,7 +53,7 @@ int c_nonlinrouting(int nval, int nsubdiv, double delta,
                  * s1^(1-nu)=s0^(1-nu)-q0/theta^nu.Delta.(1-nu)
                  * s1 = [s0^(1-nu)+q0/theta^nu.Delta.(nu-1)]^(1/(1-nu))
                  */
-                s1 = pow(pow(s1, 1-nu)+q0*pow(theta, nu)*(nu-1), 1./(1-nu));
+                s1 = pow(pow(s1, 1-nu)+omega, 1./(1-nu));
             } else {
                 /* Linear reservoir
                  * ds/dt = -q0(s/theta)
@@ -52,7 +61,7 @@ int c_nonlinrouting(int nval, int nsubdiv, double delta,
                  * log(s) = -q0/theta.Delta
                  * s1 = s0.exp(-q0/theta.Delta)
                  * */
-                s1 = s1*exp(-q0/theta*delta);
+                s1 = s1*omega;
             }
         }
 

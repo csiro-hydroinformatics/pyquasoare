@@ -5,10 +5,11 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
                         double *inputs,
                         double *outputs){
     int i, j;
-    double dt = 1./(double)nsubdiv;
     double S, SR, TWS, Pi, Ei, PR, PERC, S2;
     double P, E, PSi, ESi;
     double AE;
+
+    double dt = 1./(double)nsubdiv;
 
     /* Check input data */
     if(nsubdiv<1 || nsubdiv>1000)

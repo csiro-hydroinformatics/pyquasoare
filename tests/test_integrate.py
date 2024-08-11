@@ -601,9 +601,9 @@ def test_gr4jprod(allclose):
 
 def test_reservoir_equation_gr4j(allclose):
     funs = [
-        lambda x: 1-x**2, \
-        lambda x: -x*(2-x), \
-        lambda x: -(4/9*x)**5/4
+        lambda x: 1.-x**2, \
+        lambda x: -x*(2.-x), \
+        lambda x: -(4./9.*x)**5/4.
     ]
     alphas = np.linspace(0., 1.2, 3)
 
