@@ -16,7 +16,7 @@ resources:
             - azure-pipelines.yml
             - env_mini_v2.yml
 
-    - repository: pymge
+    - repository: pygme
       type: git
       name: pygme/pygme
       ref: refs/heads/master
