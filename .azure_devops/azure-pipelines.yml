@@ -76,6 +76,12 @@ steps:
 
 - script: |
     source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/pygme
+    python setup.py develop
+  displayName: pygme_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/pyrezeq
     python setup.py develop
   displayName: package_install
