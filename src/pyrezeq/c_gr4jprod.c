@@ -5,14 +5,14 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
                         double *inputs,
                         double *outputs){
     int i, j;
-    double S, SR, TWS, Pi, Ei, PR, PERC, S2;
+    double S, SR, PHI, PSI, Pi, Ei, PR, PERC, S2;
     double P, E, PSi, ESi;
     double AE;
 
     double dt = 1./(double)nsubdiv;
 
     /* Check input data */
-    if(nsubdiv<1 || nsubdiv>1000)
+    if(nsubdiv<1 || nsubdiv>10000)
         return GR4JPROD_ERROR + __LINE__;
 
     if(s0<1e-5 || s0>X1-1e-5)
@@ -36,20 +36,24 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
         PR = 0;
         PERC = 0;
 
+        /* integrate equations of sub step dt */
         for(j=0; j<nsubdiv; j++){
             /* Effective rainfall */
             SR = S/X1;
-            TWS = tanh(Pi/X1*dt);
-            PSi = X1*(1-SR*SR)*TWS/(1+SR*TWS);
+            PHI = tanh(Pi/X1*dt);
+            PSi = X1*(1-SR*SR)*PHI/(1+SR*PHI)/dt;
             PR += Pi-PSi;
-            /* Actual ET */
-            TWS = tanh(Ei/X1*dt);
-            ESi = S*(2-SR)*TWS/(1+(1-SR)*TWS);
-            AE += ESi+E-Ei;
+            /* Actual ET assuming SR is same because
+             * either Pi is 0 or Ei is 0
+             * */
+            PSI = tanh(Ei/X1*dt);
+            ESi = S*(2-SR)*PSI/(1+(1-SR)*PSI)/dt;
+            AE += ESi+P*dt-Pi;
+            /* balance so far */
             S += PSi-ESi;
             /* percolation */
             SR = S/X1/2.25;
-            S2 = S/sqrt(sqrt(1.+SR*SR*SR*SR));
+            S2 = S/sqrt(sqrt(1.+SR*SR*SR*SR*dt));
             PERC += S-S2;
             PR += S-S2;
             S = S2;
