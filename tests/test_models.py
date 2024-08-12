@@ -23,10 +23,9 @@ np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-LOGGER = iutils.get_logger("integrate", flog=FTEST / "test_integrate.log")
+LOGGER = iutils.get_logger("models", flog=FTEST / "test_models.log")
 
 def test_gr4jprod_nsubdiv(allclose):
-    X1s = np.linspace(50, 1000, 100)
     mod = gr4j.GR4J()
     nsubdiv = 1 # this is the config of original gr4j model
     LOGGER.info("")
@@ -67,7 +66,8 @@ def test_gr4jprod_vs_gr4j(allclose):
 
             errmax = np.abs(gp-expected).max()
             if X1 == X1s[len(X1s)//2]:
-                mess = f"gr4jprod for site {isite+1}/x1={X1:0.1f}: errmax={errmax:3.3e}"
+                mess = f"gr4jprod vs gr4j /site {isite+1}/x1={X1:0.1f}:"\
+                            +f" errmax={errmax:3.3e}"
                 LOGGER.info(mess)
 
             assert allclose(gp, expected, atol=1e-10)
@@ -75,12 +75,14 @@ def test_gr4jprod_vs_gr4j(allclose):
 
 def test_gr4jprod_vs_numerical(allclose):
     X1s = np.linspace(50, 1000, 10)
-    nsubdiv = 1000
+    nsubdiv = 10000
+    LOGGER.info("")
 
     for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "daily")
         # just 2022 because it takes too much time otherwise
         inputs = df.loc["2022", ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+        #inputs = inputs[55:65]
 
         for X1 in X1s:
             s0 = X1/2
@@ -92,8 +94,8 @@ def test_gr4jprod_vs_numerical(allclose):
             for i in range(len(inputs)):
                 # Scaled inputs
                 p, e = inputs[i]/X1
-                pi = max(p-e, 0)
-                ei = max(e-p, 0)
+                pi = max(p-e, 0) # if>0, ae=e
+                ei = max(e-p, 0) # if>0, ps=p -> pr=0
 
                 # GR4J instantaneous equations
                 nu = 1./2.25
@@ -111,25 +113,26 @@ def test_gr4jprod_vs_numerical(allclose):
 
                 _, out, _, _ = slow.integrate_forward_numerical(funs, dfuns, \
                                                 0, [u_start]+[0]*3, [1.])
-
                 numerical[i] = out*X1
 
-                # Correct PR and AE for interception
-                numerical[i][1] = p*X1-(out[1]+e-ei)*X1
+                # Correct PR with interception and percolation
+                numerical[i][1] = p*X1+(out[3]-out[1]+ei-e)*X1
+                # Correct AE with interception
                 numerical[i][2] += (p-pi)*X1
 
                 # loop
                 u_start = out[0]
 
-            #warm = 30
-            #err = np.abs(gp[warm:]-numerical[warm:])
-            #errmax = err.max()
             #import matplotlib.pyplot as plt
-            #fig, axs = plt.subplots(ncols=2, nrows=2, layout="tight")
+            #from hydrodiy.plot import putils
+            #fig, axs = plt.subplots(ncols=2, nrows=2, \
+            #                            figsize=(15, 12), layout="tight")
             #names = ["S", "PR", "AE", "PERC"]
             #for i, ax in enumerate(axs.flat):
-            #    ax.plot(numerical[:, i], "k-", label="numerical")
-            #    ax.plot(gp[:, i], "k--", label="split")
+            #    n, s1, s1000 = numerical[:, i], gp1[:, i], gp1000[:, i]
+            #    ax.plot(n, "k-", label="numerical")
+            #    #ax.plot(s1, "b--", label="split 1")
+            #    ax.plot(s1000, "b:", label="split 1000")
             #    #if names[i] == "AE":
             #    #    ax.plot(inputs[:, 0], "b:", label="rain")
             #    #    ax.plot(inputs[:, 1], "g:", label="pet")
@@ -137,13 +140,23 @@ def test_gr4jprod_vs_numerical(allclose):
             #    ax.legend(loc=2, ncol=2)
 
             #    tax = ax.twinx()
-            #    tax.plot(gp[:,i]-numerical[:, i], "r-", alpha=0.3)
-            #    tax.set(ylim=(-0.1, 0.1))
+            #    #tax.plot(s1-n, "r--", alpha=0.3)
+            #    tax.plot(s1000-n, "r:", alpha=0.3)
+
+            #    ymax = 1e-2
+            #    tax.set(ylim=(-ymax, ymax))
+            #    putils.line(tax, 1, 0, 0, 0, "-", lw=0.9, color="pink")
+
             #plt.show()
             #import pdb; pdb.set_trace()
 
-            # TODO !
-            #assert allclose(gp[warm:], numerical[warm:], atol=5e-4, rtol=1e-4)
+            errmax = np.abs(gp-numerical).max()
+            if X1 == X1s[len(X1s)//2]:
+                mess = f"gr4jprod vs num /site {isite+1}/x1={X1:0.1f}:"\
+                            +f" errmax={errmax:3.3e}"
+                LOGGER.info(mess)
+
+            assert allclose(numerical, gp, atol=1e-3, rtol=1e-4)
 
 
 
@@ -228,7 +241,7 @@ def test_nonlinrouting_vs_analytical(allclose):
 
             errmax = np.abs(sim-expected).max()
             errlogmax = np.abs(np.log(sim)-np.log(expected)).max()
-            mess = f"nonlin routing for site {isite+1}/nu={nu}: "\
+            mess = f"nonlin routing /site {isite+1}/nu={nu}: "\
                         f"errmax={errmax:3.3e} errlogmax={errlogmax:3.3e}"
             LOGGER.info(mess)
             assert allclose(sim, expected, atol=1e-5, rtol=1e-4)
