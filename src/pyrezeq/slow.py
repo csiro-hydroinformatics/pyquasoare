@@ -6,30 +6,33 @@ from scipy.integrate import solve_ivp
 
 from pyrezeq.approx import REZEQ_EPS, isequal, notequal
 
-def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
+def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
                             fun_args=None):
     method = method.title()
-    nfluxes = len(funs)
-    assert len(dfuns) == nfluxes
-    v = np.zeros(nfluxes)
+    nfluxes = len(fluxes)
+    assert len(dfluxes) == nfluxes
+
+    v = np.zeros(nfluxes+1)
     def fun_ivp(t, y):
+        v[0] = sumfun(y[0])
         for i in range(nfluxes):
-            v[i] = funs[i](y[0])
+            v[i+1] = fluxes[i](y[0])
         return v
 
-    m = np.zeros((nfluxes, nfluxes))
+    m = np.zeros((nfluxes+1, nfluxes+1))
     jac_ivp = None
     if method == "Radau":
         def jac_ivp(t, y):
+            m[0, 0] = dsumfun(y[0])
             for i in range(nfluxes):
-                m[i, 0] = dfuns[i](y[0])
+                m[i+1, 0] = dfluxes[i](y[0])
             return m
 
     res = solve_ivp(\
             fun=fun_ivp, \
             t_span=[t0, t[-1]], \
-            y0=s0, \
+            y0=[s0]+[0.]*nfluxes, \
             method=method, \
             max_step=max_step, \
             jac=jac_ivp, \
@@ -43,83 +46,11 @@ def integrate_forward_numerical(funs, dfuns, t0, s0, t, \
     return res.t, res.y.T.squeeze(), nev, njac
 
 
-def routing_numerical(delta, theta, q0, s0, \
-                        inflows, exponent=2, \
-                        method="Radau", \
-                        max_step_frac=np.inf):
-    def fun(t, y, qi):
-        return qi-q0*(y/theta)**exponent
-
-    def dfun(t, y, qi):
-        return np.array([-q0*nu*(y/theta)**(exponent-1)])
-
-    nval = len(inflows)
-    fluxes = []
-    store = []
-    for t in range(nval):
-        qi = inflows.iloc[t]
-        res = integrate_forward_numerical(fun, dfun, 0, s0, delta, \
-                            method=method, max_step=delta*max_step_frac, \
-                            fun_args=(qi, ))
-        raise ValueError("TODO")
-        s1 = res.y[0][-1]
-        fluxes.append((s0-s1)/delta+qi)
-        store.append(s1)
-
-        # Loop
-        s0 = s1
-
-    return np.array(store), np.array(fluxes)
-
 # --- REZEQ functions translated from C for slow implementation ---
-def isnull(x):
-    return 1 if abs(x)<REZEQ_EPS else 0
+def quad_fun(a, b, c, s):
+    return a*s*s+b*s+c;
 
-def notnull(x):
-    return 1-isnull(x)
-
-def ispos(x):
-    return 1 if x>REZEQ_EPS else 0
-
-def isneg(x):
-    return 1 if x<-REZEQ_EPS else 0
-
-
-def approx_fun(nu, a, b, c, s):
-    f1 = a
-    f2 = b*math.exp(-nu*s)
-    f3 = c*math.exp(nu*s)
-
-    if nu<0 or np.isnan(nu):
-        return np.nan
-
-    if notnull(f2):
-        f1 += f2;
-
-    if notnull(f3):
-        f1 += f3;
-
-    return f1;
-
-
-def approx_jac(nu, a, b, c, s):
-    j1 = 0;
-    j2 = -nu*b*math.exp(-nu*s)
-    j3 = nu*c*math.exp(nu*s)
-
-    if nu<0 or np.isnan(nu):
-        return np.nan
-
-    if notnull(j2):
-        j1 += j2
-
-    if notnull(j3):
-        j1 += j3
-
-    return j1
-
-
-def integrate_delta_t_max(nu, a, b, c, s0):
+def quad_delta_t_max(a, b, c, s0):
     e0 = math.exp(-nu*s0)
     Delta = a*a-4*b*c
 

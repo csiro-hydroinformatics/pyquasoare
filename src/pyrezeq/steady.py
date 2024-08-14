@@ -1,10 +1,6 @@
 import math
 import numpy as np
 
-from scipy.optimize import minimize_scalar, minimize
-from scipy.special import expit, logit, softmax
-from scipy.integrate import solve_ivp
-
 from pyrezeq import has_c_module, approx
 
 if has_c_module():
@@ -15,18 +11,18 @@ else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
 
-def steady_state(nu, a, b, c):
+def quad_steady(a, b, c):
     if approx.all_scalar(a, b, c):
         steady = np.zeros(2)
-        ierr = c_pyrezeq.steady_state(nu, a, b, c, steady)
+        ierr = c_pyrezeq.quad_steady(a, b, c, steady)
     else:
         a, b, c = approx.get_vectors(a, b, c)
         steady = np.zeros((len(a), 2))
-        ierr = c_pyrezeq.steady_state_vect(nu, a, b, c, steady)
+        ierr = c_pyrezeq.quad_steady_vect(a, b, c, steady)
     return steady
 
 
-def steady_state_scalings(alphas, nu, scalings, \
+def quad_steady_scalings(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling):

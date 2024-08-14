@@ -23,6 +23,7 @@ ext_rezeq=Extension(name="c_pyrezeq",
         "src/pyrezeq/c_rezeq_core.c",
         "src/pyrezeq/c_rezeq_model.c",
         "src/pyrezeq/c_rezeq_steady.c",
+        "src/pyrezeq/c_rezeq_quad.c",
         "src/pyrezeq/c_nonlinrouting.c",
         "src/pyrezeq/c_gr4jprod.c"
     ],

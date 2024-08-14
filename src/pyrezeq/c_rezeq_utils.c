@@ -4,12 +4,12 @@ double c_get_eps() {
     return REZEQ_EPS;
 }
 
-double c_get_continuity_atol(){
-    return REZEQ_CONTINUITY_ATOL;
+double c_get_atol(){
+    return REZEQ_ATOL;
 }
 
-double c_get_continuity_rtol(){
-    return REZEQ_CONTINUITY_RTOL;
+double c_get_rtol(){
+    return REZEQ_RTOL;
 }
 
 double c_get_nan() {
@@ -29,20 +29,12 @@ int c_get_nfluxes_max(){
     return REZEQ_NFLUXES_MAX;
 }
 
-int isnull(double x){
-    return fabs(x)<REZEQ_EPS ? 1 : 0;
-}
-
 int notnull(double x){
-    return 1-isnull(x);
+    return x<0 || x>0 ? 1 : 0;
 }
 
-int ispos(double x){
-    return x>REZEQ_EPS ? 1 : 0;
-}
-
-int isneg(double x){
-    return x<-REZEQ_EPS ? 1 : 0;
+int isnull(double x){
+    return 1-notnull(x);
 }
 
 int isequal(double x, double y, double atol, double rtol){
@@ -51,6 +43,14 @@ int isequal(double x, double y, double atol, double rtol){
 
 int notequal(double x, double y, double atol, double rtol){
     return 1-isequal(x, y, atol, rtol);
+}
+
+double sign(double x){
+    return x>=0 ? 1. : -1.;
+}
+
+double sqrtabs(double x){
+    return sqrt(sign(x)*x);
 }
 
 
@@ -97,6 +97,27 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == REZEQ_ERROR_INTEGRATE_TSTART_EQUAL_TEND)
         strncpy(message, "end time identical to start time", len);
+
+    else if(err_code == REZEQ_QUAD_APPROX_SAMEALPHA)
+        strncpy(message, "Collapsed approximation band", len);
+
+    else if(err_code == REZEQ_QUAD_TIME_TOOLOW)
+        strncpy(message, "Integration time is too low", len);
+
+    else if(err_code == REZEQ_QUAD_FAILEDSUMCHECK)
+        strncpy(message, "Coefficients sum is not consistent", len);
+
+    else if(err_code == REZEQ_QUAD_NFLUXES_TOO_LARGE)
+        strncpy(message, "Number of fluxes is too large", len);
+
+    else if(err_code == REZEQ_QUAD_NAN_COEFF)
+        strncpy(message, "Coefficient is nan", len);
+
+    else if(err_code == REZEQ_QUAD_NOT_CONTINUOUS)
+        strncpy(message, "Function is not continuous", len);
+
+    else if(err_code == REZEQ_QUAD_NO_CONVERGENCE)
+        strncpy(message, "Algorithm did not converge", len);
 
     else
         strncpy(message, "Error code not found", len);

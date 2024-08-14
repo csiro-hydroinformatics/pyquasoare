@@ -6,8 +6,8 @@ np.import_array()
 # -- HEADERS --
 cdef extern from 'c_rezeq_utils.h':
     double c_get_eps()
-    double c_get_continuity_atol()
-    double c_get_continuity_rtol()
+    double c_get_atol()
+    double c_get_rtol()
     double c_get_inf()
     double c_get_nan()
     int c_get_nfluxes_max()
@@ -17,59 +17,49 @@ cdef extern from 'c_rezeq_utils.h':
     int c_get_error_message(int err_code, char message[100]);
 
 
-cdef extern from 'c_rezeq_core.h':
-    double c_approx_fun(double nu, double a, double b, double c, double s);
+cdef extern from 'c_rezeq_quad.h':
+    double c_quad_fun(double a, double b, double c, double s)
+    double c_quad_grad(double a, double b, double c, double s)
 
-    double c_integrate_forward(double nu, double a, double b, double c,
-                                    double t0, double s0, double t);
-    double c_integrate_delta_t_max(double nu, double a, double b, double c, double s0);
+    int c_quad_steady(double a, double b, double c, double steady[2])
 
-    double c_integrate_inverse(double nu, double a, double b, double c,
-                                        double s0, double s1);
+    int c_quad_coefficients(double a0, double a1,
+                                double f0, double f1, double fm,
+                                double coefs[3])
 
-    int c_increment_fluxes(int nfluxes,
-                            double nu,
+    double c_quad_delta_t_max(double a, double b, double c, double s0)
+
+    double c_quad_forward(double a, double b, double c,
+                            double t0, double s0, double t)
+
+    double c_quad_inverse(double a, double b, double c,
+                                    double s0, double s1)
+
+    int c_quad_fluxes(int nfluxes,
                             double * aj_vector,
                             double * bj_vector,
                             double * cj_vector,
-                            double aoj,
-                            double boj,
-                            double coj,
-                            double t0,
-                            double t1,
-                            double s0,
-                            double s1,
-                            double * fluxes);
+                            double aoj, double boj, double coj,
+                            double t0, double t1, double s0, double s1,
+                            double * fluxes)
 
-    int c_integrate(int nalphas, int nfluxes,
-                                double * alphas,
-                                double * scalings,
-                                double nu,
+    int c_quad_integrate(int nalphas, int nfluxes,
+                                double * alphas, double * scalings,
                                 double * a_matrix_noscaling,
                                 double * b_matrix_noscaling,
                                 double * c_matrix_noscaling,
                                 double t0,
                                 double s0,
                                 double delta,
-                                int * niter,
-                                double * s1,
-                                double * fluxes);
+                                int *niter, double * s1, double * fluxes)
 
-cdef extern from 'c_rezeq_model.h':
-    int c_model(int nalphas, int nfluxes, int nval, double delta,
-                                double * alphas,
-                                double * scalings,
-                                double nu,
-                                double * a_matrix_noscaling,
-                                double * b_matrix_noscaling,
-                                double * c_matrix_noscaling,
-                                double s0,
-                                int * niter,
-                                double * s_end,
-                                double * fluxes);
-
-cdef extern from 'c_rezeq_steady.h':
-    int c_steady_state(double nu, double a, double b, double c, double steady[2]);
+    int c_quad_model(int nalphas, int nfluxes, int nval, double delta,
+                            double * alphas, double * scalings,
+                            double * a_matrix_noscaling,
+                            double * b_matrix_noscaling,
+                            double * c_matrix_noscaling,
+                            double s0, int * niter,
+                            double * s1, double * fluxes);
 
 
 cdef extern from 'c_nonlinrouting.h':
@@ -85,15 +75,14 @@ cdef extern from 'c_gr4jprod.h':
 def __cinit__(self):
     pass
 
-
 def get_eps():
     return c_get_eps()
 
-def get_continuity_atol():
-    return c_get_continuity_atol()
+def get_atol():
+    return c_get_atol()
 
-def get_continuity_rtol():
-    return c_get_continuity_rtol()
+def get_rtol():
+    return c_get_rtol()
 
 def get_nan():
     return c_get_nan()
@@ -110,12 +99,10 @@ def get_error_message(int err_code):
     return message
 
 
-def approx_fun(double nu, double a, double b, double c, double s):
-    return c_approx_fun(nu, a, b, c, s)
+def quad_fun(double a, double b, double c, double s):
+    return c_quad_fun(a, b, c, s)
 
-
-def approx_fun_vect(double nu,
-                np.ndarray[double, ndim=1, mode='c'] a not None,\
+def quad_fun_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
                 np.ndarray[double, ndim=1, mode='c'] b not None,\
                 np.ndarray[double, ndim=1, mode='c'] c not None,\
                 np.ndarray[double, ndim=1, mode='c'] s not None,\
@@ -128,20 +115,48 @@ def approx_fun_vect(double nu,
 
     cdef int k
     for k in range(nval):
-        o[k] = c_approx_fun(nu, a[k], b[k], c[k], s[k])
+        o[k] = c_quad_fun(a[k], b[k], c[k], s[k])
 
     return 0
 
 
-def steady_state(double nu, double a, double b, double c, \
+def quad_grad(double a, double b, double c, double s):
+    return c_quad_grad(a, b, c, s)
+
+def quad_grad_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
+                np.ndarray[double, ndim=1, mode='c'] b not None,\
+                np.ndarray[double, ndim=1, mode='c'] c not None,\
+                np.ndarray[double, ndim=1, mode='c'] s not None,\
+                np.ndarray[double, ndim=1, mode='c'] o not None):
+    cdef int nval = a.shape[0]
+    assert nval == b.shape[0]
+    assert nval == c.shape[0]
+    assert nval == s.shape[0]
+    assert nval == o.shape[0]
+
+    cdef int k
+    for k in range(nval):
+        o[k] = c_quad_grad(a[k], b[k], c[k], s[k])
+
+    return 0
+
+
+
+def quad_coefficients(double a0, double a1,
+                        double f0, double f1, double fm,
+                        np.ndarray[double, ndim=1, mode='c'] coefs):
+    assert coefs.shape[0] == 3
+    return c_quad_coefficients(a0, a1, f0, f1, fm,
+                                <double*> np.PyArray_DATA(coefs))
+
+
+def quad_steady(double a, double b, double c, \
                         np.ndarray[double, ndim=1, mode='c'] steady not None):
     assert steady.shape[0] == 2
-    return c_steady_state(nu, a, b, c, \
-                            <double*> np.PyArray_DATA(steady))
+    return c_quad_steady(a, b, c, <double*> np.PyArray_DATA(steady))
 
 
-def steady_state_vect(double nu, \
-                        np.ndarray[double, ndim=1, mode='c'] a not None, \
+def quad_steady_vect(np.ndarray[double, ndim=1, mode='c'] a not None, \
                         np.ndarray[double, ndim=1, mode='c'] b not None, \
                         np.ndarray[double, ndim=1, mode='c'] c not None, \
                         np.ndarray[double, ndim=2, mode='c'] steady not None):
@@ -153,17 +168,17 @@ def steady_state_vect(double nu, \
     assert steady.shape[1] == 2
 
     for k in range(nval):
-        c_steady_state(nu, a[k], b[k], c[k], \
-                            <double*> np.PyArray_DATA(steady[k]))
+        c_quad_steady(a[k], b[k], c[k], <double*> np.PyArray_DATA(steady[k]))
+
     return 0
 
 
-def integrate_forward(double nu, double a, double b, double c, \
+def quad_forward(double a, double b, double c, \
                         double t0, double s0, double t):
-    return c_integrate_forward(nu, a, b, c, t0, s0, t)
+    return c_quad_forward(a, b, c, t0, s0, t)
 
 
-def integrate_forward_vect(double nu, double a, double b, double c, \
+def quad_forward_vect(double a, double b, double c, \
                         double t0, double s0, \
                         np.ndarray[double, ndim=1, mode='c'] t not None,\
                         np.ndarray[double, ndim=1, mode='c'] s not None):
@@ -171,28 +186,27 @@ def integrate_forward_vect(double nu, double a, double b, double c, \
     cdef int i
     assert s.shape[0] == nval
     for i in range(nval):
-        s[i] = c_integrate_forward(nu, a, b, c, t0, s0, t[i])
+        s[i] = c_quad_forward(a, b, c, t0, s0, t[i])
     return 0
 
 
-def integrate_delta_t_max(double nu, double a, double b, double c, double s0):
-    return c_integrate_delta_t_max(nu, a, b, c, s0)
+def quad_delta_t_max(double a, double b, double c, double s0):
+    return c_quad_delta_t_max(a, b, c, s0)
 
 
-def integrate_inverse(double nu, double a, double b, double c, \
+def quad_inverse(double a, double b, double c, \
                             double s0, double s1):
-    return c_integrate_inverse(nu, a, b, c, s0, s1)
+    return c_quad_inverse(a, b, c, s0, s1)
 
 
-def integrate_inverse_vect(double nu, double a, double b, double c, \
-                            double s0, \
+def quad_inverse_vect(double a, double b, double c, double s0, \
                             np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                             np.ndarray[double, ndim=1, mode='c'] t not None):
     cdef int nval = s1.shape[0]
     cdef int i
     assert t.shape[0] == nval
     for i in range(nval):
-            t[i] = c_integrate_inverse(nu, a, b, c, s0, s1[i])
+            t[i] = c_quad_inverse(a, b, c, s0, s1[i])
     return 0
 
 
@@ -202,8 +216,7 @@ def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     return c_find_alpha(nalphas, <double*> np.PyArray_DATA(alphas), s0)
 
 
-def increment_fluxes(double nu, \
-                    np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
+def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
                     double aoj, double boj, double coj, \
@@ -220,7 +233,7 @@ def increment_fluxes(double nu, \
         raise ValueError("cj_vector.shape[0] != nfluxes")
 
     # Run C code
-    return c_increment_fluxes(nfluxes, nu,
+    return c_quad_fluxes(nfluxes,
                             <double*> np.PyArray_DATA(aj_vector),
                             <double*> np.PyArray_DATA(bj_vector),
                             <double*> np.PyArray_DATA(cj_vector),
@@ -228,9 +241,8 @@ def increment_fluxes(double nu, \
                             <double*> np.PyArray_DATA(fluxes))
 
 
-def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
+def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                         np.ndarray[double, ndim=1, mode='c'] scalings not None,
-                        double nu, \
                         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
@@ -267,10 +279,9 @@ def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         raise ValueError("fluxes.shape[0] != nfluxes")
 
     # Run C code
-    return c_integrate(nalphas, nfluxes,
+    return c_quad_integrate(nalphas, nfluxes,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
-                                nu,
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
@@ -280,10 +291,9 @@ def integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def run(double delta, \
+def quad_model(double delta, \
         np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         np.ndarray[double, ndim=2, mode='c'] scalings not None,
-        double nu,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
@@ -328,10 +338,9 @@ def run(double delta, \
         raise ValueError("fluxes.shape[0] != nval")
 
     # Run C code
-    return c_model(nalphas, nfluxes, nval, delta,
+    return c_quad_model(nalphas, nfluxes, nval, delta,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
-                                nu,
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),

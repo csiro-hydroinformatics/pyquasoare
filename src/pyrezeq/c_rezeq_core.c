@@ -70,7 +70,7 @@ double c_integrate_delta_t_max(double nu, double a, double b, double c,
             delta_tmax = fmin(delta_tmax, a>-c/e0 ?
                                 4*b*e0/(a+2*b*e0)/nu/a : c_get_inf());
         }
-        else if (isneg(Delta)){
+        else if (Delta<0){
             delta_tmax = lam0<0 ? atan(-1./lam0)*2/nu/sqD : c_get_inf();
             tmp = atan((lam0*sqD-a)/(a*lam0+sqD))*2/nu/sqD;
             tmp = tmp>0 ? tmp : c_get_inf();
@@ -98,7 +98,7 @@ double c_integrate_forward(double nu, double a, double b, double c,
     if(nu<0 || isnan(nu))
         return c_get_nan();
 
-    if(isneg(t-t0))
+    if(t-t0<0)
         return c_get_nan();
 
     if(isequal(t, t0, REZEQ_EPS, 0.))
@@ -131,9 +131,9 @@ double c_integrate_forward(double nu, double a, double b, double c,
         }
         else {
             /* Non zero determinant */
-            sgn = isneg(Delta) ? -1 : 1;
+            sgn = Delta<0 ? -1 : 1;
             sqD = sqrt(sgn*Delta);
-            omeg = isneg(Delta) ? tan(nu*sqD*(t-t0)/2) : tanh(nu*sqD*(t-t0)/2);
+            omeg = Delta<0 ? tan(nu*sqD*(t-t0)/2) : tanh(nu*sqD*(t-t0)/2);
             lam0 = (2*b*e0+a)/sqD;
             s1 = -log((lam0+sgn*omeg)/(1+lam0*omeg)*sqD/2/b-ra2b)/nu;
         }
@@ -179,7 +179,7 @@ double c_integrate_inverse(double nu, double a, double b, double c,
             tau1 = 2./(a+2*b*e1)/nu;
             return tau1-tau0;
         }
-        else if (ispos(Delta)){
+        else if (Delta>0){
             L = (1+lam1)*(1-lam0)/(1-lam1)/(1+lam0);
             return L>0 ? 1./sqD/nu*log(L) : c_get_nan();
         }
@@ -234,7 +234,7 @@ int c_increment_fluxes(int nfluxes, double nu,
             }
             else {
                 lam0 = (2*b*e0+a)/sqD;
-                if (ispos(Delta)){
+                if (Delta>0){
                     w = nu*sqD/2*dt;
                     /* Care with overflow */
                     if(w>100) {
@@ -348,7 +348,7 @@ int c_integrate(int nalphas, int nfluxes,
     }
 
     /* Time loop */
-    while (ispos(t_final-t_end) && nit<niter_max) {
+    while ((t_final-t_end>0) && nit<niter_max) {
         nit += 1;
 
         /* Extrapolation is triggered if s_start is
@@ -514,7 +514,7 @@ int c_integrate(int nalphas, int nfluxes,
     }
 
     /* Convergence problem */
-    if(ispos(t_final-t_end)) {
+    if(t_final-t_end>0) {
         return REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE;
     }
     return 0;

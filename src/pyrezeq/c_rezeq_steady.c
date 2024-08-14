@@ -12,7 +12,7 @@ int c_steady_state(double nu, double a, double b, double c, double steady[2]){
         - all params are pos
         - b and c are zeros
     */
-    if((ispos(a) && ispos(b) && ispos(c))
+    if(((a>0) && (b>0) && (c>0))
                 || (isnan(a)||isnan(b)||isnan(c))
                 || (isnull(b)&&isnull(c)) ) {
         return 0;
@@ -28,7 +28,7 @@ int c_steady_state(double nu, double a, double b, double c, double steady[2]){
         if(isnull(Delta)){
             steady[0] = notnull(a) ? log(-a/2/c)/nu : s1;
         }
-        else if(ispos(Delta)){
+        else if(Delta>0){
             p = a/c;
             q = b/c;
             sqD = sqrt(p*p-4*q);
