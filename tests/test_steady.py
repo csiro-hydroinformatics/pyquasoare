@@ -23,52 +23,38 @@ LOGGER = iutils.get_logger("steady", flog=FTEST / "test_steady.log")
 
 
 def test_steady_state(allclose, generate_samples):
-    cname, case, params, nus, _, _ = generate_samples
+    cname, case, params, _, _ = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip("Skip param config")
 
-    stdy, feval = [], []
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
-    ones = np.ones(len(a))
-    for nu in nus:
-        s = steady.steady_state(nu, a, b, c)
-        f = np.column_stack([approx.approx_fun(nu, a, b, c, sc)\
-                                for sc in s.T])
-        stdy.append(s)
-        feval.append(f)
+    stdy = steady.quad_steady(a, b, c)
+    f1 = approx.quad_fun(a, b, c, stdy[:, 0])
+    f2 = approx.quad_fun(a, b, c, stdy[:, 1])
 
-    stdy = np.row_stack(stdy)
-    feval = np.row_stack(feval)
+    ina = np.array([approx.isnull(aa)==1 for aa in a])
+    nnb = np.array([approx.notnull(aa)==1 for aa in a])
+    ilin = ina & nnb
+    if ilin.sum()>0:
+        assert allclose(f1[ilin], 0)
+        assert np.all(np.isnan(stdy[ilin, 1]))
 
-    if case<4:
-        # No steady state
-        assert np.all(np.isnan(stdy))
-        return
+    delta = b**2-4*a*c
+    nna = ~ina
+    ipos = (delta>0) & nna
+    if ipos.sum()>0:
+        assert allclose(f1[ipos], 0)
+        assert allclose(f2[ipos], 0)
 
-    if np.all(np.isnan(stdy)):
-        pytest.skip("No steady state found")
+    ind = np.array([approx.isnull(d)==1 for d in delta])
+    izero = ind & nna
+    if izero.sum()>0:
+        az, bz, cz = a[izero], b[izero], c[izero]
+        rz = stdy[izero, 0]
+        assert allclose(f1[izero], 0)
+        assert np.all(np.isnan(stdy[izero, 1]))
 
-    if case>=8:
-        # 2 distinct roots
-        Delta = a**2-4*b*c
-        ipos = np.repeat(Delta>0, ntry)
-        iboth = np.sum(~np.isnan(stdy), axis=1)==2
-        assert np.all(np.diff(stdy[iboth&ipos], axis=1)>0)
-
-    ione = np.isnan(stdy).sum(axis=1)==1
-    nbnan = np.isnan(stdy[ione, 0]).sum()
-    errmess = f"Number of nan in first column = {nbnan}"
-    assert nbnan == 0, LOGGER.error(errmess)
-
-    # check steady state
-    err_max = np.nanmax(np.abs(feval))
-    assert err_max < 5e-4
-
-    nskipped = np.all(np.isnan(feval), axis=1).sum()
-    mess = f"[{case}:{cname}] steady: errmax = {err_max:3.2e}"\
-            f"  skipped={(100.*nskipped)/len(feval):0.0f}%"
-    LOGGER.info(mess)
 
 
 def test_steady_state_scalings(allclose, generate_samples):

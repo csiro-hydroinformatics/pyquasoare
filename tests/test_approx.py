@@ -16,7 +16,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 15
+NCASES = 10
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -169,67 +169,63 @@ def generate_samples(ntry, selcase, request):
     v0, v1 = -5*np.ones(3), 5*np.ones(3)
 
     if case == 1:
-        name = "all zero except a"
-        v0[1:] = 0
-        v1[1:] = 0
-    if case == 2:
-        name = "all zero except c"
-        v0[:2] = 0
-        v1[:2] = 0
-    if case == 3:
-        name = "all zero except b"
-        v0[[0, 2]] = 0
-        v1[[0, 2]] = 0
-    elif case == 4:
+        name = "a and b are zero"
+        v0[:-1] = 0
+        v1[:-1] = 0
+    elif case == 2:
         name = "a is zero"
         v0[0] = 0
         v1[0] = 0
-    elif case == 5:
-        name = "b is zero"
-        v0[1] = 0
-        v1[1] = 0
-    elif case == 6:
-        name = "c is zero"
-        v0[2] = 0
-        v1[2] = 0
 
     rnd = np.random.uniform(0, 1, size=(ntry, 3))
     params = v0[None, :]+(v1-v0)[None, :]*rnd
 
     eps = approx.REZEQ_EPS
-    if case == 7:
+    if case == 3:
         name = "Determinant is null"
-        params[:, 2] = params[:, 0]**2/4/params[:, 1]
-    elif case == 8:
-        name = "Constraint b=-c"
-        params[:, 2] = -params[:, 1]
-    elif case == 9:
-        name = "Constraint b=c"
-        params[:, 2] = params[:, 1]
-    elif case ==10:
+        params[:, 2] = params[:, 1]**2/4/params[:, 0]
+    elif case == 4:
+        name = "Determinant is negative"
+        a, b, c = params.T
+        delta = b**2-4*a*c
+        delta *= -np.sign(delta) # Turn all delta to neg
+        x1 = (-b-np.sqrt(delta+0j))/2/a
+        x2 = (-b+np.sqrt(delta+0j))/2/a
+        s, p = x1+x2, x1*x2
+        params[:, 1] = (-s*a).real # Reconstruct coefficients from roots
+        params[:, 2] = (p*a).real
+
+    elif case == 5:
+        name = "Determinant is positive"
+        a, b, c = params.T
+        delta = b**2-4*a*c
+        delta *= np.sign(delta) # Turn all delta to pos
+        x1 = (-b-np.sqrt(delta+0j))/2/a
+        x2 = (-b+np.sqrt(delta+0j))/2/a
+        s, p = x1+x2, x1*x2
+        params[:, 1] = (-s*a).real # Reconstruct coefficients from roots
+        params[:, 2] = (p*a).real
+
+    elif case == 6:
         name = "General"
-    elif case ==11:
+    elif case == 7:
         name = "General+large scale"
         params *= 1000
-    elif case ==12:
+    elif case == 8:
         name = "General+low scale"
         params /= 1000
-    elif case ==13:
+    elif case == 9:
+        name = "a and b close to zero"
+        params[:, :2] = np.random.uniform(2*eps, 3*eps, size=(len(params), 2))
+    elif case == 10:
         name = "a close to zero"
         params[:, 0] = np.random.uniform(2*eps, 3*eps, size=len(params))
-    elif case ==14:
-        name = "b close to zero"
-        params[:, 1] = np.random.uniform(2*eps, 3*eps, size=len(params))
-    elif case ==15:
-        name = "c close to zero"
-        params[:, 2] = np.random.uniform(2*eps, 3*eps, size=len(params))
 
     # Other data
-    nus = np.exp(np.random.uniform(-2, 2, size=ntry))
     s0s = np.random.uniform(-5, 5, size=ntry)
     Tmax = 20
 
-    return f"{name:20}", case, params, nus, s0s, Tmax
+    return f"{name:20}", case, params, s0s, Tmax
 
 
 
@@ -246,105 +242,86 @@ def test_get_inf():
     assert np.isinf(inf)
 
 
-def test_approx_fun(allclose, generate_samples):
-    cname, case, params, nus, s0s, Tmax = generate_samples
+def test_quad_fun(allclose, generate_samples):
+    cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip("Skip param config")
 
-    for itry, ((a, b, c), nu, s0) in enumerate(zip(params, nus, s0s)):
-        o = approx.approx_fun(nu, a, b, c, s0s)
-        expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
+    for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
+        o = approx.quad_fun(a, b, c, s0)
+        expected = a*s0**2+b*s0+c
         assert allclose(o, expected)
 
-        o_slow = [slow.approx_fun(nu, a, b, c, s) for s in s0s]
-        assert allclose(o_slow, expected)
+        o = approx.quad_grad(a, b, c, s0)
+        expected = 2*a*s0+b
+        assert allclose(o, expected)
+
+        #o_slow = [slow.approx_fun(nu, a, b, c, s) for s in s0s]
+        #assert allclose(o_slow, expected)
 
     a, b, c = [np.ascontiguousarray(v) for v in params.T]
-    o = approx.approx_fun(nu, a, b, c, s0s)
-    expected = a+b*np.exp(-nu*s0s)+c*np.exp(nu*s0s)
+    o = approx.quad_fun(a, b, c, s0s)
+    expected = a*s0s**2+b*s0s+c
     assert allclose(o, expected)
 
-    # Check derivative against nu
-    do = approx.approx_fun(nu, 0, -s0s*b, s0s*c, s0s)
-    eps = 1e-8
-    oe = approx.approx_fun(nu+eps, a, b, c, s0s)
-    expected = (oe-o)/eps
-    assert allclose(do, expected, atol=1e-4)
+    o = approx.quad_grad(a, b, c, s0s)
+    expected = 2*a*s0s+b
+    assert allclose(o, expected)
 
 
-def test_get_coefficients(allclose, reservoir_function):
+def test_quad_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
-    nus = [0.01, 0.1, 1, 5]
 
     #nus = [5]
     # check fun = genlogisitc
 
-    corrected = 0
-    for nu in nus:
-        a, b, c, corr = approx.get_coefficients(fun, alpha0, alpha1, nu)
-        corrected += corr
+    f0 = fun(alpha0)
+    f1 = fun(alpha1)
+    xm = (alpha0+alpha1)/2
+    fm = fun(xm)
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
 
-        # Check function on bounds
-        fa = approx.approx_fun(nu, a, b, c, alpha0)
-        ft = fun(alpha0)
-        assert allclose(ft, fa, atol=1e-7)
+    # Check function on bounds
+    for x in [alpha0, alpha1]:
+        fa = approx.quad_fun(a, b, c, x)
+        ft = fun(x)
+        assert allclose(ft, fa, atol=1e-10)
 
-        fa = approx.approx_fun(nu, a, b, c, alpha1)
-        ft = fun(alpha1)
-        assert allclose(ft, fa, atol=1e-7)
-
-        # Check mid point values
-        if not corrected:
-            eps = 0.5
-            x = (1-eps)*alpha0+eps*alpha1
-            assert allclose(approx.approx_fun(nu, a, b, c, x), fun(x))
-
-    LOGGER.info("")
-    LOGGER.info(f"[{fname}] get coeff: corrected = {corrected}/{len(nus)}")
+    fa = approx.quad_fun(a, b, c, xm)
+    v0, v1 = (f0+3*f1)/4, (f1+3*f0)/4
+    v0, v1 = min(v0, v1), max(v0, v1)
+    expected = max(v0, min(v1, fm))
+    assert allclose(fa, expected, atol=1e-10)
 
 
-def test_get_coefficients_edge_cases(allclose):
-    # Piecewise linear fun
-    x0, xm, x1 = 0., 0.5, 1.
-    def fun(x, f0, fm, f1):
-        scal = np.isscalar(x)
-        x = np.atleast_1d(x)
-        y = f0*np.ones_like(x)
-        y = np.where((x<xm)&(x>=x0), f0+(fm-f0)*(x-x0)/(xm-x0), y)
-        y = np.where((x>=xm)&(x<x1), fm+(f1-fm)*(x-xm)/(x1-xm), y)
-        y = np.where(x>=x1, f1, y)
-        if scal:
-            return y[0]
-        else:
-            return y
+def test_quad_coefficients_edge_cases(allclose):
+    # Identical band limits
+    alpha0, alpha1 = 1., 1.
+    f0, f1, fm = 1., 1., 1.
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    assert np.all(np.isnan([a, b, c]))
 
-    nu = 1.
+    # Too high value
+    alpha0, alpha1 = 0., 1.
+    f0, f1, fm = 1., 3., 10.
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    fm2 = approx.quad_fun(a, b, c, 0.5)
+    assert allclose(fm2, 5./2)
 
-    # Case of a slowly varying monotonous function
-    f = lambda x: fun(x, 0, 1, 2)
-    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
-    assert not corr
-
-    # Case of non-monotonous function
-    f = lambda x: fun(x, 0, 6, 2)
-    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
-    assert not corr
-
-    # Case of a highly varying function
-    f = lambda x: fun(x, 0, 2, 2)
-    a, b, c, corr = approx.get_coefficients(f, x0, x1, nu)
-    assert corr
+    # Too low value
+    f0, f1, fm = 1., 3., -10.
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    fm2 = approx.quad_fun(a, b, c, 0.5)
+    assert allclose(fm2, 3./2)
 
 
-def test_get_coefficients_matrix(allclose, reservoir_function):
+def test_quad_coefficient_matrix(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     funs = [lambda x: inflow, fun]
 
     nalphas = 21
     alphas = np.linspace(alpha0, alpha1, nalphas)
-    nu = 1
-    epsilon = 0.5
 
     da = 0.005 if fname in ["recip", "recipquad", "ratio"] else (alpha1-alpha0)/10
     s = np.linspace(alpha0-da, alpha1+da, 1000)
@@ -352,121 +329,32 @@ def test_get_coefficients_matrix(allclose, reservoir_function):
     isin = (s>=alpha0)&(s<=alpha1)
 
     # Check max nfluxes
-    n, eps = np.ones(nalphas-1), 0.5
     nf = approx.REZEQ_NFLUXES_MAX
     fs = [lambda x: x**a for a in np.linspace(1, 2, nf+1)]
     with pytest.raises(ValueError, match="nfluxes"):
-        amat, bmat, cmat = approx.get_coefficients_matrix(\
-                                                        fs, alphas, n)
+        amat, bmat, cmat = approx.quad_coefficient_matrix(fs, alphas)
 
-    amat, bmat, cmat = approx.get_coefficients_matrix(funs, alphas, nu)
-    out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
+    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas)
+
+    # Check extrapolations
+    out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
     fapprox = out[:, 1]
-    assert allclose(fapprox[s<alpha0], fun(alpha0))
-    assert allclose(fapprox[s>alpha1], fun(alpha1))
 
+    ilow = s<alpha0
+    y0 = approx.quad_fun(amat[0, 1], bmat[0, 1], cmat[0, 1], alpha0)
+    dy0 = approx.quad_grad(amat[0, 1], bmat[0, 1], cmat[0, 1], alpha0)
+    expected = y0+dy0*(s-alpha0)
+    assert allclose(fapprox[ilow], expected[ilow])
+
+    ihigh = s>alpha1
+    y1 = approx.quad_fun(amat[-1, 1], bmat[-1, 1], cmat[-1, 1], alpha1)
+    dy1 = approx.quad_grad(amat[-1, 1], bmat[-1, 1], cmat[-1, 1], alpha1)
+    expected = y1+dy1*(s-alpha1)
+    assert allclose(fapprox[ihigh], expected[ihigh])
+
+    # Check interpolation
     for alpha in alphas:
-        out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, alpha)
+        out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, alpha)
         assert allclose(out[0, 1], fun(alpha))
-
-
-def test_optimize_nu(allclose, reservoir_function):
-    fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
-    funs = [lambda x: inflow+fun(x)]
-
-    # ratio function cannot be captured with 11 bands
-    # increase this to 31
-    nalphas = 31 if fname == "ratio" else 11
-
-    alphas = np.linspace(alpha0, alpha1, nalphas)
-    scr = np.ones(len(funs))
-    nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
-    assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
-
-    s = np.linspace(alpha0, alpha1, 10000)
-    out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
-    fapprox = out[:, 0]
-    ftrue = funs[0](s)
-    rmse = math.sqrt(((fapprox-ftrue)**2).mean())
-
-    rmse_thresh = {
-        "x2": 1e-9, \
-        "x4": 1e-4, \
-        "x6": 1e-3, \
-        "x8": 1e-3, \
-        "tanh": 5e-2, \
-        "exp": 1e-7,
-        "sin": 5e-3, \
-        "recip": 5e-3, \
-        "recipquad": 5e-2, \
-        "runge": 1e-3, \
-        "stiff": 1e-7, \
-        "ratio": 0.8, \
-        "logistic": 1e-8, \
-        "genlogistic": 5e-3
-    }
-
-    assert rmse<rmse_thresh[fname]
-    LOGGER.info("")
-    LOGGER.info(f"[{fname}] optimize approx vs truth: "\
-                    +f"nalphas={nalphas} niter={niter} rmse={rmse:3.3e} (nu={nu:0.2f})")
-
-
-def test_optimize_vs_quad(allclose, reservoir_function):
-    fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
-    if fname in ["x2", "stiff", "logistic"]:
-        # Skip x2, stiff and logistic which are perfect match with quadratic functions
-        pytest.skip("Skip function")
-
-    funs = [lambda x: inflow+fun(x)]
-    #nalphas = 21
-    nalphas = 5
-    alphas = np.linspace(alpha0, alpha1, nalphas)
-    scr = np.ones(len(funs))
-    nu, amat, bmat, cmat, _, _ = approx.optimize_nu(funs, alphas, scr)
-    assert approx.is_continuous(alphas, nu, amat, bmat, cmat)
-
-    # Issue with continuity for fname=recip and
-    # nu in [3.01, 3.03] -> TOFIX!
-
-    s = np.linspace(alpha0, alpha1, 10000)
-    out = approx.approx_fun_from_matrix(alphas, nu, amat, bmat, cmat, s)
-    fapprox = out[:, 0]
-    ftrue = funs[0](s)
-    rmse = math.sqrt(((fapprox-ftrue)**2).mean())
-
-    # quadratic interpolation
-    quad = lambda x, p: p[0]+p[1]*x+p[2]*x**2
-    fquad = np.nan*np.zeros_like(s)
-    for j in range(nalphas-1):
-        a0, a1 = alphas[[j, j+1]]
-        aa = [a0, (a0+a1)/2, a1]
-        X = np.array([[quad(a, [1, 0, 0]), quad(a, [0, 1, 0]), \
-                            quad(a, [0, 0, 1])] for a in aa])
-        Y = np.array([fun(a) for a in aa])
-        pq = np.linalg.solve(X, Y)
-        idx = (s>=a0-1e-10)&(s<=a1+1e-10)
-        fquad[idx] = quad(s[idx], pq)
-
-    rmse_quad = math.sqrt(((fquad-ftrue)**2).mean())
-
-    # We want to make sure quad is always worse than app
-    ratio_thresh = {
-        "x4": 0.5, \
-        "x6": 0.3, \
-        "x8": 0.2, \
-        "tanh": 0.8, \
-        "exp": 1e-8, \
-        "sin": 1.0+1e-4, \
-        "recip": 0.3, \
-        "recipquad": 0.2, \
-        "runge": 1.0+1e-4, \
-        "ratio": 0.2, \
-        "genlogistic": 0.9
-    }
-    ratio = rmse/rmse_quad
-    assert ratio<ratio_thresh[fname]
-    LOGGER.info("")
-    LOGGER.info(f"[{fname}] optimize approx vs quad: error ratio={ratio:2.2e}")
 
 

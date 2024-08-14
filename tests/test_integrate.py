@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils
 
-from pyrezeq import approx, integrate, slow
+from pyrezeq import approx, integrate, slow, benchmarks
 
 from test_approx import generate_samples, reservoir_function
 
@@ -78,7 +78,7 @@ def test_delta_t_max(allclose, generate_samples, printout):
         f = lambda x: approx.approx_fun(nu, a, b, c, x)
         df = lambda x: approx.approx_fun(nu, 0, -nu*b, nu*c, x)
         te, ns1, nev, njac = slow.integrate_forward_numerical(\
-                                    [f], [df], t0, [s0], t_eval)
+                                    f, df, [], [], t0, s0, t_eval)
 
         # Check tmax < end of sim
         if te.max()<Tmax and te.max()>0 and len(te)>3:
@@ -90,7 +90,7 @@ def test_delta_t_max(allclose, generate_samples, printout):
             te = np.linspace(t0, 2*t1-t0, 1000)
             s0 = ns1[-3]
             te, ns1, nev, njac = slow.integrate_forward_numerical(\
-                                                    [f], [df], t0, [s0], te)
+                                                    f, df, [f], [df], t0, s0, te)
             expected = te.max()
 
             s1 = integrate.integrate_forward(nu, a, b, c, t0, s0, te)
@@ -222,8 +222,8 @@ def test_forward_vs_numerical(allclose, generate_samples, printout):
 
         f = lambda x: approx.approx_fun(nu, a, b, c, x)
         df = lambda x: approx.approx_fun(nu, 0, -nu*b, nu*c, x)
-        te, expected, nev, njac = slow.integrate_forward_numerical([f], [df], \
-                                                            t0, [s0], t_eval)
+        te, expected, nev, njac = slow.integrate_forward_numerical(f, df, [], [], \
+                                                            t0, s0, t_eval)
         if len(te)<3:
             nskipped += 1
             continue
@@ -467,11 +467,11 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
     inp = lambda x: (1+0*x)*inflow
     sfun = lambda x: inflow+fun(x)
-    funs = [sfun, inp, fun]
+    funs = [inp, fun]
 
     dinp = lambda x: 0.
     dsfun = lambda x: dinp(x)+dfun(x)
-    dfuns = [dsfun, dinp, dfun]
+    dfuns = [dinp, dfun]
 
     # Optimize approx
     nalphas = 11
@@ -506,8 +506,9 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         # Numerical method
         start_exec = time.time()
         tn, fn, nev, njac = slow.integrate_forward_numerical(\
+                                        sfun, dsfun, \
                                         funs, dfuns, \
-                                        t0, [s0]+[0]*2, t1)
+                                        t0, s0, t1)
         end_exec = time.time()
         time_num += (end_exec-start_exec)*1e3
         numerical = fn[:, 0]
@@ -579,47 +580,69 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                     +f" / niter={niter_num}")
 
 
-def test_gr4jprod(allclose):
-    X1s = np.linspace(10, 1000, 100)
-    mod = gr4j.GR4J()
-
-    for siteid in data_reader.SITEIDS:
-        df = data_reader.get_data(siteid, "daily")
-        inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
-        mod.allocate(inputs, noutputs=mod.noutputsmax)
-
-        for X1 in X1s:
-            mod.X1 = X1
-            mod.initialise_fromdata()
-            mod.run()
-            sims = mod.to_dataframe()
-
-
-            import pdb; pdb.set_trace()
-
-
 
 def test_reservoir_equation_gr4j(allclose):
-    nu = 2.25
-    funs = [
-        lambda x: 1.-x**2, \
-        lambda x: -x*(2.-x), \
-        lambda x: -nu*(nu*x)**5/4.
-    ]
-    alphas = np.linspace(0., 1.2, 3)
+    nalphas = 20
+    alphas = np.linspace(0., 1.2, nalphas)
+    start, end = "2017-01", "2022-12-31"
+    nsubdiv = 10000
+    nu = 0.01
+    X1s = [50, 200, 1000]
+    LOGGER.info("")
 
-    start, end = "2022-02", "2022-04"
+    # Compute approx coefs
+    fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
+    amat = np.zeros((nalphas-1, 3))
+    bmat = amat.copy()
+    cmat = amat.copy()
+    for j in range(nalphas-1):
+        a0, a1 = alphas[[j, j+1]]
+        for i in range(3):
+            a, b, c, _ = approx.get_coefficients(fluxes[i], a0, a1, nu)
+            amat[j, i] = a
+            bmat[j, i] = b
+            cmat[j, i] = c
 
-    for siteid in data_reader.SITEIDS:
+    # Loop over sites
+    for isite, siteid in enumerate(data_reader.SITEIDS):
+        # Get climate data
         df = data_reader.get_data(siteid, "daily")
         df = df.loc[start:end]
+        nval = len(df)
+        inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
 
-        scalings = np.ones((len(df), 3))
-        scalings[:, :2] = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
-        scr = scalings.mean(axis=0)
-        nu, amat, bmat, cmat, niter, fopt = approx.optimize_nu(funs, alphas, scr)
+        for X1 in X1s:
+            # Run approximate solution
+            s0 = X1/2
+            expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)
+            scalings = np.ones(3)
+            s_start = s0/X1
 
-        import pdb; pdb.set_trace()
+            # Run solution based on approximation function
+            sims = np.zeros_like(expected)
+            for t in range(nval):
+                P, E = inputs[t]
 
+                # Apply interception to inputs
+                pi = max(0, P-E)/X1
+                ei = max(0, E-P)/X1
+                scalings[:2] = pi, ei
 
-    return
+                # Integate equation
+                n, s_end, fx = integrate.integrate(alphas, scalings, nu, \
+                                                    amat, bmat, cmat, 0., \
+                                                    s_start, 1)
+                sims[t, 0] = s_end*X1
+                sims[t, 1] = fx[0]*X1
+                sims[t, 2] = -fx[1]*X1
+                sims[t, 3] = -fx[2]*X1
+                s_start = s_end
+
+            errmax = np.abs(sims-expected).max()
+            mess = f"approx vs gr4jprod /site {isite+1}/x1={X1:4.0f}:"\
+                        +f" errmax={errmax:3.3e}"
+            LOGGER.info(mess)
+            atol = 1e-3
+            rtol = 1e-4
+            assert np.allclose(expected, sims, atol=atol, rtol=rtol)
+
