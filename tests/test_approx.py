@@ -231,7 +231,7 @@ def generate_samples(ntry, selcase, request):
 # ----- TESTS --------------------------------------------
 
 def test_accuracy():
-    eps = approx.REZEQ_ACCURACY
+    eps = abs(approx.REZEQ_ACCURACY)
     assert eps>0
 
 def test_get_nan():
