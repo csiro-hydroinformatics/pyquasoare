@@ -2,7 +2,7 @@
 
 /* Approximation functions */
 double c_quad_fun(double a, double b, double c, double s){
-    return a*s*s+b*s+c;
+    return (a*s+b)*s+c;
 }
 
 double c_quad_grad(double a, double b, double c, double s){
@@ -10,21 +10,21 @@ double c_quad_grad(double a, double b, double c, double s){
 }
 
 int c_quad_steady(double a, double b, double c, double steady[2]){
-    double q;
+    double q, x1, x2;
+    double sign = b<0 ? -1. : 1.;
     double Delta = discrimin(a, b, c);
     steady[0] = c_get_nan();
     steady[1] = c_get_nan();
 
     if(notnull(a)){
         if(Delta>=0){
-            /* Code copied from
-             * https://stackoverflow.com/questions/48979861/
-             *         numerically-stable-method-for-solving-quadratic-equations */
-            q = -0.5*(b+copysign(sqrt(Delta), b));
-            steady[0] = q/a;
+            q = -0.5*(b+sign*sqrt(Delta));
+            x1 = q/a;
+            x2 = c/q;
+            steady[0] = x1<x2 ? x1 : x2;
 
             if(Delta>0) {
-                steady[1] = c/q;
+                steady[1] = x1<x2 ? x2 : x1;
             }
         }
     }
@@ -68,21 +68,6 @@ int c_quad_coefficients(int islin, double a0, double a1,
             coefs[2] = f0-a0*coefs[1];
             return 0;
         }
-
-        /* Reparam s -> x
-         * s = a0 + (a1-a0)x / x = (s-a0)/(a1-a0)
-         * x^2 = (s^2-2a0s+a0^2)/(a1-a0)^2
-         *
-         * Approx functions
-         * f0 = (2x-1)(x-1) = 2x^2-3x+1
-         * f1 = (2x-1)x = 2x^2-x
-         * fm = 4x(1-x) = 4x-4x^2
-         *
-         * f(x) = f0(2x^2-3x+1)+f1(2x^2-x)+fm(4x-4x^2)
-         *      = x^2 (2f0+2f1-4fm) + x (4fm-f1-3f0) + f0
-         *      = (s^2-2a0.s+a0^2)/da^2 A + (s-a0)/da B + C
-         *      = A/da^2 s^2 + (-2a0.A/da^2+B/da) s +
-         */
         A = 2*f0+2*f1-4*fm;
         B = 4*fm-f1-3*f0;
         C = f0;
@@ -96,23 +81,28 @@ int c_quad_coefficients(int islin, double a0, double a1,
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c, double s0){
     double Delta = discrimin(a, b, c);
-    double qD = sqrtabs(Delta);
-    double delta_tmax=0;
+    double qD = sqrtabs(Delta)/2.;
+    double ssr = b/2./a;
+    double delta_tmax=0.;
+    double nu=0, Tm1=0., Tm2=0.;
 
     if(isnull(a)){
         delta_tmax = c_get_inf();
     }
     else{
+        nu = qD/a/(s0+ssr);
         if(isnull(Delta)){
-            delta_tmax = 1./(a*s0+b/2);
-            delta_tmax = isnan(delta_tmax) || delta_tmax<0 ? c_get_inf() : delta_tmax;
+            delta_tmax = 1./a/(s0+ssr);
         }
         else if (Delta>0){
-            delta_tmax = c_get_inf();
+            delta_tmax = atanh(nu)/qD;
         }
         else {
-            delta_tmax = c_get_inf();
+            Tm1 = atan(nu)/qD;
+            Tm2 = REZEQ_PI/2./qD;
+            delta_tmax = nu>0 && Tm1<Tm2 ? Tm1 : Tm2;
         }
+        delta_tmax = isnan(delta_tmax) || delta_tmax<0 ? c_get_inf() : delta_tmax;
     }
 
    return delta_tmax;
@@ -121,10 +111,11 @@ double c_quad_delta_t_max(double a, double b, double c, double s0){
 /* Solution of dS/dt = f*(s) */
 double c_quad_forward(double a, double b, double c,
                         double t0, double s0, double t){
-    double s1=0, omega = 0;
+    double s1=0., omega=0.;
 
     double Delta = discrimin(a, b, c);
-    double qD = sqrtabs(Delta);
+    double qD = sqrtabs(Delta)/2;
+    double ssr = b/2./a;
     double dt=t-t0;
     double delta_tmax = c_quad_delta_t_max(a, b, c, s0);
 
@@ -144,17 +135,17 @@ double c_quad_forward(double a, double b, double c,
         s1 = -c/b+(s0+c/b)*exp(b*dt);
     }
     else{
-        s1 = -b/2/a;
+        s1 = -ssr;
         if(isnull(Delta)){
-            s1 += (s0+b/2/a)/(1-a*dt*b/2/a);
+            s1 += (s0+ssr)/(1-a*dt*(s0+ssr));
         }
         else if (Delta>0){
-            omega = tanh(qD*dt/2);
-            s1 += (s0+b/2/a-qD/2/a*omega)/(1-(2*a*s0+b)/qD*omega);
+            omega = tanh(qD*dt);
+            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
         }
         else {
-            omega = tan(qD*dt/2);
-            s1 += (2*a*s0+b+qD*omega)/(qD-(2*a*s0+b)*omega);
+            omega = tan(qD*dt);
+            s1 += (s0+ssr+qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
         }
     }
     return s1;

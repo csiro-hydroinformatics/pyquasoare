@@ -20,9 +20,9 @@ def nonlinrouting(nsubdiv, delta, theta, nu, q0, s0, inflows):
 
 def gr4jprod_fluxes_noscaling(eta=1./2.25):
     """ GR4J production store fluxes: Ps, Es, Perc without climate input scaling """
-    fpr = lambda x: (1.-x**2)
-    fae = lambda x: -x*(2.-x)
-    fperc = lambda x: -(eta*x)**5/4./eta
+    fpr = lambda x: (1.-x**2) if x>0 else 1.
+    fae = lambda x: -x*(2.-x) if x<1. else -1.
+    fperc = lambda x: -(eta*x)**5/4./eta if x>0 else 0.
     fluxes = [fpr, fae, fperc]
 
     dfpr = lambda x: -2.*x

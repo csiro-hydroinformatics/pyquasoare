@@ -40,10 +40,10 @@ def quad_steady_scalings(alphas, scalings, \
     steady = np.zeros((nval, 2*(nalphas-1)))
 
     for j in range(0, nalphas-1):
-        a0 = scalings@a_matrix_noscaling[j]
-        b0 = scalings@b_matrix_noscaling[j]
-        c0 = scalings@c_matrix_noscaling[j]
-        stdy = steady_state(nu, a0, b0, c0)
+        a = scalings@a_matrix_noscaling[j]
+        b = scalings@b_matrix_noscaling[j]
+        c = scalings@c_matrix_noscaling[j]
+        stdy = quad_steady(a, b, c)
 
         # Keep steady solution within band
         a0, a1 = alphas[[j, j+1]]
@@ -51,18 +51,12 @@ def quad_steady_scalings(alphas, scalings, \
         stdy[out_of_range] = np.nan
         steady[:, 2*j:(2*j+2)] = stdy
 
-    # Set up bands
-    b = np.repeat(np.arange(nalphas-1), 2)
-    bands = np.repeat(b[None, :], nval, axis=0)
+    # Reorder and remove nan columns
+    steady = np.sort(steady, axis=1)
 
-    # Sort values and eliminate columns with nan only
-    isort = np.argsort(steady, axis=1)
-    idx = np.arange(nval)[:, None]
-    steady, bands = steady[idx, isort], bands[idx, isort]
+    hasvalid = np.any(~np.isnan(steady), axis=0)
+    steady = steady[:, hasvalid]
 
-    has_valid = (np.isnan(steady)).sum(axis=0)==0
-    steady, bands = steady[:, has_valid], bands[:, has_valid]
-
-    return steady, bands
+    return steady
 
 
