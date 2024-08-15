@@ -228,8 +228,11 @@ def generate_samples(ntry, selcase, request):
     return f"{name:20}", case, params, s0s, Tmax
 
 
-
 # ----- TESTS --------------------------------------------
+
+def test_accuracy():
+    eps = approx.REZEQ_ACCURACY
+    assert eps>0
 
 def test_get_nan():
     nan = c_pyrezeq.get_nan()
@@ -282,10 +285,17 @@ def test_quad_coefficients(allclose, reservoir_function):
     fm = fun(xm)
     a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
 
+    # Linear function (al=0)
+    al, bl, cl = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, True)
+    assert allclose(al, 0)
+
     # Check function on bounds
     for x in [alpha0, alpha1]:
-        fa = approx.quad_fun(a, b, c, x)
         ft = fun(x)
+        fa = approx.quad_fun(a, b, c, x)
+        assert allclose(ft, fa, atol=1e-10)
+
+        fa = approx.quad_fun(al, bl, cl, x)
         assert allclose(ft, fa, atol=1e-10)
 
     fa = approx.quad_fun(a, b, c, xm)
@@ -293,6 +303,12 @@ def test_quad_coefficients(allclose, reservoir_function):
     v0, v1 = min(v0, v1), max(v0, v1)
     expected = max(v0, min(v1, fm))
     assert allclose(fa, expected, atol=1e-10)
+
+    # Linear function goes through mid point
+    fa = approx.quad_fun(al, bl, cl, xm)
+    expected = (f1+f0)/2
+    assert allclose(fa, expected, atol=1e-10)
+
 
 
 def test_quad_coefficients_edge_cases(allclose):

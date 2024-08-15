@@ -29,6 +29,11 @@ int c_get_nfluxes_max(){
     return REZEQ_NFLUXES_MAX;
 }
 
+double c_compiler_accuracy_kahan(){
+    long double s, t=3.0;
+    return 1.0-(4.0/t-1.0)*t;
+}
+
 int notnull(double x){
     return x<0 || x>0 ? 1 : 0;
 }
@@ -45,14 +50,31 @@ int notequal(double x, double y, double atol, double rtol){
     return 1-isequal(x, y, atol, rtol);
 }
 
-double sign(double x){
-    return x>=0 ? 1. : -1.;
-}
-
 double sqrtabs(double x){
-    return sqrt(sign(x)*x);
+    return sqrt(fabs(x));
 }
 
+/* Code copied from
+ * https://stackoverflow.com/questions/48979861/numerically-stable-method-for-solving-quadratic-equations
+
+  diff_of_products() computes a*b-c*d with a maximum error <= 1.5 ulp
+
+  Claude-Pierre Jeannerod, Nicolas Louvet, and Jean-Michel Muller,
+  "Further Analysis of Kahan's Algorithm for the Accurate Computation
+  of 2x2 Determinants". Mathematics of Computation, Vol. 82, No. 284,
+  Oct. 2013, pp. 2245-2264
+ */
+double diff_of_products(double a, double b, double c, double d)
+{
+    double w = d*c;
+    double e = fma(-d, c, w);
+    double f = fma(a, b, -w);
+    return f+e;
+}
+
+double discrimin(double a, double b, double c){
+    return isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);
+}
 
 int c_find_alpha(int nalphas, double * alphas, double s0){
     int i=0;

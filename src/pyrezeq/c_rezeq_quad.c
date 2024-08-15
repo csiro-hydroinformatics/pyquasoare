@@ -6,33 +6,26 @@ double c_quad_fun(double a, double b, double c, double s){
 }
 
 double c_quad_grad(double a, double b, double c, double s){
-    return 2*a*s+b;
-}
-
-/* Code pasted from
- * https://stackoverflow.com/questions/48979861/numerically-stable-method-for-solving-quadratic-equations
- */
-
-double diff_of_products(double a, double b, double c, double d)
-{
-    double w = d*c;
-    double e = fma(-d, c, w);
-    double f = fma(a, b, -w);
-    return f+e;
+    return 2.*a*s+b;
 }
 
 int c_quad_steady(double a, double b, double c, double steady[2]){
-    double Delta = b*b-4*a*c;
     double q;
-
+    double Delta = discrimin(a, b, c);
     steady[0] = c_get_nan();
     steady[1] = c_get_nan();
 
     if(notnull(a)){
-        if(Delta>=0) {
-            q = -0.5*(b+copysign(sqrt(diff_of_products(b, b, 4.0*a, c)), b));
+        if(Delta>=0){
+            /* Code copied from
+             * https://stackoverflow.com/questions/48979861/
+             *         numerically-stable-method-for-solving-quadratic-equations */
+            q = -0.5*(b+copysign(sqrt(Delta), b));
             steady[0] = q/a;
-            steady[1] = c/q;
+
+            if(Delta>0) {
+                steady[1] = c/q;
+            }
         }
     }
     else {
@@ -40,24 +33,7 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
             steady[0] = -c/b;
         }
     }
-    //if (isnull(a) && notnull(b)) {
-    //    /* Linear function */
-    //    steady[0] = -c/b;
-    //}
-    //else {
-    //    if(Delta>=0 && Delta<REZEQ_EPS) {
-    //        steady[0] = -b/2/a;
-    //    }
-    //    else if(Delta>REZEQ_EPS) {
-    //        r1 = (-b-qD)/2/a;
-    //        r2 = (-b+qD)/2/a;
-    //        steady[0] = a>0 ? r1 : r2;
-    //        steady[1] = a>0 ? r2 : r1;
-    //    }
-    //}
-    //
-
-    return 1;
+    return 0;
 }
 
 /*
@@ -65,7 +41,7 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
  * f(a0) = f0 , f(a1) = f1 , f((a0+a1)/2) = fm
  * fapprox(s) = as^2+bs+c with coefs = [a, b, c]
  * */
-int c_quad_coefficients(double a0, double a1,
+int c_quad_coefficients(int islin, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]){
      double da = a1-a0;
@@ -85,6 +61,14 @@ int c_quad_coefficients(double a0, double a1,
         return REZEQ_QUAD_APPROX_SAMEALPHA;
      }
      else {
+        /* Linear function */
+        if(islin) {
+            coefs[0] = 0.;
+            coefs[1] = (f1-f0)/da;
+            coefs[2] = f0-a0*coefs[1];
+            return 0;
+        }
+
         /* Reparam s -> x
          * s = a0 + (a1-a0)x / x = (s-a0)/(a1-a0)
          * x^2 = (s^2-2a0s+a0^2)/(a1-a0)^2
@@ -111,8 +95,8 @@ int c_quad_coefficients(double a0, double a1,
 
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c, double s0){
-    double Delta = b*b-4*a*c;
-    double qD = sqrt(fabs(Delta));
+    double Delta = discrimin(a, b, c);
+    double qD = sqrtabs(Delta);
     double delta_tmax=0;
 
     if(isnull(a)){
@@ -139,8 +123,8 @@ double c_quad_forward(double a, double b, double c,
                         double t0, double s0, double t){
     double s1=0, omega = 0;
 
-    double Delta = b*b-4*a*c;
-    double qD = sqrt(fabs(Delta));
+    double Delta = discrimin(a, b, c);
+    double qD = sqrtabs(Delta);
     double dt=t-t0;
     double delta_tmax = c_quad_delta_t_max(a, b, c, s0);
 
@@ -179,8 +163,8 @@ double c_quad_forward(double a, double b, double c,
 /* Primitive of 1/f*(s) */
 double c_quad_inverse(double a, double b, double c,
                                 double s0, double s1){
-    double Delta = b*b-4*a*c;
-    double qD = sqrt(fabs(Delta));
+    double Delta = discrimin(a, b, c);
+    double qD = sqrtabs(Delta);
 
     if(isnull(a) && isnull(b)){
         return (s1-s0)/c;
@@ -217,7 +201,7 @@ int c_quad_fluxes(int nfluxes,
     double a = aoj, a_check=0;
     double b = boj, b_check=0;
     double c = coj, c_check=0;
-    double Delta = boj*boj-4*aoj*coj;
+    double Delta = discrimin(aoj, boj, coj);
 
     if(t1<t0)
         return REZEQ_QUAD_TIME_TOOLOW;

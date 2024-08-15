@@ -11,6 +11,7 @@ cdef extern from 'c_rezeq_utils.h':
     double c_get_inf()
     double c_get_nan()
     int c_get_nfluxes_max()
+    double c_compiler_accuracy_kahan()
 
     int c_find_alpha(int nalphas, double * alphas, double s0);
 
@@ -23,7 +24,7 @@ cdef extern from 'c_rezeq_quad.h':
 
     int c_quad_steady(double a, double b, double c, double steady[2])
 
-    int c_quad_coefficients(double a0, double a1,
+    int c_quad_coefficients(int islin, double a0, double a1,
                                 double f0, double f1, double fm,
                                 double coefs[3])
 
@@ -93,6 +94,10 @@ def get_inf():
 def get_nfluxes_max():
     return c_get_nfluxes_max()
 
+def compiler_accuracy_kahan():
+    return c_compiler_accuracy_kahan()
+
+
 def get_error_message(int err_code):
     cdef char message[100]
     c_get_error_message(err_code, message)
@@ -142,11 +147,11 @@ def quad_grad_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
 
 
 
-def quad_coefficients(double a0, double a1,
+def quad_coefficients(int islin, double a0, double a1,
                         double f0, double f1, double fm,
                         np.ndarray[double, ndim=1, mode='c'] coefs):
     assert coefs.shape[0] == 3
-    return c_quad_coefficients(a0, a1, f0, f1, fm,
+    return c_quad_coefficients(islin, a0, a1, f0, f1, fm,
                                 <double*> np.PyArray_DATA(coefs))
 
 

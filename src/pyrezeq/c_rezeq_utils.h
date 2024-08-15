@@ -45,12 +45,15 @@ double c_get_rtol();
 double c_get_inf();
 double c_get_nan();
 int c_get_nfluxes_max();
+double c_compiler_accuracy_kahan();
 
 int isnull(double x);
 int notnull(double x);
 int isequal(double x, double y, double atol, double rtol);
 int notequal(double x, double y, double atol, double rtol);
-double sign(double x);
+
+double diff_of_products(double a, double b, double c, double d);
+double discrimin(double a, double b, double c);
 double sqrtabs(double x);
 
 

@@ -14,7 +14,7 @@ double c_quad_grad(double a, double b, double c, double s);
 
 int c_quad_steady(double a, double b, double c, double steady[2]);
 
-int c_quad_coefficients(double a0, double a1,
+int c_quad_coefficients(int islin, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]);
 

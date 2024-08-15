@@ -9,6 +9,7 @@ if has_c_module():
     REZEQ_ATOL = c_pyrezeq.get_atol()
     REZEQ_RTOL = c_pyrezeq.get_rtol()
     REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
+    REZEQ_ACCURACY = c_pyrezeq.compiler_accuracy_kahan()
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
@@ -30,7 +31,6 @@ def notnull(x):
 
 def isnull(x):
     return 1-notnull(x)
-
 
 def all_scalar(*args):
     """ Check if all arguments are scalar """
@@ -65,13 +65,13 @@ def quad_grad(a, b, c, s):
         return o
 
 
-
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm):
+def quad_coefficients(alphaj, alphajp1, f0, f1, fm, islin=0):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         Fits the approx fun at x=a0, x=a1 and x=(a0+a1)/2.
+        If islin=1, use linear approx only and set quadratic coef to 0.
     """
     coefs = np.zeros(3)
-    ierr = c_pyrezeq.quad_coefficients(alphaj, alphajp1, f0, f1, fm, coefs)
+    ierr = c_pyrezeq.quad_coefficients(islin, alphaj, alphajp1, f0, f1, fm, coefs)
     return coefs
 
 

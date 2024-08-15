@@ -21,6 +21,27 @@ FTEST = source_file.parent
 
 LOGGER = iutils.get_logger("steady", flog=FTEST / "test_steady.log")
 
+def test_steady_state_kahan(allclose):
+    # Implementing tests by Kayan
+    # https://people.eecs.berkeley.edu/%7Ewkahan/Qdrtcs.pdf
+    a1, b1, c1 = 10.27, 29.61, 85.37
+    stdy1 = steady.quad_steady(a1, -2.*b1, c1)
+
+    D1 = b1*b1-a1*c1
+    za1 = (b1+np.sign(b1)*math.sqrt(D1))/a1
+    zb1 = (b1-np.sign(b1)*math.sqrt(D1))/a1
+
+    a2, b2, c2 = 10.28, 29.62, 85.34
+    stdy2 = steady.quad_steady(a2, -2.*b2, c2)
+
+    a3, b3, c3 = 94906265.625, 94906267.000, 94906268.375
+    stdy3 = steady.quad_steady(a3, -2.*b3, c3)
+
+    a4, b4, c4 = 94906266.375, 94906267.375, 94906268.375
+    stdy4 = steady.quad_steady(a4, -2.*b4, c4)
+    import pdb; pdb.set_trace()
+
+
 
 def test_steady_state(allclose, generate_samples):
     cname, case, params, _, _ = generate_samples
