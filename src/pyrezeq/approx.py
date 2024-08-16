@@ -75,7 +75,7 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, islin=0):
     return coefs
 
 
-def quad_coefficient_matrix(funs, alphas):
+def quad_coefficient_matrix(funs, alphas, islin=0):
     """ Generate coefficient matrices for flux functions """
     nalphas = len(alphas)
     nfluxes = len(funs)
@@ -94,7 +94,7 @@ def quad_coefficient_matrix(funs, alphas):
             f0 = f(alphaj)
             f1 = f(alphajp1)
             fm = f((alphaj+alphajp1)/2)
-            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm)
+            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm, islin)
 
             a_matrix[j, ifun] = a
             b_matrix[j, ifun] = b

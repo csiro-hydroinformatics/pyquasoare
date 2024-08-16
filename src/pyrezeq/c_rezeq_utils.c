@@ -50,10 +50,6 @@ int notequal(double x, double y, double atol, double rtol){
     return 1-isequal(x, y, atol, rtol);
 }
 
-double sqrtabs(double x){
-    return sqrt(fabs(x));
-}
-
 /* Code copied from
  * https://stackoverflow.com/questions/48979861/numerically-stable-method-for-solving-quadratic-equations
 
@@ -72,8 +68,12 @@ double diff_of_products(double a, double b, double c, double d)
     return f+e;
 }
 
-double discrimin(double a, double b, double c){
-    return isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);
+int c_discrimin(double a, double b, double c, double discr[2]){
+    double Delta = isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);
+    double qD = sqrt(fabs(Delta))/2;
+    discr[0] = Delta;
+    discr[1] = qD;
+    return qD>=0 ? 0 : REZEQ_UTILS_QD_NEGATIVE;
 }
 
 int c_find_alpha(int nalphas, double * alphas, double s0){
@@ -140,6 +140,9 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == REZEQ_QUAD_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
+
+    else if(err_code == REZEQ_UTILS_QD_NEGATIVE)
+        strncpy(message, "qD value is negative", len);
 
     else
         strncpy(message, "Error code not found", len);

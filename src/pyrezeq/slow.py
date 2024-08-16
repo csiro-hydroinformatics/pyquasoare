@@ -4,7 +4,8 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, isequal, notequal
+from pyrezeq.approx import REZEQ_EPS, isequal, notequal, isnull, notnull
+from pyrezeq.integrate import discrimin
 
 def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -48,133 +49,72 @@ def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
 
 # --- REZEQ functions translated from C for slow implementation ---
 def quad_fun(a, b, c, s):
-    return a*s*s+b*s+c;
+    return (a*s+b)*s+c;
 
-def quad_delta_t_max(a, b, c, s0):
-    e0 = math.exp(-nu*s0)
-    Delta = a*a-4*b*c
-
-    if isnull(b) and isnull(c):
+def quad_delta_t_max(a, b, c, Delta, qD, s0):
+    ssr = b/2./a
+    if isnull(a):
         delta_tmax = np.inf
-
-    elif isnull(a) and isnull(b) and notnull(c):
-        delta_tmax = np.inf if c<0 else e0/nu/c
-
-    elif isnull(a) and notnull(b) and isnull(c):
-        delta_tmax = np.inf if b>0 else -1/e0/nu/b
-
-    elif notnull(a) and isnull(b) and notnull(c):
-        delta_tmax = np.inf if c<0 or (c>0 and a<-c/e0) else math.log(1+a*e0/c)/nu/a
-
-    elif notnull(a) and notnull(b) and isnull(c):
-        delta_tmax = np.inf if b>0 or (b<0 and a>-b*e0) else -math.log(1+a/e0/b)/nu/a
-
-    elif notnull(b) and notnull(c):
-        sqD = math.sqrt(abs(Delta))
-        lam0 = (2*b*e0+a)/sqD
-
+    else:
+        nu = qD/a/(s0+ssr)
         if isnull(Delta):
-            delta_tmax = -2/(a+2*b*e0)/nu if a<-2*e0*b else np.inf
-            delta_tmax = min(delta_tmax, 4*b*e0/(a+2*b*e0)/nu/a if a>-c/e0 else np.inf)
-
-        elif isneg(Delta):
-            delta_tmax = math.atan(-1./lam0)*2/nu/sqD if lam0<0 else np.inf
-            tmp = math.atan((lam0*sqD-a)/(a*lam0+sqD))*2/nu/sqD
-            tmp = tmp if tmp>0 else np.inf
-            delta_tmax = min(min(delta_tmax, tmp), math.pi/nu/sqD)
-
+            delta_tmax = 1./a/(s0+ssr);
+        elif Delta>0:
+            delta_tmax = math.atanh(nu)/qD if abs(nu)<1 else math.atanh(1./nu)/qD
         else:
-            delta_tmax = math.atanh(-1./lam0)*2/nu/sqD if lam0<-1 else np.inf
-            x = (lam0*sqD-a)/(a*lam0-sqD)
-            tmp = math.atanh(x)*2/nu/sqD if abs(x)<1 else -np.inf
-            tmp = tmp if tmp>0 else np.inf
-            delta_tmax = min(delta_tmax, tmp)
+            Tm1 = math.atan(nu)/qD
+            Tm2 = math.pi/2./qD
+            delta_tmax = Tm1 if nu>0 and Tm1<Tm2 else Tm1
 
-    return delta_tmax if delta_tmax>=0 else np.nan
+        delta_tmax = np.inf if np.isnan(delta_tmax) or delta_tmax<0 \
+                            else delta_tmax
+
+    return delta_tmax
 
 
-def integrate_forward(nu, a, b, c, t0, s0, t):
-    e0 = math.exp(-nu*s0)
-    Delta = a*a-4*b*c
-
+def quad_forward(a, b, c, Delta, qD, t0, s0, t):
     if t<t0:
         return np.nan
 
-    dtmax = integrate_delta_t_max(nu, a, b, c, s0)
-    if t-t0>dtmax:
+    dt = t-t0
+    dtmax = quad_delta_t_max(a, b, c, Delta, qD, s0)
+    if dt>dtmax:
         return np.nan
 
     if isequal(t0, t, REZEQ_EPS, 0.):
         return s0
 
-    if isnull(b) and isnull(c):
-        s1 = s0+a*(t-t0)
+    if isnull(a) and isnull(b):
+        s1 = s0+c*dt
 
-    elif isnull(a) and isnull(b) and notnull(c):
-        s1 = s0-math.log(1-nu*c/e0*(t-t0))/nu
+    elif isnull(a) and notnull(b):
+        s1 = -c/b+(s0+c/b)*math.exp(b*dt)
 
-    elif isnull(a) and notnull(b) and isnull(c):
-        s1 = s0+math.log(1+nu*b*e0*(t-t0))/nu
-
-    elif notnull(a) and isnull(b) and notnull(c):
-        s1 = s0+a*(t-t0)-math.log(1+c/a/e0*(1-math.exp(nu*a*(t-t0))))/nu
-
-    elif notnull(a) and notnull(b) and isnull(c):
-        s1 = s0+a*(t-t0)+math.log(1+b/a*e0*(1-math.exp(-nu*a*(t-t0))))/nu
-
-    elif notnull(b) and notnull(c):
-        ra2b = a/2/b
+    else:
+        ssr = b/2./a;
+        s1 = -ssr
         if isnull(Delta):
-            s1 = -math.log((e0+ra2b)/(1+(e0+ra2b)*nu*b*(t-t0))-ra2b)/nu
-
+            s1 += (s0+ssr)/(1-a*dt*(s0+ssr))
         else:
-            sgn = -1 if isneg(Delta) else 1
-            sqD = math.sqrt(sgn*Delta)
-            omeg = math.tan(nu*sqD*(t-t0)/2) if isneg(Delta) \
-                                else math.tanh(nu*sqD*(t-t0)/2)
-            lam0 = (2*b*e0+a)/sqD
-            s1 = -math.log((lam0+sgn*omeg)/(1+lam0*omeg)*sqD/2/b-ra2b)/nu
+            omega = math.tanh(qD*dt) if Delta>0 else math.tan(qD*dt)
+            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega)
 
     return s1
 
 
-def integrate_inverse(nu, a, b, c, s0, s1):
-    e0 = math.exp(-nu*s0)
-    e1 = math.exp(-nu*s1)
-    Delta = a*a-4*b*c
-    sgn = -1 if Delta<0 else 1
-
-    if isnull(b) and isnull(c):
-        return (s1-s0)/a
-
-    elif isnull(a) and isnull(b) and notnull(c):
-        return -e1/nu/c+e0/nu/c
-
-    elif isnull(a) and notnull(b) and isnull(c):
-        return 1./e1/nu/b-1./e0/nu/b
-
-    elif notnull(a) and isnull(b) and notnull(c):
-        return math.log((c+a*e0)/(c+a*e1))/nu/a
-
-    elif notnull(a) and notnull(b) and isnull(c):
-        return math.log((b+a/e1)/(b+a/e0))/nu/a
-
-    elif notnull(b) and notnull(c):
-        sqD = math.sqrt(sgn*Delta)
-        lam0 = (2*b*e0+a)/sqD
-        lam1 = (2*b*e1+a)/sqD
-
+def quad_inverse(a, b, c, Delta, qD, s0, s1):
+    if isnull(a) and isnull(b):
+        return (s1-s0)/c
+    elif isnull(a) and notnull(b):
+        return 1./b*math.log(abs((b*s1+c)/(b*s0+c)))
+    else:
+        ssr = b/2./a
         if isnull(Delta):
-            tau0 = 2./(a+2*b*e0)/nu
-            tau1 = 2./(a+2*b*e1)/nu
-            return tau1-tau0
-
-        elif ispos(Delta):
-            M = (1+lam1)*(1-lam0)/(1-lam1)/(1+lam0)
-            return 1./sqD/nu*math.log(M) if M>0 else np.nan
-
+            return (1./(s0+ssr)-1./(s1+ssr))/a
+        elif Delta>0:
+            return (math.atanh(a*(s0+ssr)/qD)-math.atanh(a*(s1+ssr)/qD))/qD
         else:
-            return -2./sqD/nu*(math.atan(lam1)-math.atan(lam0))
+            return (math.atan(a*(s1+ssr)/qD)-math.atan(a*(s0+ssr)/qD))/qD
 
     return np.nan
 
@@ -191,41 +131,8 @@ def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
     c = coj
     Delta = aoj*aoj-4*boj*coj
 
-    # Integrate exp(-nuS) if needed
-    if notnull(b) or notnull(c):
-        if isnull(a) and isnull(b) and notnull(c):
-            expint = dt*e0-nu*c/2*dt*dt
-
-        elif isnull(a) and notnull(b) and isnull(c):
-            expint = dt/e0+nu*b/2*dt*dt
-
-        elif notnull(a) and isnull(b) and notnull(c):
-            expint = (e0+c/a)/nu/a*(1-math.exp(-nu*a*dt))-c/a*dt
-
-        elif notnull(a) and notnull(b) and isnull(c):
-            expint = -(1/e0+b/a)/nu/a*(1-math.exp(nu*a*dt))-b/a*dt
-
-        elif notnull(b) and notnull(c):
-            sqD = math.sqrt(abs(Delta))
-            if isnull(Delta):
-                expint = math.log(1+(e0+a/2/b)*nu*b*dt)/nu/b-a/2/b*dt
-
-            else:
-                lam0 = (2*b*e0+a)/sqD
-                if ispos(Delta):
-                    w = nu*sqD/2*dt
-                    # Care with overflow
-                    if w>100:
-                        expint = (math.log((lam0+1)/2)+w)/nu/b-a/2/b*dt
-
-                    else:
-                        u1 = math.exp(w)
-                        expint = math.log((lam0+1)*u1/2+(1-lam0)/u1/2)/nu/b-a/2/b*dt
-
-                else:
-                    u0 = math.atan(lam0)
-                    u1 = u0-nu*sqD/2*dt
-                    expint = math.log(math.cos(u1)/math.cos(u0))/nu/b-a/2/b*dt
+    # Integrate S if needed
+    # TODO
 
     for i in range(nfluxes):
         aij = aj_vector[i]
@@ -344,8 +251,11 @@ def integrate(alphas, scalings, nu, \
             boj += b
             coj += c
 
+        # Discriminant
+        Delta, qD = discrimin(aoj, boj, coj)
+
         # Get derivative at beginning of time step
-        funval = approx_fun(nu, aoj, boj, coj, s_start)
+        funval = quad_fun(aoj, boj, coj, s_start)
 
         # Check continuity
         if nit>1:
@@ -355,7 +265,7 @@ def integrate(alphas, scalings, nu, \
                 raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
-        s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_final)
+        s_end = quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_final)
 
         # complete or move band if needed
         if (s_end>=alpha0 and s_end<=alpha1 and not extrapolating)\
@@ -381,7 +291,7 @@ def integrate(alphas, scalings, nu, \
                 # Extrapolation, we cut integration at t_final
                 t_end = t_final
                 # we also need to correct s_end that is infinite
-                s_end = integrate_forward(nu, aoj, boj, coj, t_start, s_start, t_end)
+                s_end = quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_end)
                 # Ensure that s_end remains just inside interpolation range
                 if funval<0:
                     s_end = max(alpha_max-2*REZEQ_EPS, s_end)
@@ -389,7 +299,7 @@ def integrate(alphas, scalings, nu, \
                     s_end = min(alpha_min+2*REZEQ_EPS, s_end)
             else:
                 # No extrapolation, we can reach s_end
-                t_end = t_start+integrate_inverse(nu, aoj, boj, coj, s_start, s_end)
+                t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, s_start, s_end)
 
         if debug:
             print(f"\n\n[{nit}] low={str(extrapolating_low)[0]}"\
@@ -400,11 +310,11 @@ def integrate(alphas, scalings, nu, \
                     +f" / s:{s_start:3.3e}>{s_end:3.3e}")
 
         # Increment fluxes during the last interval
-        increment_fluxes(nu, a_vect, b_vect, c_vect, \
+        quad_fluxes(a_vect, b_vect, c_vect, \
                     aoj, boj, coj, t_start, t_end, s_start, s_end, fluxes)
 
         # Loop for next band
-        funval_prev = approx_fun(nu, aoj, boj, coj, s_end)
+        funval_prev = quad_fun(aoj, boj, coj, s_end)
         #print(" "*4+f"f({nu:3.3e}, {aoj:3.3e}, {boj:3.3e}, "\
         #        +f"{coj:3.3e}, {s_end:3.3e})={funval_prev:3.3e}")
         t_start = t_end

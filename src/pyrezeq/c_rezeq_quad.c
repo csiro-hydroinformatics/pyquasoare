@@ -12,7 +12,11 @@ double c_quad_grad(double a, double b, double c, double s){
 int c_quad_steady(double a, double b, double c, double steady[2]){
     double q, x1, x2;
     double sign = b<0 ? -1. : 1.;
-    double Delta = discrimin(a, b, c);
+    double discr[2], Delta, qD;
+
+    c_discrimin(a, b, c, discr);
+    Delta = discr[0];
+
     steady[0] = c_get_nan();
     steady[1] = c_get_nan();
 
@@ -21,8 +25,9 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
             q = -0.5*(b+sign*sqrt(Delta));
             x1 = q/a;
             x2 = c/q;
-            steady[0] = x1<x2 ? x1 : x2;
 
+            /* Store */
+            steady[0] = x1<x2 ? x1 : x2;
             if(Delta>0) {
                 steady[1] = x1<x2 ? x2 : x1;
             }
@@ -39,13 +44,15 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
 /*
  * Quadratic interpolation coefficients to match a function such that
  * f(a0) = f0 , f(a1) = f1 , f((a0+a1)/2) = fm
- * fapprox(s) = as^2+bs+c with coefs = [a, b, c]
+ * fapprox(s) = as^2+bs+c with coefs = [a, b, c, Delta, qD = sqrt(abs(Delta))/2]
  * */
 int c_quad_coefficients(int islin, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]){
      double da = a1-a0;
+     double da2 = da*da;
      double A=0, B=0, C=0;
+     double a=0, b=0, c=0;
 
      /* Ensures quadratic function remains monotone */
      double f25=(3*f0+f1)/4, f75=(f0+3*f1)/4;
@@ -55,33 +62,37 @@ int c_quad_coefficients(int islin, double a0, double a1,
 
      if(isnull(da)){
         /* a0=a1, cannot interpolate */
-        coefs[0] = c_get_nan();
-        coefs[1] = c_get_nan();
-        coefs[2] = c_get_nan();
-        return REZEQ_QUAD_APPROX_SAMEALPHA;
+        a = c_get_nan();
+        b = c_get_nan();
+        c = c_get_nan();
      }
      else {
         /* Linear function */
         if(islin) {
-            coefs[0] = 0.;
-            coefs[1] = (f1-f0)/da;
-            coefs[2] = f0-a0*coefs[1];
-            return 0;
+            a = 0.;
+            b = (f1-f0)/da;
+            c = f0-a0*b;
+        } else {
+            /* Quadratic function */
+            A = 2*f0+2*f1-4*fm;
+            B = 4*fm-f1-3*f0;
+            C = f0;
+
+            a = A/da2;
+            b = -2*a0*a+B/da;
+            c = a0*a0*a-B*a0/da+C;
         }
-        A = 2*f0+2*f1-4*fm;
-        B = 4*fm-f1-3*f0;
-        C = f0;
-        coefs[0] = A/da/da;
-        coefs[1] = -2*a0*A/da/da+B/da;
-        coefs[2] = A*a0*a0/da/da-B*a0/da+C;
      }
+     coefs[0] = a;
+     coefs[1] = b;
+     coefs[2] = c;
      return 0;
 }
 
 /* solution valididty range */
-double c_quad_delta_t_max(double a, double b, double c, double s0){
-    double Delta = discrimin(a, b, c);
-    double qD = sqrtabs(Delta)/2.;
+double c_quad_delta_t_max(double a, double b, double c,
+                            double Delta, double qD,
+                            double s0){
     double ssr = b/2./a;
     double delta_tmax=0.;
     double nu=0, Tm1=0., Tm2=0.;
@@ -95,7 +106,7 @@ double c_quad_delta_t_max(double a, double b, double c, double s0){
             delta_tmax = 1./a/(s0+ssr);
         }
         else if (Delta>0){
-            delta_tmax = atanh(nu)/qD;
+            delta_tmax = abs(nu)< 1? atanh(nu)/qD : atanh(1./nu)/qD;
         }
         else {
             Tm1 = atan(nu)/qD;
@@ -104,20 +115,16 @@ double c_quad_delta_t_max(double a, double b, double c, double s0){
         }
         delta_tmax = isnan(delta_tmax) || delta_tmax<0 ? c_get_inf() : delta_tmax;
     }
-
-   return delta_tmax;
+    return delta_tmax;
 }
 
 /* Solution of dS/dt = f*(s) */
-double c_quad_forward(double a, double b, double c,
-                        double t0, double s0, double t){
+double c_quad_forward(double a, double b, double c, double Delta, double qD,
+                            double t0, double s0, double t){
     double s1=0., omega=0.;
-
-    double Delta = discrimin(a, b, c);
-    double qD = sqrtabs(Delta)/2;
     double ssr = b/2./a;
     double dt=t-t0;
-    double delta_tmax = c_quad_delta_t_max(a, b, c, s0);
+    double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, s0);
 
     if(t<t0)
         return c_get_nan();
@@ -139,39 +146,33 @@ double c_quad_forward(double a, double b, double c,
         if(isnull(Delta)){
             s1 += (s0+ssr)/(1-a*dt*(s0+ssr));
         }
-        else if (Delta>0){
-            omega = tanh(qD*dt);
-            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
-        }
         else {
-            omega = tan(qD*dt);
-            s1 += (s0+ssr+qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
+            omega = Delta>0 ? tanh(qD*dt) : tan(qD*dt);
+            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
         }
     }
     return s1;
 }
 
 /* Primitive of 1/f*(s) */
-double c_quad_inverse(double a, double b, double c,
-                                double s0, double s1){
-    double Delta = discrimin(a, b, c);
-    double qD = sqrtabs(Delta);
-
+double c_quad_inverse(double a, double b, double c, double Delta, double qD,
+                            double s0, double s1){
+    double ssr = b/2./a;
     if(isnull(a) && isnull(b)){
         return (s1-s0)/c;
     }
     else if(isnull(a) && notnull(b)){
-        return 1/b*log(fabs((b*s1+c)/(b*s0+c)));
+        return 1./b*log(fabs((b*s1+c)/(b*s0+c)));
     }
     else{
         if(isnull(Delta)){
-            return 2/(2*a*s0+b)-2/(2*a*s1+b);
+            return (1./(s0+ssr)-1./(s1+ssr))/a;
         }
         else if (Delta>0){
-            return -2/qD*atanh((2*a*s1+b)/qD)+2/qD*atanh((2*a*s1+b)/qD);
+            return (atanh(a*(s0+ssr)/qD)-atanh(a*(s1+ssr)/qD))/qD;
         }
         else {
-            return 2/qD*atan((2*a*s1+b)/qD)-2/qD*atan((2*a*s1+b)/qD);
+            return (atan(a*(s1+ssr)/qD)-atan(a*(s0+ssr)/qD))/qD;
         }
     }
     return c_get_nan();
@@ -192,7 +193,11 @@ int c_quad_fluxes(int nfluxes,
     double a = aoj, a_check=0;
     double b = boj, b_check=0;
     double c = coj, c_check=0;
-    double Delta = discrimin(aoj, boj, coj);
+    double discr[2], Delta, qD;
+
+    c_discrimin(aoj, boj, coj, discr);
+    Delta = discr[0];
+    qD = discr[1];
 
     if(t1<t0)
         return REZEQ_QUAD_TIME_TOOLOW;
@@ -238,6 +243,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double aoj=0., boj=0., coj=0.;
     double a=0, b=0, c=0;
     double funval=0, funval_prev=0, grad=0;
+    double discr[2], Delta, qD;
     double alpha0, alpha1;
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
@@ -336,6 +342,11 @@ int c_quad_integrate(int nalphas, int nfluxes,
         if(isnan(aoj) || isnan(boj) || isnan(coj))
             return REZEQ_QUAD_NAN_COEFF;
 
+        /* Compute discriminant variables */
+        c_discrimin(aoj, boj, coj, discr);
+        Delta = discr[0];
+        qD = discr[1];
+
         /* Get derivative at beginning of time step */
         funval = c_quad_fun(aoj, boj, coj, s_start);
 
@@ -355,7 +366,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         /* Try integrating up to the end of the time step */
-        s_end = c_quad_forward(aoj, boj, coj, t_start, s_start, t_final);
+        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_final);
 
         /* complete or move band if needed */
         if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating) || isnull(funval)){
@@ -382,7 +393,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 /* Extrapolation, we cut integration at t_final */
                 t_end = t_final;
                 /* we also need to correct s_end because it is infinite */
-                s_end = c_quad_forward(aoj, boj, coj, t_start, s_start, t_end);
+                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_end);
                 /* Ensure that s_end remains inside interpolation range */
                 if(funval<0){
                     s_end = s_end < alpha_max-2*REZEQ_EPS ?
@@ -395,7 +406,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
             }
             else {
                 /* No extrapolation, we can reach s_end */
-                t_end = t_start+c_quad_inverse(aoj, boj, coj, s_start, s_end);
+                t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, s_start, s_end);
             }
         }
 

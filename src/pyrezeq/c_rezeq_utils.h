@@ -20,6 +20,7 @@
 
 #define REZEQ_ERROR_NFLUXES_TOO_LARGE 10
 
+
 #define REZEQ_QUAD_APPROX_SAMEALPHA 101
 #define REZEQ_QUAD_TIME_TOOLOW 102
 #define REZEQ_QUAD_FAILEDSUMCHECK 103
@@ -29,12 +30,14 @@
 #define REZEQ_QUAD_NO_CONVERGENCE 107
 #define REZEQ_QUAD_NAN_COEFF 108
 
+#define REZEQ_UTILS_QD_NEGATIVE 501
+
 /* Define small number */
 #define REZEQ_EPS 1e-15
 #define REZEQ_ATOL 1e-7
 #define REZEQ_RTOL 1e-5
 
-#define REZEQ_PI 3.1415926535897936
+#define REZEQ_PI  3.1415926535897932384626433832795028841971693993751
 
 /* Define maximum number of fluxes */
 #define REZEQ_NFLUXES_MAX 20
@@ -53,9 +56,9 @@ int isequal(double x, double y, double atol, double rtol);
 int notequal(double x, double y, double atol, double rtol);
 
 double diff_of_products(double a, double b, double c, double d);
-double discrimin(double a, double b, double c);
 double sqrtabs(double x);
 
+int c_discrimin(double a, double b, double c, double discr[2]);
 
 int c_find_alpha(int nalphas, double * alphas, double s0);
 

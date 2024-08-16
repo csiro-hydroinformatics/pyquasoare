@@ -16,7 +16,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 10
+NCASES = 11
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -220,6 +220,9 @@ def generate_samples(ntry, selcase, request):
     elif case == 10:
         name = "a close to zero"
         params[:, 0] = np.random.uniform(2*eps, 3*eps, size=len(params))
+    elif case == 11:
+        name = "s0 = -b/2a"
+        s0s = -params[:, 1]/2/params[:, 0]
 
     # Other data
     s0s = np.random.uniform(-5, 5, size=ntry)
@@ -275,9 +278,6 @@ def test_quad_fun(allclose, generate_samples):
 
 def test_quad_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
-
-    #nus = [5]
-    # check fun = genlogisitc
 
     f0 = fun(alpha0)
     f1 = fun(alpha1)
@@ -373,4 +373,46 @@ def test_quad_coefficient_matrix(allclose, reservoir_function):
         out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, alpha)
         assert allclose(out[0, 1], fun(alpha))
 
+
+def test_quad_vs_lin(allclose, reservoir_function):
+    fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
+    if fname in ["x2", "stiff", "logistic"]:
+        # Skip x2, stiff and logistic which are perfect match with quadratic functions
+        pytest.skip("Skip function")
+
+    funs = [lambda x: inflow+fun(x)]
+    nalphas = 11
+    alphas = np.linspace(alpha0, alpha1, nalphas)
+
+    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas)
+    s = np.linspace(alpha0, alpha1, 10000)
+    out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
+    fapprox = out[:, 0]
+
+    amat_lin, bmat_lin, cmat_lin = approx.quad_coefficient_matrix(funs, alphas, True)
+    out = approx.quad_fun_from_matrix(alphas, amat_lin, bmat_lin, cmat_lin, s)
+    fapprox_lin = out[:, 0]
+
+    ftrue = funs[0](s)
+    rmse = math.sqrt(((fapprox-ftrue)**2).mean())
+    rmse_lin = math.sqrt(((fapprox_lin-ftrue)**2).mean())
+
+    # We want to make sure quad is always worse than app
+    ratio_thresh = {
+        "x4": 2e-2, \
+        "x6": 5e-2, \
+        "x8": 1e-1, \
+        "tanh": 5e-1, \
+        "exp": 1e-2, \
+        "sin": 8e-1, \
+        "recip": 3e-1, \
+        "recipquad": 5e-1, \
+        "runge": 9e-1, \
+        "ratio": 5e-1, \
+        "genlogistic": 2e-1
+    }
+    ratio = rmse/rmse_lin
+    assert ratio<ratio_thresh[fname]
+    LOGGER.info("")
+    LOGGER.info(f"[{fname}] quad vs lin: error ratio={ratio:2.2e}")
 
