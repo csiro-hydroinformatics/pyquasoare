@@ -19,14 +19,14 @@ int c_quad_coefficients(int islin, double a0, double a1,
                             double coefs[3]);
 
 double c_quad_delta_t_max(double a, double b, double c,
-                            double Delta, double qD, double s0);
+                            double Delta, double qD, double ssr, double s0);
 
 double c_quad_forward(double a, double b, double c,
-                            double Delta, double qD,
+                            double Delta, double qD, double ssr,
                             double t0, double s0, double t);
 
 double c_quad_inverse(double a, double b, double c,
-                            double Delta, double qD,
+                            double Delta, double qD, double ssr,
                             double s0, double s1);
 
 int c_quad_fluxes(int nfluxes,

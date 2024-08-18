@@ -4,8 +4,9 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, isequal, notequal, isnull, notnull
-from pyrezeq.integrate import discrimin
+from pyrezeq.approx import REZEQ_EPS, REZEQ_SSR_THRESHOLD
+from pyrezeq.approx import isequal, notequal, isnull, notnull
+from pyrezeq.integrate import quad_constants
 
 def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -44,40 +45,50 @@ def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
     nev = res.nfev
     njac = res.njev if hasattr(res, "njev") else 0
 
-    return res.t, res.y.T.squeeze(), nev, njac
+    if len(res.t) == 0:
+        return np.array([]), np.array([]), nev, njac
+    else:
+        return res.t, res.y.T.squeeze(), nev, njac
 
 
 # --- REZEQ functions translated from C for slow implementation ---
+def eta_fun(x, Delta):
+    if Delta<0.:
+        return math.atan(x)
+    else:
+        return -math.atanh(x) if abs(x)<1 else -math.atanh(1./x)
+
+
+def omega_fun(x, Delta):
+    return math.tan(x) if Delta<0. else math.tanh(x)
+
+
 def quad_fun(a, b, c, s):
     return (a*s+b)*s+c;
 
-def quad_delta_t_max(a, b, c, Delta, qD, s0):
-    ssr = b/2./a
+
+def quad_delta_t_max(a, b, c, Delta, qD, ssr, s0):
+    tmp = a*(s0+ssr)
+    signD = -1 if Delta<0 else 1
     if isnull(a):
         delta_tmax = np.inf
     else:
-        nu = qD/a/(s0+ssr)
         if isnull(Delta):
-            delta_tmax = 1./a/(s0+ssr);
-        elif Delta>0:
-            delta_tmax = math.atanh(nu)/qD if abs(nu)<1 else math.atanh(1./nu)/qD
+            delta_tmax = np.inf if tmp<=0 else 1./tmp
+        elif Delta<0:
+            delta_tmax = (math.pi/2-eta_fun(tmp/qD, Delta))/qD
         else:
-            Tm1 = math.atan(nu)/qD
-            Tm2 = math.pi/2./qD
-            delta_tmax = Tm1 if nu>0 and Tm1<Tm2 else Tm1
-
-        delta_tmax = np.inf if np.isnan(delta_tmax) or delta_tmax<0 \
-                            else delta_tmax
+            delta_tmax = np.inf if tmp<qD*signD else -eta_fun(tmp/qD, Delta)/qD
 
     return delta_tmax
 
 
-def quad_forward(a, b, c, Delta, qD, t0, s0, t):
+def quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t):
     if t<t0:
         return np.nan
 
     dt = t-t0
-    dtmax = quad_delta_t_max(a, b, c, Delta, qD, s0)
+    dtmax = quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
     if dt>dtmax:
         return np.nan
 
@@ -91,30 +102,35 @@ def quad_forward(a, b, c, Delta, qD, t0, s0, t):
         s1 = -c/b+(s0+c/b)*math.exp(b*dt)
 
     else:
-        ssr = b/2./a;
-        s1 = -ssr
         if isnull(Delta):
-            s1 += (s0+ssr)/(1-a*dt*(s0+ssr))
+            s1 = -ssr+(s0+ssr)/(1-a*dt*(s0+ssr))
         else:
-            omega = math.tanh(qD*dt) if Delta>0 else math.tan(qD*dt)
-            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega)
+            omega = omega_fun(qD*dt, Delta)
+            signD = -1. if Delta<0 else 1.
+            if abs(ssr)>REZEQ_SSR_THRESHOLD:
+                s1 = -c/b+(s0+c/b)*math.exp(b*dt)
+            else:
+                s1 = -ssr+(s0+ssr-signD*qD/a*omega)/(1-a/qD*(s0+ssr)*omega)
 
     return s1
 
 
-def quad_inverse(a, b, c, Delta, qD, s0, s1):
+def quad_inverse(a, b, c, Delta, qD, ssr, s0, s1):
     if isnull(a) and isnull(b):
         return (s1-s0)/c
     elif isnull(a) and notnull(b):
         return 1./b*math.log(abs((b*s1+c)/(b*s0+c)))
     else:
-        ssr = b/2./a
         if isnull(Delta):
             return (1./(s0+ssr)-1./(s1+ssr))/a
         elif Delta>0:
-            return (math.atanh(a*(s0+ssr)/qD)-math.atanh(a*(s1+ssr)/qD))/qD
+            eta = lambda x: math.atanh(x) if abs(x)<1 else math.atanh(1./x)
+            return (eta(a*(s0+ssr)/qD)-eta(a*(s1+ssr)/qD))/qD
         else:
-            return (math.atan(a*(s1+ssr)/qD)-math.atan(a*(s0+ssr)/qD))/qD
+            if abs(ssr)>REZEQ_SSR_THRESHOLD:
+                return 1./b*math.log(abs((b*s1+c)/(b*s0+c)))
+            else:
+                return (math.atan(a*(s1+ssr)/qD)-math.atan(a*(s0+ssr)/qD))/qD
 
     return np.nan
 
@@ -129,7 +145,7 @@ def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
     a = aoj
     b = boj
     c = coj
-    Delta = aoj*aoj-4*boj*coj
+    Delta, qD, ssr = quad_constants(a, b, c)
 
     # Integrate S if needed
     # TODO
@@ -252,7 +268,7 @@ def integrate(alphas, scalings, nu, \
             coj += c
 
         # Discriminant
-        Delta, qD = discrimin(aoj, boj, coj)
+        Delta, qD, ssr = quad_constants(aoj, boj, coj)
 
         # Get derivative at beginning of time step
         funval = quad_fun(aoj, boj, coj, s_start)
@@ -265,7 +281,8 @@ def integrate(alphas, scalings, nu, \
                 raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
-        s_end = quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_final)
+        s_end = quad_forward(aoj, boj, coj, Delta, qD, ssr, \
+                                    t_start, s_start, t_final)
 
         # complete or move band if needed
         if (s_end>=alpha0 and s_end<=alpha1 and not extrapolating)\

@@ -10,9 +10,10 @@ cdef extern from 'c_rezeq_utils.h':
     double c_get_rtol()
     double c_get_inf()
     double c_get_nan()
+    double c_get_ssr_threshold()
     int c_get_nfluxes_max()
     double c_compiler_accuracy_kahan()
-    int c_discrimin(double a, double b, double c, double discr[2])
+    int c_quad_constants(double a, double b, double c, double values[3])
 
     int c_find_alpha(int nalphas, double * alphas, double s0)
 
@@ -30,14 +31,14 @@ cdef extern from 'c_rezeq_quad.h':
                                 double coefs[3])
 
     double c_quad_delta_t_max(double a, double b, double c,
-                                double Delta, double qD, double s0);
+                                double Delta, double qD, double ssr, double s0);
 
     double c_quad_forward(double a, double b, double c,
-                                double Delta, double qD,
+                                double Delta, double qD, double ssr,
                                 double t0, double s0, double t);
 
     double c_quad_inverse(double a, double b, double c,
-                                double Delta, double qD,
+                                double Delta, double qD, double ssr,
                                 double s0, double s1);
 
     int c_quad_fluxes(int nfluxes,
@@ -89,6 +90,9 @@ def get_atol():
 def get_rtol():
     return c_get_rtol()
 
+def get_ssr_threshold():
+    return c_get_ssr_threshold()
+
 def get_nan():
     return c_get_nan()
 
@@ -101,11 +105,10 @@ def get_nfluxes_max():
 def compiler_accuracy_kahan():
     return c_compiler_accuracy_kahan()
 
-
-def discrimin(double a, double b, double c, \
-                np.ndarray[double, ndim=1, mode='c'] discr not None):
-    assert discr.shape[0] == 2
-    return c_discrimin(a, b, c, <double*> np.PyArray_DATA(discr))
+def quad_constants(double a, double b, double c, \
+                np.ndarray[double, ndim=1, mode='c'] values not None):
+    assert values.shape[0] == 3
+    return c_quad_constants(a, b, c, <double*> np.PyArray_DATA(values))
 
 
 def get_error_message(int err_code):
@@ -189,13 +192,13 @@ def quad_steady_vect(np.ndarray[double, ndim=1, mode='c'] a not None, \
 
 
 def quad_forward(double a, double b, double c, \
-                        double Delta, double qD, \
+                        double Delta, double qD, double ssr, \
                         double t0, double s0, double t):
-    return c_quad_forward(a, b, c, Delta, qD, t0, s0, t)
+    return c_quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t)
 
 
 def quad_forward_vect(double a, double b, double c, \
-                        double Delta, double qD, \
+                        double Delta, double qD, double ssr, \
                         double t0, double s0, \
                         np.ndarray[double, ndim=1, mode='c'] t not None,\
                         np.ndarray[double, ndim=1, mode='c'] s not None):
@@ -203,29 +206,30 @@ def quad_forward_vect(double a, double b, double c, \
     cdef int i
     assert s.shape[0] == nval
     for i in range(nval):
-        s[i] = c_quad_forward(a, b, c, Delta, qD, t0, s0, t[i])
+        s[i] = c_quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t[i])
     return 0
 
 
 def quad_delta_t_max(double a, double b, double c, \
-                        double Delta, double qD, double s0):
-    return c_quad_delta_t_max(a, b, c, Delta, qD, s0)
+                        double Delta, double qD, double ssr, double s0):
+    return c_quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
 
 
 def quad_inverse(double a, double b, double c, \
-                        double Delta, double qD, \
+                        double Delta, double qD, double ssr, \
                         double s0, double s1):
-    return c_quad_inverse(a, b, c, Delta, qD, s0, s1)
+    return c_quad_inverse(a, b, c, Delta, qD, ssr, s0, s1)
 
 
-def quad_inverse_vect(double a, double b, double c, double Delta, double qD, double s0, \
+def quad_inverse_vect(double a, double b, double c, \
+                        double Delta, double qD, double ssr, double s0, \
                             np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                             np.ndarray[double, ndim=1, mode='c'] t not None):
     cdef int nval = s1.shape[0]
     cdef int i
     assert t.shape[0] == nval
     for i in range(nval):
-            t[i] = c_quad_inverse(a, b, c, Delta, qD, s0, s1[i])
+            t[i] = c_quad_inverse(a, b, c, Delta, qD, ssr, s0, s1[i])
     return 0
 
 

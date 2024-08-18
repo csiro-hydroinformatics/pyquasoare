@@ -16,7 +16,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 11
+NCASES = 12
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -140,22 +140,6 @@ def reservoir_function(request, selfun):
         sol = lambda t, s0: K/(1+((K/s0)**nu-1)*np.exp(-alpha*nu*t))**(1./nu)
         alpha0, alpha1 = 0, K
 
-
-    #elif name == "cos":
-    #    e = 1e-5
-    #    fun = lambda x: 1+eps+np.cos(x)
-    #    dfun = lambda x: -np.sin(x)
-    #    inflow = 0.
-    #    C = math.sqrt(e*(e+2))
-    #    # int ( 1/f ) = 2/C*atan(e*sin(x)/C/(cos(x)+1))
-    #    # hence
-    #    # => atan(e*sin(s1)/C/(cos(s1)+1)) = atan(e*sin(s0)/C/(cos(s0)+1))+C/2.t
-    #    #                                  = D+C/2.t
-    #    # => e*sin(s1)/(1+cos(s1)) = tan(D+C/2.t)
-    #    sol = lambda t, s0: (1-np.exp(-n*t)*(1-s0**n))**(1./n)
-    #    alpha0, alpha1 = 0., 3*math.pi
-
-
     return name, fun, dfun, sol, inflow, (alpha0, alpha1)
 
 
@@ -166,6 +150,9 @@ def generate_samples(ntry, selcase, request):
     if selcase>0 and case!=selcase:
         pytest.skip("Configuration skipped")
 
+    Tmax = 20
+
+    # Parameters
     v0, v1 = -5*np.ones(3), 5*np.ones(3)
 
     if case == 1:
@@ -180,53 +167,71 @@ def generate_samples(ntry, selcase, request):
     rnd = np.random.uniform(0, 1, size=(ntry, 3))
     params = v0[None, :]+(v1-v0)[None, :]*rnd
 
+    # Refine cases
     eps = approx.REZEQ_EPS
     if case == 3:
         name = "Determinant is null"
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
+
     elif case == 4:
         name = "Determinant is negative"
         a, b, c = params.T
-        delta = b**2-4*a*c
-        delta *= -np.sign(delta) # Turn all delta to neg
-        x1 = (-b-np.sqrt(delta+0j))/2/a
-        x2 = (-b+np.sqrt(delta+0j))/2/a
-        s, p = x1+x2, x1*x2
-        params[:, 1] = (-s*a).real # Reconstruct coefficients from roots
-        params[:, 2] = (p*a).real
+        Delta = -np.abs(b**2-4*a*c)
+        qD = np.sqrt(-Delta)/2
+        c = (b**2-Delta)/4./a
+        params[:, 2] = c
 
-    elif case == 5:
-        name = "Determinant is positive"
+    elif case in [5, 12]:
+        name = "Determinant is positive" if case==5 \
+                        else "edge case for atanh"
         a, b, c = params.T
-        delta = b**2-4*a*c
-        delta *= np.sign(delta) # Turn all delta to pos
-        x1 = (-b-np.sqrt(delta+0j))/2/a
-        x2 = (-b+np.sqrt(delta+0j))/2/a
-        s, p = x1+x2, x1*x2
-        params[:, 1] = (-s*a).real # Reconstruct coefficients from roots
-        params[:, 2] = (p*a).real
+        Delta = np.abs(b**2-4*a*c)
+        c = (b**2-Delta)/4./a
+        params[:, 2] = c
+
+        if case == 12:
+            ssr = b/2./a
+            qD = np.sqrt(Delta)/2.
+            eps = np.random.uniform(0., 2., len(qD))
+            s0s = -ssr+np.abs(qD/a)*np.random.uniform(0., 1., len(qD))
+            nu = qD/a/(s0s+ssr)
 
     elif case == 6:
         name = "General"
+
     elif case == 7:
         name = "General+large scale"
         params *= 1000
+
     elif case == 8:
         name = "General+low scale"
         params /= 1000
+
     elif case == 9:
+        s0s = np.random.uniform(-5, 5, ntry)
         name = "a and b close to zero"
         params[:, :2] = np.random.uniform(2*eps, 3*eps, size=(len(params), 2))
+
     elif case == 10:
+        s0s = np.random.uniform(-5, 5, ntry)
         name = "a close to zero"
         params[:, 0] = np.random.uniform(2*eps, 3*eps, size=len(params))
-    elif case == 11:
-        name = "s0 = -b/2a"
-        s0s = -params[:, 1]/2/params[:, 0]
 
-    # Other data
-    s0s = np.random.uniform(-5, 5, size=ntry)
-    Tmax = 20
+    elif case == 11:
+        name = "equality s0 = -b/2a"
+        a, b, c = params.T
+        s0s = -b/2./a
+
+    if not case in [9, 10, 11, 12]:
+        s0s = np.random.uniform(-5, 5, ntry)
+        a, b, c = params.T
+        idx = np.abs(a)>0
+        if idx.sum()>0:
+            Delta = np.abs(b**2-4*a*c)
+            qD = np.sqrt(Delta)/2
+            qD[np.abs(Delta)==0] = 3.
+            ssr = b/2/a
+            s0s[idx] = -ssr+qD/a*np.random.uniform(-2, 2, idx.sum())
 
     return f"{name:20}", case, params, s0s, Tmax
 

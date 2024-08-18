@@ -8,6 +8,7 @@ if has_c_module():
     REZEQ_EPS = c_pyrezeq.get_eps()
     REZEQ_ATOL = c_pyrezeq.get_atol()
     REZEQ_RTOL = c_pyrezeq.get_rtol()
+    REZEQ_SSR_THRESHOLD = c_pyrezeq.get_ssr_threshold()
     REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
     REZEQ_ACCURACY = c_pyrezeq.compiler_accuracy_kahan()
 else:

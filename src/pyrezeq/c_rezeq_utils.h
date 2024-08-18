@@ -37,6 +37,8 @@
 #define REZEQ_ATOL 1e-7
 #define REZEQ_RTOL 1e-5
 
+#define REZEQ_SSR_THRESHOLD 1e10
+
 #define REZEQ_PI  3.1415926535897932384626433832795028841971693993751
 
 /* Define maximum number of fluxes */
@@ -47,6 +49,7 @@ double c_get_atol();
 double c_get_rtol();
 double c_get_inf();
 double c_get_nan();
+double c_get_ssr_threshold();
 int c_get_nfluxes_max();
 double c_compiler_accuracy_kahan();
 
@@ -56,10 +59,10 @@ int isequal(double x, double y, double atol, double rtol);
 int notequal(double x, double y, double atol, double rtol);
 
 double diff_of_products(double a, double b, double c, double d);
-double sqrtabs(double x);
 
-int c_discrimin(double a, double b, double c, double discr[2]);
-
+int c_quad_constants(double a, double b, double c, double values[3]);
+double c_eta_fun(double x, double Delta);
+double c_omega_fun(double x, double Delta);
 int c_find_alpha(int nalphas, double * alphas, double s0);
 
 int c_get_error_message(int err_code, char message[100]);

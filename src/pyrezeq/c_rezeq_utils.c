@@ -25,9 +25,14 @@ double c_get_inf() {
     return inf;
 }
 
+double c_get_ssr_threshold(){
+    return REZEQ_SSR_THRESHOLD;
+}
+
 int c_get_nfluxes_max(){
     return REZEQ_NFLUXES_MAX;
 }
+
 
 double c_compiler_accuracy_kahan(){
     long double s, t=3.0;
@@ -68,13 +73,30 @@ double diff_of_products(double a, double b, double c, double d)
     return f+e;
 }
 
-int c_discrimin(double a, double b, double c, double discr[2]){
+int c_quad_constants(double a, double b, double c, double values[3]){
     double Delta = isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);
     double qD = sqrt(fabs(Delta))/2;
-    discr[0] = Delta;
-    discr[1] = qD;
-    return qD>=0 ? 0 : REZEQ_UTILS_QD_NEGATIVE;
+    values[0] = Delta;
+    values[1] = qD;
+    values[2] = b/2./a;
+    return qD>=0. ? 0. : REZEQ_UTILS_QD_NEGATIVE;
 }
+
+double c_eta_fun(double x, double Delta){
+    if(Delta<0.)
+        return atan(x);
+    else
+        return abs(x)<1 ? -atanh(x) : -atanh(1./x);
+}
+
+double c_omega_fun(double x, double Delta){
+    if(Delta<0.)
+        return tan(x);
+    else
+        return tanh(x);
+}
+
+
 
 int c_find_alpha(int nalphas, double * alphas, double s0){
     int i=0;

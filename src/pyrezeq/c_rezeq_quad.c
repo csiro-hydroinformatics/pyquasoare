@@ -12,25 +12,24 @@ double c_quad_grad(double a, double b, double c, double s){
 int c_quad_steady(double a, double b, double c, double steady[2]){
     double q, x1, x2;
     double sign = b<0 ? -1. : 1.;
-    double discr[2], Delta, qD;
+    double constants[2], Delta;
 
-    c_discrimin(a, b, c, discr);
-    Delta = discr[0];
+    c_quad_constants(a, b, c, constants);
+    Delta = constants[0];
 
     steady[0] = c_get_nan();
     steady[1] = c_get_nan();
 
     if(notnull(a)){
-        if(Delta>=0){
+        if(isnull(Delta)){
+            steady[0] = -b/2./a;
+        }
+        else if(Delta>=0){
             q = -0.5*(b+sign*sqrt(Delta));
             x1 = q/a;
             x2 = c/q;
-
-            /* Store */
             steady[0] = x1<x2 ? x1 : x2;
-            if(Delta>0) {
-                steady[1] = x1<x2 ? x2 : x1;
-            }
+            steady[1] = x1<x2 ? x2 : x1;
         }
     }
     else {
@@ -91,40 +90,35 @@ int c_quad_coefficients(int islin, double a0, double a1,
 
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c,
-                            double Delta, double qD,
+                            double Delta, double qD, double ssr,
                             double s0){
-    double ssr = b/2./a;
     double delta_tmax=0.;
-    double nu=0, Tm1=0., Tm2=0.;
+    double tmp = a*(s0+ssr);
+    double signD = Delta<0 ? -1 : 1;
 
     if(isnull(a)){
         delta_tmax = c_get_inf();
     }
     else{
-        nu = qD/a/(s0+ssr);
-        if(isnull(Delta)){
-            delta_tmax = 1./a/(s0+ssr);
-        }
-        else if (Delta>0){
-            delta_tmax = abs(nu)< 1? atanh(nu)/qD : atanh(1./nu)/qD;
-        }
-        else {
-            Tm1 = atan(nu)/qD;
-            Tm2 = REZEQ_PI/2./qD;
-            delta_tmax = nu>0 && Tm1<Tm2 ? Tm1 : Tm2;
-        }
-        delta_tmax = isnan(delta_tmax) || delta_tmax<0 ? c_get_inf() : delta_tmax;
+        if(isnull(Delta))
+            delta_tmax = tmp<=0 ? c_get_inf() : 1./tmp;
+        else if (Delta<0)
+            delta_tmax = (REZEQ_PI/2-c_eta_fun(tmp/qD, Delta))/qD;
+        else if (Delta>0)
+            delta_tmax = tmp<qD*signD ? c_get_inf() : -c_eta_fun(tmp/qD, Delta)/qD;
     }
     return delta_tmax;
 }
 
 /* Solution of dS/dt = f*(s) */
 double c_quad_forward(double a, double b, double c, double Delta, double qD,
-                            double t0, double s0, double t){
+                            double ssr, double t0, double s0, double t){
     double s1=0., omega=0.;
-    double ssr = b/2./a;
     double dt=t-t0;
-    double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, s0);
+    double signD = Delta<0 ? -1. : 1.;
+
+    /* Obtain the maximum time for which integration remains valid */
+    double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, ssr, s0);
 
     if(t<t0)
         return c_get_nan();
@@ -142,13 +136,15 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
         s1 = -c/b+(s0+c/b)*exp(b*dt);
     }
     else{
-        s1 = -ssr;
         if(isnull(Delta)){
-            s1 += (s0+ssr)/(1-a*dt*(s0+ssr));
+            s1 = -ssr+(s0+ssr)/(1-a*dt*(s0+ssr));
         }
         else {
-            omega = Delta>0 ? tanh(qD*dt) : tan(qD*dt);
-            s1 += (s0+ssr-qD/a*omega)/(1-a/qD*(s0+ssr)*omega);
+            omega = c_omega_fun(qD*dt, Delta);
+            if(fabs(ssr)>REZEQ_SSR_THRESHOLD)
+                s1 = -c/b+(s0+c/b)*exp(b*dt);
+            else
+                s1 = -ssr+(s0+ssr-signD*qD/a*omega)/(1.-a/qD*(s0+ssr)*omega);
         }
     }
     return s1;
@@ -156,8 +152,8 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
 
 /* Primitive of 1/f*(s) */
 double c_quad_inverse(double a, double b, double c, double Delta, double qD,
-                            double s0, double s1){
-    double ssr = b/2./a;
+                            double ssr, double s0, double s1){
+    double u0=0., u1=0.;
     if(isnull(a) && isnull(b)){
         return (s1-s0)/c;
     }
@@ -165,14 +161,14 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
         return 1./b*log(fabs((b*s1+c)/(b*s0+c)));
     }
     else{
-        if(isnull(Delta)){
+        if(isnull(Delta))
             return (1./(s0+ssr)-1./(s1+ssr))/a;
-        }
-        else if (Delta>0){
-            return (atanh(a*(s0+ssr)/qD)-atanh(a*(s1+ssr)/qD))/qD;
-        }
-        else {
-            return (atan(a*(s1+ssr)/qD)-atan(a*(s0+ssr)/qD))/qD;
+        else{
+            if(fabs(ssr)>REZEQ_SSR_THRESHOLD)
+                return 1./b*log(fabs((b*s1+c)/(b*s0+c)));
+            else
+                return (c_eta_fun(a*(s1+ssr)/qD, Delta)
+                                -c_eta_fun(a*(s0+ssr)/qD, Delta))/qD;
         }
     }
     return c_get_nan();
@@ -193,11 +189,12 @@ int c_quad_fluxes(int nfluxes,
     double a = aoj, a_check=0;
     double b = boj, b_check=0;
     double c = coj, c_check=0;
-    double discr[2], Delta, qD;
+    double constants[2], Delta, qD, ssr;
 
-    c_discrimin(aoj, boj, coj, discr);
-    Delta = discr[0];
-    qD = discr[1];
+    c_quad_constants(aoj, boj, coj, constants);
+    Delta = constants[0];
+    qD = constants[1];
+    ssr = constants[2];
 
     if(t1<t0)
         return REZEQ_QUAD_TIME_TOOLOW;
@@ -242,8 +239,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int i, nit=0, jalpha_next=0;
     double aoj=0., boj=0., coj=0.;
     double a=0, b=0, c=0;
+    double constants[2], Delta, qD, ssr;
     double funval=0, funval_prev=0, grad=0;
-    double discr[2], Delta, qD;
     double alpha0, alpha1;
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
@@ -343,9 +340,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
             return REZEQ_QUAD_NAN_COEFF;
 
         /* Compute discriminant variables */
-        c_discrimin(aoj, boj, coj, discr);
-        Delta = discr[0];
-        qD = discr[1];
+        c_quad_constants(aoj, boj, coj, constants);
+        Delta = constants[0];
+        qD = constants[1];
+        ssr = constants[2];
 
         /* Get derivative at beginning of time step */
         funval = c_quad_fun(aoj, boj, coj, s_start);
@@ -366,7 +364,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         /* Try integrating up to the end of the time step */
-        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_final);
+        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, ssr,
+                                    t_start, s_start, t_final);
 
         /* complete or move band if needed */
         if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating) || isnull(funval)){
@@ -393,7 +392,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 /* Extrapolation, we cut integration at t_final */
                 t_end = t_final;
                 /* we also need to correct s_end because it is infinite */
-                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_end);
+                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, ssr,
+                                            t_start, s_start, t_end);
                 /* Ensure that s_end remains inside interpolation range */
                 if(funval<0){
                     s_end = s_end < alpha_max-2*REZEQ_EPS ?
@@ -406,7 +406,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
             }
             else {
                 /* No extrapolation, we can reach s_end */
-                t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, s_start, s_end);
+                t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, ssr,
+                                                        s_start, s_end);
             }
         }
 
