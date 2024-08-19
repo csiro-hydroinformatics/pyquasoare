@@ -46,6 +46,7 @@ cdef extern from 'c_rezeq_quad.h':
                             double * bj_vector,
                             double * cj_vector,
                             double aoj, double boj, double coj,
+                            double Delta, double qD, double ssr,
                             double t0, double t1, double s0, double s1,
                             double * fluxes)
 
@@ -243,6 +244,7 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
                     double aoj, double boj, double coj, \
+                    double Delta, double qD, double ssr,
                     double t0, double t1, \
                     double s0, double s1, \
                     np.ndarray[double, ndim=1, mode='c'] fluxes not None):
@@ -260,7 +262,8 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                             <double*> np.PyArray_DATA(aj_vector),
                             <double*> np.PyArray_DATA(bj_vector),
                             <double*> np.PyArray_DATA(cj_vector),
-                            aoj, boj, coj, t0, t1, s0, s1, \
+                            aoj, boj, coj, Delta, qD, ssr, \
+                            t0, t1, s0, s1, \
                             <double*> np.PyArray_DATA(fluxes))
 
 

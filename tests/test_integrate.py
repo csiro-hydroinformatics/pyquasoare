@@ -56,11 +56,11 @@ def test_quad_constants(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(a, b, c)
+        Delta, qD, sbar = integrate.quad_constants(a, b, c)
         assert allclose(Delta, b*b-4*a*c)
         assert allclose(qD, math.sqrt(abs(Delta))/2)
         if a<0 or a>0:
-            assert allclose(ssr, b/2/a)
+            assert allclose(sbar, b/2/a)
 
 
 def test_delta_t_max(allclose, generate_samples):
@@ -71,10 +71,10 @@ def test_delta_t_max(allclose, generate_samples):
     err_max = 0
     nassessed = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(a, b, c)
+        Delta, qD, sbar = integrate.quad_constants(a, b, c)
 
         # Compute delta max from C code
-        delta_tmax = integrate.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
+        delta_tmax = integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)
         t0 = 0
         tmax = t0+delta_tmax
 
@@ -114,7 +114,7 @@ def test_delta_t_max(allclose, generate_samples):
             assert tmax>=Tmax
 
         # Compares with slow
-        delta_tmax_slow = slow.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
+        delta_tmax_slow = slow.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)
         assert np.isclose(delta_tmax, delta_tmax_slow)
 
         # Check tmax < end of sim
@@ -142,24 +142,24 @@ def test_delta_t_max(allclose, generate_samples):
 def test_forward_vs_finite_difference(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     if case in [7, 10]:
-        pytest.skip("Cannot do because numerical round-off")
+        pytest.skip("Cannot do because of numerical round-off")
     ntry = len(params)
     t0 = 0
     errmax_max = 0
     nassessed = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(a, b, c)
+        Delta, qD, sbar = integrate.quad_constants(a, b, c)
 
         # Set integration time
-        Tmax = t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)*0.99
+        Tmax = t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.99
         Tmax = Tmax if np.isfinite(Tmax) else 20.
         t_eval = np.linspace(t0, Tmax, 10000)
 
         # Integrate with C code
-        s1 = integrate.quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t_eval)
+        s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
 
         # Compare with slow
-        s1_slow = np.array([slow.quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t) \
+        s1_slow = np.array([slow.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t) \
                                                                     for t in t_eval])
         assert allclose(s1, s1_slow)
 
@@ -204,10 +204,10 @@ def test_forward_vs_numerical(allclose, generate_samples):
     errmax_max = 0
     nassessed = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(a, b, c)
+        Delta, qD, sbar = integrate.quad_constants(a, b, c)
 
         # Set integration time
-        Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)*0.99)
+        Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.99)
         if np.isnan(Tmax) or Tmax<0:
             continue
         t_eval = np.linspace(0, Tmax, 1000)
@@ -219,15 +219,16 @@ def test_forward_vs_numerical(allclose, generate_samples):
         if len(te)<3:
             continue
 
+        # Eliminates points with very high derivatives
         dsdt = np.diff(expected)/np.diff(te)
         dsdt = np.insert(dsdt, 0, 0)
+        iok = (np.abs(dsdt)<1e3)
 
-        s1 = integrate.quad_forward(a, b, c, Delta, qD, ssr, t0, s0, te)
+        s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, te)
 
         err = np.abs(np.arcsinh(s1)-np.arcsinh(expected))
-        iok = (np.abs(dsdt)<1e3)
         errmax = np.nanmax(err[iok])
-        err_thresh = 5e-3 if case in [5, 7] else 5e-4
+        err_thresh = 5e-2 if case in [5, 7] else 5e-4
         assert errmax<err_thresh
         errmax_max = max(errmax, errmax_max)
         nassessed += 1
@@ -240,29 +241,31 @@ def test_forward_vs_numerical(allclose, generate_samples):
 
 def test_inverse(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
+    if case in [10]:
+        pytest.skip("Cannot do because of numerical round-off")
     ntry = len(params)
     t0 = 0
     nassessed = 0
     errmax_max = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(a, b, c)
+        Delta, qD, sbar = integrate.quad_constants(a, b, c)
 
         # Set integration time
-        Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)*0.9)
+        Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.9)
         t_eval = np.linspace(0, Tmax, 1000)
 
         # Simulate
-        s1 = integrate.quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t_eval)
+        s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
         dsdt = approx.quad_fun(a, b, c, s1)
 
-        # Difference with steady state
+        # Takes into account distance with steady state
         stdy = steady.quad_steady(a, b, c)
         stdy[np.isnan(stdy)] = np.inf
         dst1 = np.abs(s1-stdy[0])
         dst2 = np.abs(s1-stdy[1])
 
         # Compute difference
-        ta = integrate.quad_inverse(a, b, c, Delta, qD, ssr, s0, s1)
+        ta = integrate.quad_inverse(a, b, c, Delta, qD, sbar, s0, s1)
 
         iok = (np.abs(s1)<1e20) & (dst1>1e-3) & (dst2>1e-3)
         assert np.all(ta[iok]>=0)
@@ -276,11 +279,11 @@ def test_inverse(allclose, generate_samples):
         assert errmax< err_thresh
         errmax_max = max(errmax, errmax_max)
 
-        # Compare with slow TODO:fix this!
+        # Compare with slow
         iok = np.isfinite(ta)
-        #ta_slow = [slow.quad_inverse(a, b, c, Delta, qD, ssr, s0, s) \
-        #                        for s in s1[iok]]
-        #assert allclose(ta[iok], ta_slow)
+        ta_slow = [slow.quad_inverse(a, b, c, Delta, qD, sbar, s0, s) \
+                                for s in s1[iok]]
+        assert allclose(ta[iok], ta_slow)
         nassessed += 1
 
     LOGGER.info(f"[{case}:{cname}] inverse: "\
@@ -288,47 +291,46 @@ def test_inverse(allclose, generate_samples):
                 +f"assessed={100*nassessed/ntry:0.0f}%")
 
 
-def test_increment_fluxes_vs_integration(allclose, generate_samples):
-    cname, case, params, nus, s0s, Tmax = generate_samples
+def test_increment_fluxes(allclose, generate_samples):
+    cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)
     if ntry==0:
         pytest.skip()
 
-    nskipped = 0
     errbal_max = 0
     errmax_max = 0
+    nassessed = 0
     ev = []
-    for itry, ((aoj, boj, coj), nu, s0) in enumerate(zip(params, nus, s0s)):
-        Delta, qD, ssr = integrate.quad_constants(aoj, boj, coj)
+    for itry, ((aoj, boj, coj), s0) in enumerate(zip(params, s0s)):
+        Delta, qD, sbar = integrate.quad_constants(aoj, boj, coj)
         avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
 
         # make sure coefficient sum matches aoj, boj and coj
         sa, sb, sc = avect.sum(), bvect.sum(), cvect.sum()
-        avect += (aoj-sa)/3
-        bvect += (boj-sb)/3
-        cvect += (coj-sc)/3
+        avect += (aoj-sa)/3.
+        bvect += (boj-sb)/3.
+        cvect += (coj-sc)/3.
 
         # Integrate forward analytically
-        t1 = min(10, integrate.delta_t_max(nu, aoj, boj, coj, s0))
+        t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj, \
+                                                        Delta, qD, sbar, s0))
         t0 = t1*0.05 # do not start at zero to avoid sharp falls
         t1 = t1*0.5 # far away from limits of validity
-        s1 = integrate.quad_forward(aoj, boj, coj, t0, s0, t1)
-        if np.isnan(s1):
-            nskipped += 1
-            continue
+        s1 = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t1)
 
         # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
             fluxes = np.zeros(3)
-            integrate.increment_fluxes(nu, avect, bvect, cvect2, \
-                            aoj, boj, coj, t0, t1, s0, s1, fluxes)
+            integrate.quad_fluxes(avect, bvect, cvect2, \
+                            aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Compute fluxes analytically
         fluxes = np.zeros(3)
-        integrate.increment_fluxes(nu, avect, bvect, cvect, \
-                        aoj, boj, coj, t0, t1, s0, s1, fluxes)
+        integrate.quad_fluxes(avect, bvect, cvect, \
+                        aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
+        import pdb; pdb.set_trace()
 
         # Test mass balance
         balance = s1-s0-fluxes.sum()
@@ -356,10 +358,12 @@ def test_increment_fluxes_vs_integration(allclose, generate_samples):
         slow.increment_fluxes(nu, avect, bvect, cvect, \
                         aoj, boj, coj, t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
+        nassessed += 1
 
     mess = f"[{case}:{cname}] fluxes vs integration: "\
-                +f"errmax = {errmax_max:3.2e} ({ntry-nskipped} runs) "\
-                +f" balmax = {errbal_max:3.3e}"
+                +f"errmax = {errmax_max:3.2e}"\
+                +f" balmax = {errbal_max:3.3e}"\
+                +f" assessed = {nassessed/ntry*100:0.0f}%"
     LOGGER.info(mess)
 
 

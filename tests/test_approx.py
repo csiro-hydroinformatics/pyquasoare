@@ -168,7 +168,6 @@ def generate_samples(ntry, selcase, request):
     params = v0[None, :]+(v1-v0)[None, :]*rnd
 
     # Refine cases
-    eps = approx.REZEQ_EPS
     if case == 3:
         name = "Determinant is null"
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
@@ -192,9 +191,7 @@ def generate_samples(ntry, selcase, request):
         if case == 12:
             ssr = b/2./a
             qD = np.sqrt(Delta)/2.
-            eps = np.random.uniform(0., 2., len(qD))
             s0s = -ssr+np.abs(qD/a)*np.random.uniform(0., 1., len(qD))
-            nu = qD/a/(s0s+ssr)
 
     elif case == 6:
         name = "General"
@@ -210,12 +207,14 @@ def generate_samples(ntry, selcase, request):
     elif case == 9:
         s0s = np.random.uniform(-5, 5, ntry)
         name = "a and b close to zero"
-        params[:, :2] = np.random.uniform(2*eps, 3*eps, size=(len(params), 2))
+        eps = 1e-9
+        params[:, :2] = np.random.uniform(eps, 5*eps, size=(len(params), 2))
 
     elif case == 10:
         s0s = np.random.uniform(-5, 5, ntry)
         name = "a close to zero"
-        params[:, 0] = np.random.uniform(2*eps, 3*eps, size=len(params))
+        eps = 1e-9
+        params[:, 0] = np.random.uniform(eps, 5*eps, size=len(params))
 
     elif case == 11:
         name = "equality s0 = -b/2a"

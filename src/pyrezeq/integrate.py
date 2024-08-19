@@ -21,41 +21,43 @@ def quad_constants(a, b, c):
     return constants
 
 
-def quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t):
+def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
     if np.isscalar(t):
-        return c_pyrezeq.quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t)
+        return c_pyrezeq.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t)
     else:
         s = np.nan*np.ones_like(t)
-        ierr = c_pyrezeq.quad_forward_vect(a, b, c, Delta, qD, ssr, t0, s0, t, s)
+        ierr = c_pyrezeq.quad_forward_vect(a, b, c, Delta, qD, sbar, t0, s0, t, s)
         if ierr>0:
             raise ValueError(f"c_pyrezeq.quad_forward_vect returns {ierr}")
         return s
 
 
-def quad_delta_t_max(a, b, c, Delta, qD, ssr, s0):
-    return c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
+def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
+    return c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)
 
 
-def quad_inverse(a, b, c, Delta, qD, ssr, s0, s1):
+def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     if np.isscalar(s1):
-        return c_pyrezeq.quad_inverse(a, b, c, Delta, qD, ssr, s0, s1)
+        return c_pyrezeq.quad_inverse(a, b, c, Delta, qD, sbar, s0, s1)
     else:
         t = np.nan*np.ones_like(s1)
-        ierr = c_pyrezeq.quad_inverse_vect(a, b, c, Delta, qD, ssr, s0, s1, t)
+        ierr = c_pyrezeq.quad_inverse_vect(a, b, c, Delta, qD, sbar, s0, s1, t)
         if ierr>0:
             raise ValueError(f"c_pyrezeq.quad_inverse_vect returns {ierr}")
         return t
 
 
-def quad_fluxes(nu, a_vector, b_vector, c_vector, \
+def quad_fluxes(a_vector, b_vector, c_vector, \
                         aoj, boj, coj, \
+                        Delta, qD, sbar, \
                         t0, t1, s0, s1, fluxes):
 
     ierr = c_pyrezeq.quad_fluxes(a_vector, b_vector, c_vector, \
-                            aoj, boj, coj, \
+                            aoj, boj, coj, Delta, qD, sbar, \
                             t0, t1, s0, s1, fluxes)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.quad_fluxes returns {ierr}")
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.quad_fluxes returns {ierr} ({mess})")
 
 
 def quad_integrate(alphas, scalings, nu, \

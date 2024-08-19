@@ -50,7 +50,7 @@ int c_quad_coefficients(int islin, double a0, double a1,
                             double coefs[3]){
      double da = a1-a0;
      double da2 = da*da;
-     double A=0, B=0, C=0;
+     double A=0, B=0;
      double a=0, b=0, c=0;
 
      /* Ensures quadratic function remains monotone */
@@ -75,11 +75,10 @@ int c_quad_coefficients(int islin, double a0, double a1,
             /* Quadratic function */
             A = 2*f0+2*f1-4*fm;
             B = 4*fm-f1-3*f0;
-            C = f0;
 
             a = A/da2;
             b = -2*a0*a+B/da;
-            c = a0*a0*a-B*a0/da+C;
+            c = a0*a0*a-B*a0/da+f0;
         }
      }
      coefs[0] = a;
@@ -90,11 +89,10 @@ int c_quad_coefficients(int islin, double a0, double a1,
 
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c,
-                            double Delta, double qD, double ssr,
+                            double Delta, double qD, double sbar,
                             double s0){
     double delta_tmax=0.;
-    double tmp = a*(s0+ssr);
-    double signD = Delta<0 ? -1 : 1;
+    double tmp = a*(s0-sbar);
 
     if(isnull(a)){
         delta_tmax = c_get_inf();
@@ -105,46 +103,41 @@ double c_quad_delta_t_max(double a, double b, double c,
         else if (Delta<0)
             delta_tmax = (REZEQ_PI/2-c_eta_fun(tmp/qD, Delta))/qD;
         else if (Delta>0)
-            delta_tmax = tmp<qD*signD ? c_get_inf() : -c_eta_fun(tmp/qD, Delta)/qD;
+            delta_tmax = tmp<qD ? c_get_inf() : -c_eta_fun(tmp/qD, Delta)/qD;
     }
     return delta_tmax;
 }
 
 /* Solution of dS/dt = f*(s) */
 double c_quad_forward(double a, double b, double c, double Delta, double qD,
-                            double ssr, double t0, double s0, double t){
-    double s1=0., omega=0.;
-    double dt=t-t0;
+                            double sbar, double t0, double s0, double t){
+    double s1=c_get_nan();
+    double omega=0.;
+    double tau=t-t0;
     double signD = Delta<0 ? -1. : 1.;
 
     /* Obtain the maximum time for which integration remains valid */
-    double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, ssr, s0);
+    double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, sbar, s0);
 
-    if(t<t0)
-        return c_get_nan();
+    if(t<t0 || t>t0+delta_tmax)
+        return s1;
 
     if(isequal(t, t0, REZEQ_EPS, 0.))
         return s0;
 
-    if(t>t0+delta_tmax)
-        return c_get_nan();
-
     if(isnull(a) && isnull(b)){
-        s1 = s0+c*dt;
+        s1 = s0+c*tau;
     }
-    else if(isnull(a) && notnull(b)){
-        s1 = -c/b+(s0+c/b)*exp(b*dt);
+    else if((isnull(a) && notnull(b))){
+        s1 = -c/b+(s0+c/b)*exp(b*tau);
     }
     else{
         if(isnull(Delta)){
-            s1 = -ssr+(s0+ssr)/(1-a*dt*(s0+ssr));
+            s1 = sbar+(s0-sbar)/(1-a*tau*(s0-sbar));
         }
         else {
-            omega = c_omega_fun(qD*dt, Delta);
-            if(fabs(ssr)>REZEQ_SSR_THRESHOLD)
-                s1 = -c/b+(s0+c/b)*exp(b*dt);
-            else
-                s1 = -ssr+(s0+ssr-signD*qD/a*omega)/(1.-a/qD*(s0+ssr)*omega);
+            omega = c_omega_fun(qD*tau, Delta);
+            s1 = sbar+(s0-sbar-signD*qD/a*omega)/(1.-a/qD*(s0-sbar)*omega);
         }
     }
     return s1;
@@ -152,7 +145,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
 
 /* Primitive of 1/f*(s) */
 double c_quad_inverse(double a, double b, double c, double Delta, double qD,
-                            double ssr, double s0, double s1){
+                            double sbar, double s0, double s1){
     double u0=0., u1=0.;
     if(isnull(a) && isnull(b)){
         return (s1-s0)/c;
@@ -162,13 +155,10 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
     }
     else{
         if(isnull(Delta))
-            return (1./(s0+ssr)-1./(s1+ssr))/a;
+            return (1./(s0-sbar)-1./(s1-sbar))/a;
         else{
-            if(fabs(ssr)>REZEQ_SSR_THRESHOLD)
-                return 1./b*log(fabs((b*s1+c)/(b*s0+c)));
-            else
-                return (c_eta_fun(a*(s1+ssr)/qD, Delta)
-                                -c_eta_fun(a*(s0+ssr)/qD, Delta))/qD;
+            return (c_eta_fun(a*(s1-sbar)/qD, Delta)
+                                -c_eta_fun(a*(s0-sbar)/qD, Delta))/qD;
         }
     }
     return c_get_nan();
@@ -181,24 +171,42 @@ int c_quad_fluxes(int nfluxes,
                         double * bj_vector,
                         double * cj_vector,
                         double aoj, double boj, double coj,
+                        double Delta, double qD, double sbar,
                         double t0, double t1, double s0, double s1,
                         double * fluxes){
     int i;
-    double dt = t1-t0;
+    double tau=t1-t0;
+    double tau2=tau*tau;
+    double tau3=tau2*tau;
     double aij, bij, cij;
-    double a = aoj, a_check=0;
-    double b = boj, b_check=0;
-    double c = coj, c_check=0;
-    double constants[2], Delta, qD, ssr;
-
-    c_quad_constants(aoj, boj, coj, constants);
-    Delta = constants[0];
-    qD = constants[1];
-    ssr = constants[2];
+    double a = aoj, a_check=0.;
+    double b = boj, b_check=0.;
+    double c = coj, c_check=0.;
+    double integS=0., integS2=0., r=0., sbar_single=0., expon=0.;
 
     if(t1<t0)
         return REZEQ_QUAD_TIME_TOOLOW;
 
+    if (isnull(a) && isnull(b)) {
+        integS = s0*tau+c*tau2/2;
+        integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.;
+    }
+    else if((isnull(a) && notnull(b))){
+        r = c/b;
+        sbar_single = s0+r;
+        expon = exp(b*tau);
+        integS = -r*tau+sbar_single/b*(expon-1.);
+        integS2 = r*r*tau-2.*r/b*(expon-1.)-sbar_single*sbar_single/2./b*(expon*expon-1.);
+    }
+    else if (notnull(a)){
+        /* Integrate S only */
+        if(isnull(Delta))
+            integS = sbar*tau+log(1-a*tau*(s0-sbar));
+        else
+            integS = c_get_nan();
+    }
+
+    /* increment fluxes */
     for(i=0; i<nfluxes; i++){
         aij = aj_vector[i];
         a_check += aij;
@@ -209,12 +217,10 @@ int c_quad_fluxes(int nfluxes,
         cij = cj_vector[i];
         c_check += cij;
 
-        if(isnull(a) && isnull(b)){
-        }
-        else if(isnull(a) && notnull(b)){
-        }
-        else {
-        }
+        if(isnull(a))
+            fluxes[i] += aij*integS2+bij*integS+cij*tau;
+        else
+            fluxes[i] += aij/a*(s1-s0)+(bij-aij*b/a)*integS+(cij-aij*c/a)*tau;
     }
 
     if(notnull(a-a_check)||notnull(b-b_check)||notnull(c-c_check))
@@ -239,7 +245,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int i, nit=0, jalpha_next=0;
     double aoj=0., boj=0., coj=0.;
     double a=0, b=0, c=0;
-    double constants[2], Delta, qD, ssr;
+    double constants[2], Delta, qD, sbar;
     double funval=0, funval_prev=0, grad=0;
     double alpha0, alpha1;
     double alpha_min=alphas[0];
@@ -343,7 +349,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         c_quad_constants(aoj, boj, coj, constants);
         Delta = constants[0];
         qD = constants[1];
-        ssr = constants[2];
+        sbar = constants[2];
 
         /* Get derivative at beginning of time step */
         funval = c_quad_fun(aoj, boj, coj, s_start);
@@ -364,7 +370,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         /* Try integrating up to the end of the time step */
-        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, ssr,
+        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
@@ -392,7 +398,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 /* Extrapolation, we cut integration at t_final */
                 t_end = t_final;
                 /* we also need to correct s_end because it is infinite */
-                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, ssr,
+                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
                                             t_start, s_start, t_end);
                 /* Ensure that s_end remains inside interpolation range */
                 if(funval<0){
@@ -406,7 +412,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
             }
             else {
                 /* No extrapolation, we can reach s_end */
-                t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, ssr,
+                t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, sbar,
                                                         s_start, s_end);
             }
         }
@@ -429,7 +435,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Increment fluxes during the last interval */
         c_quad_fluxes(nfluxes,
                     &(a_vect), &(b_vect), &(c_vect),
-                    aoj, boj, coj,
+                    aoj, boj, coj, Delta, qD, sbar,
                     t_start, t_end, s_start, s_end, fluxes);
 
         /* Loop for next band */

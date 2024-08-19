@@ -67,9 +67,8 @@ def quad_fun(a, b, c, s):
     return (a*s+b)*s+c;
 
 
-def quad_delta_t_max(a, b, c, Delta, qD, ssr, s0):
-    tmp = a*(s0+ssr)
-    signD = -1 if Delta<0 else 1
+def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
+    tmp = a*(s0-sbar)
     if isnull(a):
         delta_tmax = np.inf
     else:
@@ -78,100 +77,99 @@ def quad_delta_t_max(a, b, c, Delta, qD, ssr, s0):
         elif Delta<0:
             delta_tmax = (math.pi/2-eta_fun(tmp/qD, Delta))/qD
         else:
-            delta_tmax = np.inf if tmp<qD*signD else -eta_fun(tmp/qD, Delta)/qD
+            delta_tmax = np.inf if tmp<qD else -eta_fun(tmp/qD, Delta)/qD
 
     return delta_tmax
 
 
-def quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t):
+def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
     if t<t0:
         return np.nan
 
-    dt = t-t0
-    dtmax = quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
-    if dt>dtmax:
+    tau = t-t0
+    dtmax = quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)
+    if tau<0 or tau>dtmax:
         return np.nan
 
     if isequal(t0, t, REZEQ_EPS, 0.):
         return s0
 
     if isnull(a) and isnull(b):
-        s1 = s0+c*dt
+        s1 = s0+c*tau
 
     elif isnull(a) and notnull(b):
-        s1 = -c/b+(s0+c/b)*math.exp(b*dt)
+        s1 = -c/b+(s0+c/b)*math.exp(b*tau)
 
     else:
         if isnull(Delta):
-            s1 = -ssr+(s0+ssr)/(1-a*dt*(s0+ssr))
+            s1 = sbar+(s0-sbar)/(1-a*tau*(s0-sbar))
         else:
-            omega = omega_fun(qD*dt, Delta)
+            omega = omega_fun(qD*tau, Delta)
             signD = -1. if Delta<0 else 1.
-            if abs(ssr)>REZEQ_SSR_THRESHOLD:
-                s1 = -c/b+(s0+c/b)*math.exp(b*dt)
-            else:
-                s1 = -ssr+(s0+ssr-signD*qD/a*omega)/(1-a/qD*(s0+ssr)*omega)
+            s1 = sbar+(s0-sbar-signD*qD/a*omega)/(1-a/qD*(s0-sbar)*omega)
 
     return s1
 
 
-def quad_inverse(a, b, c, Delta, qD, ssr, s0, s1):
+def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     if isnull(a) and isnull(b):
         return (s1-s0)/c
     elif isnull(a) and notnull(b):
         return 1./b*math.log(abs((b*s1+c)/(b*s0+c)))
     else:
         if isnull(Delta):
-            return (1./(s0+ssr)-1./(s1+ssr))/a
+            return (1./(s0-sbar)-1./(s1-sbar))/a
         elif Delta>0:
             eta = lambda x: math.atanh(x) if abs(x)<1 else math.atanh(1./x)
-            return (eta(a*(s0+ssr)/qD)-eta(a*(s1+ssr)/qD))/qD
+            return (eta(a*(s0-sbar)/qD)-eta(a*(s1-sbar)/qD))/qD
         else:
-            if abs(ssr)>REZEQ_SSR_THRESHOLD:
-                return 1./b*math.log(abs((b*s1+c)/(b*s0+c)))
-            else:
-                return (math.atan(a*(s1+ssr)/qD)-math.atan(a*(s0+ssr)/qD))/qD
+            return (math.atan(a*(s1-sbar)/qD)-math.atan(a*(s0-sbar)/qD))/qD
 
     return np.nan
 
 
 def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
-                        aoj, boj, coj, \
+                        aoj, boj, coj, Delta, qD, sbar, \
                         t0, t1, s0, s1, fluxes):
     nfluxes = len(fluxes)
-    dt = t1-t0
-    e0 = math.exp(-nu*s0)
-    expint = 0
+    tau = t1-t0
+    tau2 = tau*tau
+    tau3 = tau*tau2
     a = aoj
     b = boj
     c = coj
-    Delta, qD, ssr = quad_constants(a, b, c)
 
-    # Integrate S if needed
-    # TODO
+    # Integrate S and S2
+    if isnull(a) and isnull(b):
+        integS = s0*tau+c*tau2/2
+        integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.
 
+    elif isnull(a) and notnull(b):
+        r = c/b;
+        sbar_single = s0+r
+        expon = exp(b*tau)
+        integS = -r*tau+sbar_single/b*(expon-1.)
+        integS2 = r*r*tau-2.*r/b*(expon-1.)-sbar_single*sbar_single/2./b*(expon*expon-1.)
+
+    elif notnull(a):
+        if isnull(Delta):
+            integS = sbar*tau+log(1-a*tau*(s0-sbar))
+        else:
+            omega = omega_fun(qD*tau, Delta)
+            signD = -1 if Delta<0 else 1
+            integS = sbar*tau+math.log(1-signD*omega*omega)/2./a\
+                            -math.log(1-a*(s0-sbar)/qD*omega)/a
+
+    # increment fluxes
     for i in range(nfluxes):
         aij = aj_vector[i]
         bij = bj_vector[i]
         cij = cj_vector[i]
 
-        if isnull(b) and isnull(c):
-            fluxes[i] += aij*dt
-            if notnull(bij):
-                fluxes[i] += -bij*e0/nu/a*(math.exp(-nu*a*dt)-1)
-            if notnull(cij):
-                fluxes[i] += cij/nu/a/e0*(math.exp(nu*a*dt)-1)
+        if isnull(a):
+            fluxes[i] += aij*integS2+bij*integS+cij*tau
         else:
-            if notnull(c):
-                A = aij-cij*a/c
-                B = bij-cij*b/c
-                C = cij/c
-                fluxes[i] += A*dt+B*expint+C*(s1-s0)
-            else:
-                A = aij-bij*a/b
-                B = bij/b
-                C = cij-bij*c/b
-                fluxes[i] += A*dt+B*(s1-s0)+C*expint
+            fluxes[i] += aij/a*(s1-s0)+(bij-aij*b/a)*integS+(cij-aij*c/a)*tau
 
 
 # Integrate reservoir equation over 1 time step and compute associated fluxes
@@ -268,7 +266,7 @@ def integrate(alphas, scalings, nu, \
             coj += c
 
         # Discriminant
-        Delta, qD, ssr = quad_constants(aoj, boj, coj)
+        Delta, qD, sbar = quad_constants(aoj, boj, coj)
 
         # Get derivative at beginning of time step
         funval = quad_fun(aoj, boj, coj, s_start)
@@ -281,7 +279,7 @@ def integrate(alphas, scalings, nu, \
                 raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
-        s_end = quad_forward(aoj, boj, coj, Delta, qD, ssr, \
+        s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
                                     t_start, s_start, t_final)
 
         # complete or move band if needed

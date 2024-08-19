@@ -78,7 +78,7 @@ int c_quad_constants(double a, double b, double c, double values[3]){
     double qD = sqrt(fabs(Delta))/2;
     values[0] = Delta;
     values[1] = qD;
-    values[2] = b/2./a;
+    values[2] = -b/2./a;
     return qD>=0. ? 0. : REZEQ_UTILS_QD_NEGATIVE;
 }
 
