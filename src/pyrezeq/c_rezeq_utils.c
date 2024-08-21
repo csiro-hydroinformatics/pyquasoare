@@ -1,17 +1,5 @@
 #include "c_rezeq_utils.h"
 
-double c_get_eps() {
-    return REZEQ_EPS;
-}
-
-double c_get_atol(){
-    return REZEQ_ATOL;
-}
-
-double c_get_rtol(){
-    return REZEQ_RTOL;
-}
-
 double c_get_nan() {
     /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
     static double zero1=0.;
@@ -24,15 +12,6 @@ double c_get_inf() {
     double inf=1./zero;
     return inf;
 }
-
-double c_get_ssr_threshold(){
-    return REZEQ_SSR_THRESHOLD;
-}
-
-int c_get_nfluxes_max(){
-    return REZEQ_NFLUXES_MAX;
-}
-
 
 double c_compiler_accuracy_kahan(){
     long double s, t=3.0;

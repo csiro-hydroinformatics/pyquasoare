@@ -16,7 +16,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 12
+NCASES = 13
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -220,6 +220,13 @@ def generate_samples(ntry, selcase, request):
         name = "equality s0 = -b/2a"
         a, b, c = params.T
         s0s = -b/2./a
+
+    elif case == 13:
+        name = "a zero and b close to zero"
+        params[:, 0] = 0
+        eps = 1e-9
+        params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
+
 
     if not case in [9, 10, 11, 12]:
         s0s = np.random.uniform(-5, 5, ntry)

@@ -1,11 +1,11 @@
 #include "c_nonlinrouting.h"
 
-int c_nonlinrouting(int nval, int nsubdiv, double delta,
+int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,
                         double s0, double *inflows, double * outflows){
     int i, j;
     double linear_thresh = 1+1e-10;
-    double dt = delta/(double)nsubdiv;
+    double dt = timestep/(double)nsubdiv;
     double s1, qi, qout;
     double qi_prev = 0;
 
@@ -66,7 +66,7 @@ int c_nonlinrouting(int nval, int nsubdiv, double delta,
         }
 
         /* outflow computed from mass balance */
-        qout = qi+(s0-s1)/delta;
+        qout = qi+(s0-s1)/timestep;
         outflows[i] = qout;
 
         //fprintf(stdout, "[%4d] theta=%3.3e nu=%3.3e qi=%3.3e s0=%3.3e "

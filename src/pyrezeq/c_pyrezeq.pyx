@@ -5,20 +5,20 @@ np.import_array()
 
 # -- HEADERS --
 cdef extern from 'c_rezeq_utils.h':
-    double c_get_eps()
-    double c_get_atol()
-    double c_get_rtol()
+    cdef double REZEQ_EPS
+    cdef double REZEQ_ATOL
+    cdef double REZEQ_RTOL
+    cdef double REZEQ_PI
+    cdef int REZEQ_NFLUXES_MAX
+
     double c_get_inf()
     double c_get_nan()
-    double c_get_ssr_threshold()
-    int c_get_nfluxes_max()
     double c_compiler_accuracy_kahan()
     int c_quad_constants(double a, double b, double c, double values[3])
 
     int c_find_alpha(int nalphas, double * alphas, double s0)
 
     int c_get_error_message(int err_code, char message[100])
-
 
 cdef extern from 'c_rezeq_quad.h':
     double c_quad_fun(double a, double b, double c, double s)
@@ -41,10 +41,12 @@ cdef extern from 'c_rezeq_quad.h':
                                 double Delta, double qD, double ssr,
                                 double s0, double s1);
 
+    # The interface is changed to avoid the problem with
+    # fixed length aj_vector, bj_vector, cj_vector
     int c_quad_fluxes(int nfluxes,
-                            double * aj_vector,
-                            double * bj_vector,
-                            double * cj_vector,
+                            double *aj_vector,
+                            double *bj_vector,
+                            double *cj_vector,
                             double aoj, double boj, double coj,
                             double Delta, double qD, double ssr,
                             double t0, double t1, double s0, double s1,
@@ -57,10 +59,10 @@ cdef extern from 'c_rezeq_quad.h':
                                 double * c_matrix_noscaling,
                                 double t0,
                                 double s0,
-                                double delta,
+                                double timestep,
                                 int *niter, double * s1, double * fluxes)
 
-    int c_quad_model(int nalphas, int nfluxes, int nval, double delta,
+    int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
                             double * alphas, double * scalings,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
@@ -70,7 +72,7 @@ cdef extern from 'c_rezeq_quad.h':
 
 
 cdef extern from 'c_nonlinrouting.h':
-    int c_nonlinrouting(int nval, int nsubdiv, double delta,
+    int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,
                         double s0, double *inflows, double * outflows)
 
@@ -82,26 +84,17 @@ cdef extern from 'c_gr4jprod.h':
 def __cinit__(self):
     pass
 
-def get_eps():
-    return c_get_eps()
-
-def get_atol():
-    return c_get_atol()
-
-def get_rtol():
-    return c_get_rtol()
-
-def get_ssr_threshold():
-    return c_get_ssr_threshold()
+C_REZEQ_EPS = REZEQ_EPS
+C_REZEQ_ATOL = REZEQ_ATOL
+C_REZEQ_RTOL = REZEQ_RTOL
+C_REZEQ_PI = REZEQ_PI
+C_REZEQ_NFLUXES_MAX = REZEQ_NFLUXES_MAX
 
 def get_nan():
     return c_get_nan()
 
 def get_inf():
     return c_get_inf()
-
-def get_nfluxes_max():
-    return c_get_nfluxes_max()
 
 def compiler_accuracy_kahan():
     return c_compiler_accuracy_kahan()
@@ -249,7 +242,10 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                     double s0, double s1, \
                     np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
+    cdef int i
     cdef int nfluxes = aj_vector.shape[0]
+    if nfluxes>REZEQ_NFLUXES_MAX:
+        raise ValueError(f"aj_vector.shape[0] > REZEQ_NFLUXES_MAX ({REZEQ_NFLUXES_MAX}")
 
     if bj_vector.shape[0] != nfluxes:
         raise ValueError("bj_vector.shape[0] != nfluxes")
@@ -272,7 +268,7 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
                         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
-                        double t0, double s0, double delta, \
+                        double t0, double s0, double timestep, \
                         np.ndarray[int, ndim=1, mode='c'] niter not None,\
                         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                         np.ndarray[double, ndim=1, mode='c'] fluxes not None):
@@ -311,19 +307,18 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
-                                t0, s0, delta,
+                                t0, s0, timestep,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def quad_model(double delta, \
-        np.ndarray[double, ndim=1, mode='c'] alphas not None,\
+def quad_model(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         np.ndarray[double, ndim=2, mode='c'] scalings not None,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
-        double s0, \
+        double s0, double timestep, \
         np.ndarray[int, ndim=1, mode='c'] niter not None,\
         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
         np.ndarray[double, ndim=2, mode='c'] fluxes not None):
@@ -364,7 +359,7 @@ def quad_model(double delta, \
         raise ValueError("fluxes.shape[0] != nval")
 
     # Run C code
-    return c_quad_model(nalphas, nfluxes, nval, delta,
+    return c_quad_model(nalphas, nfluxes, nval, timestep,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
@@ -376,7 +371,7 @@ def quad_model(double delta, \
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def nonlinrouting(int nsubdiv, double delta, double theta, double nu, \
+def nonlinrouting(int nsubdiv, double timestep, double theta, double nu, \
                     double q0, double s0,
                     np.ndarray[double, ndim=1, mode='c'] inflows not None,
                     np.ndarray[double, ndim=1, mode='c'] outflows not None):
@@ -385,7 +380,7 @@ def nonlinrouting(int nsubdiv, double delta, double theta, double nu, \
     if nval!=outflows.shape[0]:
         raise ValueError("inflows.shape[0]!=outflows.shape[0]")
 
-    return c_nonlinrouting(nval, nsubdiv, delta, theta, nu, q0, s0,
+    return c_nonlinrouting(nval, nsubdiv, timestep, theta, nu, q0, s0,
                                 <double*> np.PyArray_DATA(inflows),
                                 <double*> np.PyArray_DATA(outflows))
 

@@ -5,8 +5,6 @@ from pyrezeq import has_c_module, approx
 
 if has_c_module():
     import c_pyrezeq
-    REZEQ_EPS = c_pyrezeq.get_eps()
-    REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 

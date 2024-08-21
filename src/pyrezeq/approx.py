@@ -5,11 +5,11 @@ import numpy as np
 from pyrezeq import has_c_module
 if has_c_module():
     import c_pyrezeq
-    REZEQ_EPS = c_pyrezeq.get_eps()
-    REZEQ_ATOL = c_pyrezeq.get_atol()
-    REZEQ_RTOL = c_pyrezeq.get_rtol()
-    REZEQ_SSR_THRESHOLD = c_pyrezeq.get_ssr_threshold()
-    REZEQ_NFLUXES_MAX = c_pyrezeq.get_nfluxes_max()
+    REZEQ_EPS = c_pyrezeq.C_REZEQ_EPS
+    REZEQ_ATOL = c_pyrezeq.C_REZEQ_ATOL
+    REZEQ_RTOL = c_pyrezeq.C_REZEQ_RTOL
+    REZEQ_PI = c_pyrezeq.C_REZEQ_PI
+    REZEQ_NFLUXES_MAX = c_pyrezeq.C_REZEQ_NFLUXES_MAX
     REZEQ_ACCURACY = c_pyrezeq.compiler_accuracy_kahan()
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")

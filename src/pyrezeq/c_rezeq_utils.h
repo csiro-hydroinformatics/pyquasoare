@@ -37,19 +37,14 @@
 #define REZEQ_ATOL 1e-7
 #define REZEQ_RTOL 1e-5
 
-#define REZEQ_SSR_THRESHOLD 1e10
-
+/* Precise value of pi */
 #define REZEQ_PI  3.1415926535897932384626433832795028841971693993751
 
 /* Define maximum number of fluxes */
 #define REZEQ_NFLUXES_MAX 20
 
-double c_get_eps();
-double c_get_atol();
-double c_get_rtol();
 double c_get_inf();
 double c_get_nan();
-double c_get_ssr_threshold();
 int c_get_nfluxes_max();
 double c_compiler_accuracy_kahan();
 

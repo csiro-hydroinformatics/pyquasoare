@@ -10,7 +10,7 @@
 /* Define Error message */
 #define NONLINROUT_ERROR 456000
 
-int c_nonlinrouting(int nval, int nsubdiv, double delta,
+int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,
                         double s0, double *inflows, double * outflows);
 

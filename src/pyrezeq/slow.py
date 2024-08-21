@@ -4,11 +4,11 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, REZEQ_SSR_THRESHOLD
+from pyrezeq.approx import REZEQ_EPS, REZEQ_PI
 from pyrezeq.approx import isequal, notequal, isnull, notnull
 from pyrezeq.integrate import quad_constants
 
-def integrate_forward_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
+def integrate_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
                             fun_args=None):
     method = method.title()
@@ -64,7 +64,10 @@ def omega_fun(x, Delta):
 
 
 def quad_fun(a, b, c, s):
-    return (a*s+b)*s+c;
+    return (a*s+b)*s+c
+
+def quad_grad(a, b, c, s):
+    return 2*a*s+b
 
 
 def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
@@ -75,7 +78,7 @@ def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
         if isnull(Delta):
             delta_tmax = np.inf if tmp<=0 else 1./tmp
         elif Delta<0:
-            delta_tmax = (math.pi/2-eta_fun(tmp/qD, Delta))/qD
+            delta_tmax = (REZEQ_PI/2.-eta_fun(tmp/qD, Delta))/qD
         else:
             delta_tmax = np.inf if tmp<qD else -eta_fun(tmp/qD, Delta)/qD
 
@@ -128,13 +131,13 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     return np.nan
 
 
-def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
+def quad_fluxes(aj_vector, bj_vector, cj_vector, \
                         aoj, boj, coj, Delta, qD, sbar, \
                         t0, t1, s0, s1, fluxes):
     nfluxes = len(fluxes)
     tau = t1-t0
     tau2 = tau*tau
-    tau3 = tau*tau2
+    tau3 = tau2*tau
     a = aoj
     b = boj
     c = coj
@@ -145,39 +148,36 @@ def increment_fluxes(nu, aj_vector, bj_vector, cj_vector, \
         integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.
 
     elif isnull(a) and notnull(b):
-        r = c/b;
-        sbar_single = s0+r
-        expon = exp(b*tau)
-        integS = -r*tau+sbar_single/b*(expon-1.)
-        integS2 = r*r*tau-2.*r/b*(expon-1.)-sbar_single*sbar_single/2./b*(expon*expon-1.)
+        integS = (s1-s0-coj*tau)/boj;
+        integS2 = ((s1**2-s0**2)/2-coj*integS)/boj;
 
     elif notnull(a):
         if isnull(Delta):
-            integS = sbar*tau+log(1-a*tau*(s0-sbar))
+            integS = sbar*tau-math.log(1-a*tau*(s0-sbar))/a
         else:
             omega = omega_fun(qD*tau, Delta)
             signD = -1 if Delta<0 else 1
-            integS = sbar*tau+math.log(1-signD*omega*omega)/2./a\
-                            -math.log(1-a*(s0-sbar)/qD*omega)/a
+            if qD*tau>10 and Delta>0:
+                term1 = (math.log(2)-qD*tau)/aoj
+            else:
+                term1 = math.log(1-signD*omega*omega)/2./a
+            term2 = -math.log(1-a*(s0-sbar)/qD*omega)/a
+            integS = sbar*tau+term1+term2
 
     # increment fluxes
-    for i in range(nfluxes):
-        aij = aj_vector[i]
-        bij = bj_vector[i]
-        cij = cj_vector[i]
-
-        if isnull(a):
-            fluxes[i] += aij*integS2+bij*integS+cij*tau
-        else:
-            fluxes[i] += aij/a*(s1-s0)+(bij-aij*b/a)*integS+(cij-aij*c/a)*tau
+    if isnull(a):
+        fluxes += aj_vector*integS2+bj_vector*integS+cj_vector*tau
+    else:
+        fluxes += aj_vector/a*(s1-s0)+(bj_vector-aj_vector*b/a)*integS\
+                            +(cj_vector-aj_vector*c/a)*tau
 
 
 # Integrate reservoir equation over 1 time step and compute associated fluxes
-def integrate(alphas, scalings, nu, \
+def quad_integrate(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, \
-                t0, s0, delta):
+                t0, s0, timestep):
 
     nalphas = len(alphas)
     alpha_min=alphas[0]
@@ -211,13 +211,13 @@ def integrate(alphas, scalings, nu, \
 
     nit = 0
     niter_max = 2*nalphas
-    t_final = t0+delta
+    t_final = t0+timestep
     t_start, t_end = t0, t0
     s_start, s_end = s0, s0
     fluxes = np.zeros(nfluxes)
 
     # Time loop
-    while ispos(t_final-t_end) and nit<niter_max:
+    while t_final>t_end and nit<niter_max:
         nit += 1
         extrapolating_low = jalpha<0
         extrapolating_high = jalpha>=nalphas-1
@@ -227,30 +227,32 @@ def integrate(alphas, scalings, nu, \
         alpha0 = -np.inf if extrapolating_low else alphas[jalpha]
         alpha1 = np.inf if extrapolating_high else alphas[jalpha+1]
 
-        # Store previous coefficients
-        aoj_prev = aoj
-        boj_prev = boj
-        coj_prev = coj
-
         # Sum coefficients accross fluxes
-        aoj = 0
-        boj = 0
-        coj = 0
+        aoj = 0; boj = 0; coj = 0
+
         for i in range(nfluxes):
             if extrapolating_low:
                 # Extrapolate approx as fixed value equal to f(alpha_min)
                 a = a_matrix_noscaling[0, i]*scalings[i]
                 b = b_matrix_noscaling[0, i]*scalings[i]
                 c = c_matrix_noscaling[0, i]*scalings[i]
-                a = approx_fun(nu, a, b, c, alpha_min)
-                b, c = 0, 0
+
+                grad = quad_grad(a, b, c, alpha_min)
+                c = quad_fun(a, b, c, alpha_min)-grad*alpha_min
+                b = grad
+                a = 0
+
             elif extrapolating_high:
                 # Extrapolate approx as fixed value equal to f(alpha_max)
                 a = a_matrix_noscaling[nalphas-2, i]*scalings[i]
                 b = b_matrix_noscaling[nalphas-2, i]*scalings[i]
                 c = c_matrix_noscaling[nalphas-2, i]*scalings[i]
-                a = approx_fun(nu, a, b, c, alpha_max)
-                b, c = 0, 0
+
+                grad = quad_grad(a, b, c, alpha_max)
+                c = quad_fun(a, b, c, alpha_max)-grad*alpha_max
+                b = grad
+                a = 0
+
             else:
                 # No extrapolation, use coefficients as is
                 a = a_matrix_noscaling[jalpha, i]*scalings[i]
@@ -306,7 +308,8 @@ def integrate(alphas, scalings, nu, \
                 # Extrapolation, we cut integration at t_final
                 t_end = t_final
                 # we also need to correct s_end that is infinite
-                s_end = quad_forward(aoj, boj, coj, Delta, qD, t_start, s_start, t_end)
+                s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
+                                                t_start, s_start, t_end)
                 # Ensure that s_end remains just inside interpolation range
                 if funval<0:
                     s_end = max(alpha_max-2*REZEQ_EPS, s_end)
@@ -314,7 +317,8 @@ def integrate(alphas, scalings, nu, \
                     s_end = min(alpha_min+2*REZEQ_EPS, s_end)
             else:
                 # No extrapolation, we can reach s_end
-                t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, s_start, s_end)
+                t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
+                                                                s_start, s_end)
 
         if debug:
             print(f"\n\n[{nit}] low={str(extrapolating_low)[0]}"\
@@ -326,7 +330,8 @@ def integrate(alphas, scalings, nu, \
 
         # Increment fluxes during the last interval
         quad_fluxes(a_vect, b_vect, c_vect, \
-                    aoj, boj, coj, t_start, t_end, s_start, s_end, fluxes)
+                    aoj, boj, coj, Delta, qD, sbar, \
+                    t_start, t_end, s_start, s_end, fluxes)
 
         # Loop for next band
         funval_prev = quad_fun(aoj, boj, coj, s_end)
@@ -337,7 +342,7 @@ def integrate(alphas, scalings, nu, \
         jalpha = jalpha_next
 
     # Convergence problem
-    if ispos(delta+t0-t_end):
+    if t_final>t_end:
         raise ValueError("No convergence")
 
     return nit, s_end, fluxes

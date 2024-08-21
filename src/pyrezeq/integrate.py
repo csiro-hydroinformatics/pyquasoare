@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyrezeq import has_c_module, approx
+from pyrezeq.approx import REZEQ_NFLUXES_MAX
 
 if has_c_module():
     import c_pyrezeq
@@ -51,7 +52,6 @@ def quad_fluxes(a_vector, b_vector, c_vector, \
                         aoj, boj, coj, \
                         Delta, qD, sbar, \
                         t0, t1, s0, s1, fluxes):
-
     ierr = c_pyrezeq.quad_fluxes(a_vector, b_vector, c_vector, \
                             aoj, boj, coj, Delta, qD, sbar, \
                             t0, t1, s0, s1, fluxes)
@@ -60,11 +60,11 @@ def quad_fluxes(a_vector, b_vector, c_vector, \
         raise ValueError(f"c_pyrezeq.quad_fluxes returns {ierr} ({mess})")
 
 
-def quad_integrate(alphas, scalings, nu, \
+def quad_integrate(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, \
-                t0, s0, delta):
+                t0, s0, timestep):
     # Initialise
     fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
     niter = np.zeros(1, dtype=np.int32)
@@ -73,7 +73,7 @@ def quad_integrate(alphas, scalings, nu, \
     # run
     ierr = c_pyrezeq.quad_integrate(alphas, scalings, \
                     a_matrix_noscaling, b_matrix_noscaling, \
-                    c_matrix_noscaling, t0, s0, delta, niter, s1, fluxes)
+                    c_matrix_noscaling, t0, s0, timestep, niter, s1, fluxes)
     if ierr>0:
         mess = c_pyrezeq.get_error_message(ierr).decode()
         raise ValueError(f"c_pyrezeq.quad_integrate returns {ierr} ({mess})")
