@@ -294,6 +294,9 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     if c_matrix_noscaling.shape[0] != nalphas-1:
         raise ValueError("c_matrix_noscaling.shape[0] != nalphas-1")
 
+    if niter.shape[0] != 1:
+        raise ValueError("niter.shape[0] != 1")
+
     if s1.shape[0] != 1:
         raise ValueError("s1.shape[0] != 1")
 

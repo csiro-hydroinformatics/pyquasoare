@@ -59,7 +59,7 @@ def reservoir_function(request, selfun):
         sol = lambda t, s0: (1./s0**7+7*t)**(-1./7)
 
     elif name == "tanh":
-        alpha0, alpha1 = (-1., 1.)
+        alpha0, alpha1 = (-1.25, 0.75)
         a, b = 0.5, 10
         fun = lambda x: -np.tanh(a+b*x)
         dfun = lambda x: b*(np.tanh(a+b*x)**2-1)
@@ -312,7 +312,7 @@ def test_quad_coefficients(allclose, reservoir_function):
     fa = approx.quad_fun(a, b, c, xm)
     v0, v1 = (f0+3*f1)/4, (f1+3*f0)/4
     v0, v1 = min(v0, v1), max(v0, v1)
-    expected = max(v0, min(v1, fm))
+    expected = fm if (fm-f0)*(f1-fm)<0 else max(v0, min(v1, fm))
     assert allclose(fa, expected, atol=1e-10)
 
     # Linear function goes through mid point
@@ -325,22 +325,35 @@ def test_quad_coefficients(allclose, reservoir_function):
 def test_quad_coefficients_edge_cases(allclose):
     # Identical band limits
     alpha0, alpha1 = 1., 1.
-    f0, f1, fm = 1., 1., 1.
+    f0, fm, f1 = 1., 1., 1.
     a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
     assert np.all(np.isnan([a, b, c]))
 
-    # Too high value
+    # high value within interval [f0, f1] -> monotonous
     alpha0, alpha1 = 0., 1.
-    f0, f1, fm = 1., 3., 10.
+    f0, fm, f1 = 1., 2.9, 3.
     a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
     fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, 5./2)
+    assert allclose(fm2, (f0+3*f1)/4.)
 
-    # Too low value
-    f0, f1, fm = 1., 3., -10.
+    # high value outside interval [f0, f1] -> non mononotous
+    f0, fm, f1 = 1., 3.5, 3.
     a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
     fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, 3./2)
+    assert allclose(fm2, fm)
+
+    # low value within interval -> monotonous
+    f0, fm, f1 = 1., -9., -10.
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    fm2 = approx.quad_fun(a, b, c, 0.5)
+    assert allclose(fm2, (f0+3*f1)/4.)
+
+    # low value outside interval -> non monotonous
+    f0, fm, f1 = 1., -11., -10.
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    fm2 = approx.quad_fun(a, b, c, 0.5)
+    assert allclose(fm2, fm)
+
 
 
 def test_quad_coefficient_matrix(allclose, reservoir_function):

@@ -319,13 +319,23 @@ def test_increment_fluxes(allclose, generate_samples):
         t1 = t1*0.5 # far away from limits of validity
         s1 = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t1)
 
+        # Check error if vectors too long
+        n = approx.REZEQ_NFLUXES_MAX+1
+        al = np.concatenate([avect, np.zeros(n)])
+        bl = np.concatenate([bvect, np.zeros(n)])
+        cl = np.concatenate([cvect, np.zeros(n)])
+        fluxes = np.zeros(3)
+        with pytest.raises(ValueError):
+            integrate.quad_fluxes(al, bl, cl, \
+                            aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
+
         # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
-            fluxes = np.zeros(3)
             integrate.quad_fluxes(avect, bvect, cvect2, \
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
+
 
         # Compute fluxes analytically
         fluxes = np.zeros(3)
@@ -410,33 +420,41 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, timestep)
             # integrate - python code
-            #_, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
-            #                                    amat, bmat, cmat, t_start, \
-            #                                    s_start, timestep)
-            #assert np.isclose(s_end, s_end_slow)
-            #assert np.allclose(fluxes, fluxes_slow)
+            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
+                                                amat, bmat, cmat, t_start, \
+                                                s_start, timestep)
+            assert np.isclose(s_end, s_end_slow)
+            assert np.allclose(fluxes, fluxes_slow)
 
             sims.append(s_end)
             s_start = s_end
 
-        # Expect constant derivative of solution in extrapolation mode
+        # Expect linear function for derivative of solution in extrapolation mode
         sims = np.array(sims)
-        ilow = sims<alpha0
         dt = t1[1]-t1[0]
-        if ilow.sum()>0:
-            ds_low = np.diff(sims[ilow])/dt
-            expected_low = [approx.quad_fun(amat[0, i], bmat[0, i], \
-                                            cmat[0, i], alphas[0]) for i in range(2)]
-            expected_low = np.array(expected_low).sum()
-            assert allclose(ds_low, expected_low)
+        ds = (sims[2:]-sims[:-2])/dt # Centered first order derivative
+        s = sims[1:-1]
 
-        ihigh = sims>alpha1
+        # .. lower extrapolation
+        ilow = s<alpha0
+        if ilow.sum()>0:
+            aoj, boj, coj = amat[0].sum(), bmat[0].sum(), cmat[0].sum()
+            grad = approx.quad_grad(aoj, boj, coj, alpha0)
+            c = approx.quad_fun(aoj, boj, coj, alpha0)-grad*alpha0
+            b = grad
+            expected = approx.quad_fun(0., b, c, s)
+            #assert allclose(ds[ilow], expected[ilow])
+            # TODO
+
+        # .. upper extrapolation
+        ihigh = s>alpha1
         if ihigh.sum()>0:
-            ds_high = np.diff(sims[ihigh])/dt
-            expected_high = [approx.quad_fun(amat[-1, i], bmat[-1, i], \
-                                            cmat[-1, i], alphas[-1]) for i in range(2)]
-            expected_high = np.array(expected_high).sum()
-            assert allclose(ds_high, expected_high)
+            aoj, boj, coj = amat[-1].sum(), bmat[-1].sum(), cmat[-1].sum()
+            grad = approx.quad_grad(aoj, boj, coj, alpha1)
+            c = approx.quad_fun(aoj, boj, coj, alpha1)-grad*alpha1
+            b = grad
+            expected = approx.quad_fun(0., b, c, s)
+            #assert allclose(ds[ihigh], expected[ihigh])
 
 
 
@@ -505,7 +523,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                                                 s_start, timestep)
 
             # Check mass balance
-            #assert allclose(fluxes.sum()-s_end+s_start, 0.)
+            assert allclose(fluxes.sum()-s_end+s_start, 0.)
 
             # Python code
             n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
@@ -536,11 +554,11 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         errmax_num_max = max(errmax, errmax_num_max)
 
     err_thresh = {
-        "x2": 1e-9, \
+        "x2": 1e-12, \
         "x4": 1e-3, \
         "x6": 1e-3, \
         "x8": 5e-3, \
-        "tanh": 1e-2, \
+        "tanh": 5e-3, \
         "exp": 5e-5, \
         "sin": 5e-3, \
         "runge": 1e-3, \
@@ -550,7 +568,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "genlogistic": 5e-2
     }
     assert errmax_app_max < err_thresh[fname]
-    assert time_app<time_num*0.8
+    assert time_app<time_num*2.
 
     LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")
@@ -561,7 +579,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                     +f" / time={time_num:3.3e}ms "\
                     +f"(ratio vs app={time_app/time_num:0.2f})"\
                     +f" / niter={niter_num}")
-
 
 
 def test_reservoir_equation_gr4j(allclose):

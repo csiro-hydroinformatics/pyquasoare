@@ -53,11 +53,12 @@ int c_quad_coefficients(int islin, double a0, double a1,
      double A=0, B=0;
      double a=0, b=0, c=0;
 
-     /* Ensures quadratic function remains monotone */
+     /* Ensures quadratic function remains monotone if fm in [f0, f1] */
      double f25=(3*f0+f1)/4, f75=(f0+3*f1)/4;
      double bnd1 = f25<f75 ? f25 : f75;
      double bnd2 = f25<f75 ? f75 : f25;
-     fm = fm<bnd1 ? bnd1 : fm>bnd2 ? bnd2 : fm;
+     if ((fm-f0)*(f1-fm)>=0)
+        fm = fm<bnd1 ? bnd1 : fm>bnd2 ? bnd2 : fm;
 
      if(isnull(da)){
         /* a0=a1, cannot interpolate */
@@ -252,7 +253,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=1;
+    int REZEQ_DEBUG=0;
 
     int i, nit=0, jalpha_next=0, err_flux;
     double aoj=0., boj=0., coj=0.;
