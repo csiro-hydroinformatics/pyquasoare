@@ -101,7 +101,7 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
         s1 = s0+c*tau
 
     elif isnull(a) and notnull(b):
-        s1 = -c/b+(s0+c/b)*math.exp(b*tau) if b*tau>REZEQ_EPS \
+        s1 = -c/b+(s0+c/b)*math.exp(b*tau) if abs(b*tau)>REZEQ_EPS \
                     else s0*(1+b*tau)+c*tau
 
     else:
