@@ -60,7 +60,7 @@ def test_quad_constants(allclose, generate_samples):
         assert allclose(Delta, b*b-4*a*c)
         assert allclose(qD, math.sqrt(abs(Delta))/2)
         if a<0 or a>0:
-            assert allclose(sbar, b/2/a)
+            assert allclose(sbar, -b/2/a)
 
 
 def test_delta_t_max(allclose, generate_samples):
