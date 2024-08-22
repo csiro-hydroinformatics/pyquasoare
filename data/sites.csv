@@ -1,0 +1,22 @@
+# --------------------------------------------------
+# nrow : 6
+# ncol : 8
+# comment : Sites info
+# time_generated : 2024-08-12 15:26:31
+# author : ler015
+# source_file : C:\Users\ler015\Code\pyrezeq_workflows\scripts\data\D001_get_hydroclimate_data.py
+# work_dir : C:\Users\ler015\Code\pyrezeq_workflows
+# python_environment nt
+# python_version : 3.10.6 | packaged by conda-forge | (main, Aug 22 2022, 20:29:51) [MSC v.1929 64 bit (AMD64)]
+# pandas_version : 2.2.1
+# numpy_version : 1.26.4
+# python_inc : C:\Users\ler015\Anaconda3\envs\env_nriv_v6\include
+# python_lib : C:\Users\ler015\Anaconda3\envs\env_nriv_v6\Lib\site-packages
+# --------------------------------------------------
+STATIONID,LONGITUDE[deg],LATITUDE[deg],NAME,LONGITUDE_CENTROID[deg],LATITUDE_CENTROID[deg],CATCHMENTAREA[km2],UPSTREAM_STATIONID,UPSTREAM_DISTANCE[km]
+203004,153.05543,-28.86403,Richmond River At Casino,152.90401,-28.56127,1790.00000,203034,31.57819
+203014,153.39483,-28.75557,Wilsons River At Eltham,153.46853,-28.68405,223.00000,203012,19.96799
+203060,153.35183,-28.74601,Coopers Creek At Fairmeadow,153.38996,-28.65218,177.05985,203002,25.85565
+203024,153.36227,-28.72153,Coopers Creek At Ewing Bridge,153.39213,-28.64465,148.00000,203002,21.73323
+203005,152.96709,-28.50551,Richmond River At Wiangaree,152.89951,-28.41285,702.00000,203056,16.24394
+203900,152.99484,-28.62104,Richmond River At Kyogle,152.92730,-28.43906,899.00000,203005,18.70098
