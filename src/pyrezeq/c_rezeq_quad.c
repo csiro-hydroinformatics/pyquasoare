@@ -114,6 +114,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
                             double sbar, double t0, double s0, double t){
     double s1=c_get_nan();
     double omega=0.;
+    double exparg=0;
     double tau=t-t0;
     double signD = Delta<0 ? -1. : 1.;
 
@@ -130,7 +131,8 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
         s1 = s0+c*tau;
     }
     else if((isnull(a) && notnull(b))){
-        s1 = -c/b+(s0+c/b)*exp(b*tau);
+        exparg = b*tau;
+        s1 = fabs(exparg)<REZEQ_EPS ? s0*(1+exparg)+c*tau : -c/b+(s0+c/b)*exp(exparg);
     }
     else{
         if(isnull(Delta)){

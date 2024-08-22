@@ -397,6 +397,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     scalings = np.ones(2)
     t1 = np.linspace(t0, Tmax, nval)
     dalpha = alpha1-alpha0
+    errmax_max = 0.
 
     for itry in range(-ntry, ntry):
         # Initial conditions outside of approximation range [alpha0, alpha1]
@@ -432,30 +433,51 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         # Expect linear function for derivative of solution in extrapolation mode
         sims = np.array(sims)
         dt = t1[1]-t1[0]
-        ds = (sims[2:]-sims[:-2])/dt # Centered first order derivative
+        ds = (sims[2:]-sims[:-2])/dt/2. # Centered first order derivative
         s = sims[1:-1]
 
         # .. lower extrapolation
-        ilow = s<alpha0
-        if ilow.sum()>0:
+        ilow = np.where(s<alpha0-1e-3)[0][:-1]
+        if len(ilow)>5:
             aoj, boj, coj = amat[0].sum(), bmat[0].sum(), cmat[0].sum()
             grad = approx.quad_grad(aoj, boj, coj, alpha0)
             c = approx.quad_fun(aoj, boj, coj, alpha0)-grad*alpha0
             b = grad
             expected = approx.quad_fun(0., b, c, s)
-            #assert allclose(ds[ilow], expected[ilow])
-            # TODO
+            err = np.abs(np.arcsinh(ds[ilow])-np.arcsinh(expected[ilow]))
+            errmax = err.max()
+            errmax_max = max(errmax, errmax_max)
 
         # .. upper extrapolation
-        ihigh = s>alpha1
-        if ihigh.sum()>0:
+        ihigh = np.where(s>alpha1+1e-3)[0][:-1]
+        if len(ihigh)>5:
             aoj, boj, coj = amat[-1].sum(), bmat[-1].sum(), cmat[-1].sum()
             grad = approx.quad_grad(aoj, boj, coj, alpha1)
             c = approx.quad_fun(aoj, boj, coj, alpha1)-grad*alpha1
             b = grad
             expected = approx.quad_fun(0., b, c, s)
-            #assert allclose(ds[ihigh], expected[ihigh])
+            err = np.abs(np.arcsinh(ds[ihigh])-np.arcsinh(expected[ihigh]))
+            errmax = err.max()
+            errmax_max = max(errmax, errmax_max)
 
+
+
+    err_thresh = {
+        "x2": 1e-12, \
+        "x4": 1e-3, \
+        "x6": 1e-3, \
+        "x8": 5e-3, \
+        "tanh": 5e-3, \
+        "exp": 5e-5, \
+        "sin": 5e-3, \
+        "runge": 1e-3, \
+        "stiff": 5e-7, \
+        "ratio": 5e-2, \
+        "logistic": 1e-7, \
+        "genlogistic": 5e-2
+    }
+    #assert errmax_max < err_thresh[fname]
+    LOGGER.info(f"[{fname}] approx extrapolation: errmax={errmax_max:3.2e}")
 
 
 def test_reservoir_equation(allclose, ntry, reservoir_function):
