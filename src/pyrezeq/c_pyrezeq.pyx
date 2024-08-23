@@ -26,7 +26,7 @@ cdef extern from 'c_rezeq_quad.h':
 
     int c_quad_steady(double a, double b, double c, double steady[2])
 
-    int c_quad_coefficients(int islin, double a0, double a1,
+    int c_quad_coefficients(int approx_opt, double a0, double a1,
                                 double f0, double f1, double fm,
                                 double coefs[3])
 
@@ -154,11 +154,11 @@ def quad_grad_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
 
 
 
-def quad_coefficients(int islin, double a0, double a1,
+def quad_coefficients(int approx_opt, double a0, double a1,
                         double f0, double f1, double fm,
                         np.ndarray[double, ndim=1, mode='c'] coefs):
     assert coefs.shape[0] == 3
-    return c_quad_coefficients(islin, a0, a1, f0, f1, fm,
+    return c_quad_coefficients(approx_opt, a0, a1, f0, f1, fm,
                                 <double*> np.PyArray_DATA(coefs))
 
 
@@ -397,8 +397,8 @@ def gr4jprod(int nsubdiv, double X1, double s0,
         raise ValueError("inputs.shape[1]!=2")
     if nval!=outputs.shape[0]:
         raise ValueError("rain.shape[0]!=outputs.shape[0]")
-    if outputs.shape[1]!=4:
-        raise ValueError("outputs.shape[1]!=4")
+    if outputs.shape[1]!=6:
+        raise ValueError("outputs.shape[1]!=6")
 
     return c_gr4jprod(nval, nsubdiv, X1, s0,
                                 <double*> np.PyArray_DATA(inputs),

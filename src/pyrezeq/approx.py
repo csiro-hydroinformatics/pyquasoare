@@ -66,17 +66,20 @@ def quad_grad(a, b, c, s):
         return o
 
 
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm, islin=0):
+def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         Fits the approx fun at x=a0, x=a1 and x=(a0+a1)/2.
-        If islin=1, use linear approx only and set quadratic coef to 0.
+        approx_opt:
+            0 = linear interpolation
+            1 = monotonous quadratic interpolation
+            2 = quadratic interpolation with no constraint
     """
     coefs = np.zeros(3)
-    ierr = c_pyrezeq.quad_coefficients(islin, alphaj, alphajp1, f0, f1, fm, coefs)
+    ierr = c_pyrezeq.quad_coefficients(approx_opt, alphaj, alphajp1, f0, f1, fm, coefs)
     return coefs
 
 
-def quad_coefficient_matrix(funs, alphas, islin=0):
+def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     """ Generate coefficient matrices for flux functions """
     nalphas = len(alphas)
     nfluxes = len(funs)
@@ -95,7 +98,8 @@ def quad_coefficient_matrix(funs, alphas, islin=0):
             f0 = f(alphaj)
             f1 = f(alphajp1)
             fm = f((alphaj+alphajp1)/2)
-            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm, islin)
+            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
+                                        approx_opt)
 
             a_matrix[j, ifun] = a
             b_matrix[j, ifun] = b

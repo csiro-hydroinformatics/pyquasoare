@@ -123,12 +123,9 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     else:
         if isnull(Delta):
             return (1./(s0-sbar)-1./(s1-sbar))/a
-        elif Delta>0:
-            eta = lambda x: math.atanh(x) if abs(x)<1 else math.atanh(1./x)
-            return (eta(a*(s0-sbar)/qD)-eta(a*(s1-sbar)/qD))/qD
         else:
-            return (math.atan(a*(s1-sbar)/qD)-math.atan(a*(s0-sbar)/qD))/qD
-
+            return (eta_fun(a*(s1-sbar)/qD, Delta)
+                                -eta_fun(a*(s0-sbar)/qD, Delta))/qD
     return np.nan
 
 

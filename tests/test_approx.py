@@ -294,29 +294,32 @@ def test_quad_coefficients(allclose, reservoir_function):
     f1 = fun(alpha1)
     xm = (alpha0+alpha1)/2
     fm = fun(xm)
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    a0, b0, c0 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 0)
+    a1, b1, c1 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 1)
+    a2, b2, c2 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
 
-    # Linear function (al=0)
-    al, bl, cl = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, True)
-    assert allclose(al, 0)
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    assert allclose([a, b, c], [a1, b1, c1])
+
+    # Linear function
+    assert allclose(a0, 0)
 
     # Check function on bounds
     for x in [alpha0, alpha1]:
         ft = fun(x)
-        fa = approx.quad_fun(a, b, c, x)
-        assert allclose(ft, fa, atol=1e-10)
+        for a, b, c in zip([a0, a1, a2], [b0, b1, b2], \
+                                    [c0, c1, c2]):
+            fa = approx.quad_fun(a, b, c, x)
+            assert allclose(ft, fa, atol=1e-10)
 
-        fa = approx.quad_fun(al, bl, cl, x)
-        assert allclose(ft, fa, atol=1e-10)
-
-    fa = approx.quad_fun(a, b, c, xm)
     v0, v1 = (f0+3*f1)/4, (f1+3*f0)/4
     v0, v1 = min(v0, v1), max(v0, v1)
-    expected = fm if (fm-f0)*(f1-fm)<0 else max(v0, min(v1, fm))
+    expected = max(v0, min(v1, fm))
+    fa = approx.quad_fun(a1, b1, c1, xm)
     assert allclose(fa, expected, atol=1e-10)
 
     # Linear function goes through mid point
-    fa = approx.quad_fun(al, bl, cl, xm)
+    fa = approx.quad_fun(a0, b0, c0, xm)
     expected = (f1+f0)/2
     assert allclose(fa, expected, atol=1e-10)
 
@@ -338,7 +341,7 @@ def test_quad_coefficients_edge_cases(allclose):
 
     # high value outside interval [f0, f1] -> non mononotous
     f0, fm, f1 = 1., 3.5, 3.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
     fm2 = approx.quad_fun(a, b, c, 0.5)
     assert allclose(fm2, fm)
 
@@ -350,7 +353,7 @@ def test_quad_coefficients_edge_cases(allclose):
 
     # low value outside interval -> non monotonous
     f0, fm, f1 = 1., -11., -10.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
     fm2 = approx.quad_fun(a, b, c, 0.5)
     assert allclose(fm2, fm)
 
@@ -413,7 +416,7 @@ def test_quad_vs_lin(allclose, reservoir_function):
     out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
     fapprox = out[:, 0]
 
-    amat_lin, bmat_lin, cmat_lin = approx.quad_coefficient_matrix(funs, alphas, True)
+    amat_lin, bmat_lin, cmat_lin = approx.quad_coefficient_matrix(funs, alphas, 0)
     out = approx.quad_fun_from_matrix(alphas, amat_lin, bmat_lin, cmat_lin, s)
     fapprox_lin = out[:, 0]
 

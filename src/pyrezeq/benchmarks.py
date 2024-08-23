@@ -63,8 +63,8 @@ def gr4jprod_fluxes_scaled(P, E, X1, eta=1./2.25):
 
 def gr4jprod(nsubdiv, X1, s0, inputs):
     inputs = np.ascontiguousarray(inputs).astype(np.float64)
-    # Outputs variables = S, PR, AE, PERC
-    outputs = np.zeros((len(inputs), 4))
+    # Outputs variables = S, PR, AE, PERC, PR, AE
+    outputs = np.zeros((len(inputs), 6))
 
     ierr = c_pyrezeq.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
     if ierr>0:

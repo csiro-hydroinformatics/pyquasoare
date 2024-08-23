@@ -43,9 +43,13 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
 /*
  * Quadratic interpolation coefficients to match a function such that
  * f(a0) = f0 , f(a1) = f1 , f((a0+a1)/2) = fm
- * fapprox(s) = as^2+bs+c with coefs = [a, b, c, Delta, qD = sqrt(abs(Delta))/2]
+ * fapprox(s) = as^2+bs+c
+ * approx opt characterise the fit:
+ * 0 = linear fit (i.e. force a = 0)
+ * 1 = mononotonous function (i.e. prevent zero of derivative in [a0, a1])
+ * 2 = free
  * */
-int c_quad_coefficients(int islin, double a0, double a1,
+int c_quad_coefficients(int approx_opt, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]){
      double da = a1-a0;
@@ -53,12 +57,15 @@ int c_quad_coefficients(int islin, double a0, double a1,
      double A=0, B=0;
      double a=0, b=0, c=0;
 
-     /* Ensures quadratic function remains monotone if fm in [f0, f1] */
-     double f25=(3*f0+f1)/4, f75=(f0+3*f1)/4;
-     double bnd1 = f25<f75 ? f25 : f75;
-     double bnd2 = f25<f75 ? f75 : f25;
-     if ((fm-f0)*(f1-fm)>=0)
+     /* Ensures quadratic function remains monotone if fm */
+     double f25=0., f75=0., bnd1=0., bnd2=0.;
+     if(approx_opt==1){
+        f25=(3*f0+f1)/4;
+        f75=(f0+3*f1)/4;
+        bnd1 = f25<f75 ? f25 : f75;
+        bnd2 = f25<f75 ? f75 : f25;
         fm = fm<bnd1 ? bnd1 : fm>bnd2 ? bnd2 : fm;
+     }
 
      if(isnull(da)){
         /* a0=a1, cannot interpolate */
@@ -68,7 +75,7 @@ int c_quad_coefficients(int islin, double a0, double a1,
      }
      else {
         /* Linear function */
-        if(islin) {
+        if(approx_opt==0) {
             a = 0.;
             b = (f1-f0)/da;
             c = f0-a0*b;
