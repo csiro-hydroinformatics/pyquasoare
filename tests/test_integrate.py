@@ -618,7 +618,7 @@ def test_reservoir_equation_gr4j(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas)
+    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -665,7 +665,6 @@ def test_reservoir_equation_gr4j(allclose):
             LOGGER.info(mess)
             atol = 1e-3
             rtol = 1e-4
-            import pdb; pdb.set_trace()
 
             assert np.allclose(expected, sims, atol=atol, rtol=rtol)
 
