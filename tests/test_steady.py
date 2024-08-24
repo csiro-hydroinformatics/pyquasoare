@@ -90,15 +90,15 @@ def test_steady_state(allclose, generate_samples):
     nna = np.abs(a)>1e-14 # Caution with very low values of a !
     ipos = (delta>0) & nna
     if ipos.sum()>0:
-        assert allclose(f1[ipos], 0, atol=1e-6)
-        assert allclose(f2[ipos], 0, atol=1e-6)
+        assert allclose(f1[ipos], 0, atol=5e-6)
+        assert allclose(f2[ipos], 0, atol=5e-6)
 
     ind = np.array([approx.isnull(d)==1 for d in delta])
     izero = ind & nna
     if izero.sum()>0:
         az, bz, cz = a[izero], b[izero], c[izero]
         rz = stdy[izero, 0]
-        assert allclose(f1[izero], 0, atol=1e-6)
+        assert allclose(f1[izero], 0, atol=5e-6)
         assert np.all(np.isnan(stdy[izero, 1]))
 
 

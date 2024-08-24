@@ -115,7 +115,7 @@ def test_delta_t_max(allclose, generate_samples):
 
         # Compares with slow
         delta_tmax_slow = slow.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)
-        assert np.isclose(delta_tmax, delta_tmax_slow)
+        assert allclose(delta_tmax, delta_tmax_slow)
 
         # Check tmax < end of sim
         if te.max()<Tmax and te.max()>0 and len(te)>3:
@@ -427,7 +427,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, timestep)
-            assert np.isclose(s_end, s_end_slow)
+            assert allclose(s_end, s_end_slow)
             assert np.allclose(fluxes, fluxes_slow)
 
             sims.append(s_end)
@@ -555,8 +555,8 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
                                                 amat, bmat, cmat, t_start, \
                                                 s_start, timestep)
-            assert np.isclose(s_end, s_end_slow)
-            assert np.allclose(fluxes, fluxes_slow)
+            assert allclose(s_end, s_end_slow)
+            assert allclose(fluxes, fluxes_slow)
 
             niter.append(n)
             sims.append(s_end)
