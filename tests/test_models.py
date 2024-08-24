@@ -1,0 +1,83 @@
+from pathlib import Path
+from itertools import product as prod
+import time
+import math
+import re
+import pytest
+
+import numpy as np
+import pandas as pd
+import scipy.integrate as sci_integrate
+
+from hydrodiy.io import iutils
+
+from pyrezeq import approx, models, slow, benchmarks, steady
+
+from test_approx import generate_samples, reservoir_function
+
+from pygme.models import gr4j
+
+import data_reader
+
+np.random.seed(5446)
+
+source_file = Path(__file__).resolve()
+FTEST = source_file.parent
+LOGGER = iutils.get_logger("models", flog=FTEST / "test_models.log")
+
+def test_quad_model(allclose):
+    nalphas = 20
+    alphas = np.linspace(0., 1.2, nalphas)
+    start, end = "2017-01", "2022-12-31"
+    nsubdiv = 50000
+    X1s = [50, 200, 1000]
+    LOGGER.info("")
+
+    # Compute approx coefs
+    fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
+    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+
+    # Loop over sites
+    for isite, siteid in enumerate(data_reader.SITEIDS):
+        # Get climate data
+        df = data_reader.get_data(siteid, "daily")
+        df = df.loc[start:end]
+        nval = len(df)
+        inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+        climdiff = inputs[:, 0]-inputs[:, 1]
+        errmax_max = 0.
+        errbalmax_max = 0.
+        for X1 in X1s:
+            scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
+                                        np.maximum(-climdiff, 0.)/X1, \
+                                        np.ones(nval)])
+
+            # Run approximate solution + exclude PR and AE
+            s0 = X1/2
+            expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)[:, :-2]
+
+            # Run quad model
+            s0 = 1./2
+            niter, s1, fx = models.quad_model(alphas, scalings, \
+                                            amat, bmat, cmat, s0, 1.)
+
+            sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
+                                        -fx[:, 1]*X1, -fx[:, 2]*X1])
+
+            # Error analysis
+            errmax = np.abs(sims-expected).max()
+            errmax_max = max(errmax, errmax_max)
+
+            ps = expected[:, 1]
+            errbalmax = np.abs((sims[:, 1]-ps).mean(axis=0))*100
+            errbalmax /= np.mean(ps)
+            errbalmax_max = max(errbalmax, errbalmax_max)
+
+            atol = 1e-3
+            rtol = 1e-4
+            assert np.allclose(expected, sims, atol=atol, rtol=rtol)
+
+        mess = f"quad_model vs gr4jprod / site {isite+1}:"\
+                    +f" errmax={errmax_max:3.3e}"\
+                    +f" errbalmax={errbalmax_max:3.3e}%"
+        LOGGER.info(mess)

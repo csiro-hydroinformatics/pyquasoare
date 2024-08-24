@@ -7,22 +7,24 @@ else:
     raise ImportError("Cannot run rezeq without C module. Please compile C code")
 
 
-def model(delta, alphas, scalings, nu, \
+def quad_model(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
-                c_matrix_noscaling, s0):
-    fluxes = np.zeros(scalings.shape, dtype=np.float64)
-    niter = np.zeros(scalings.shape[0], dtype=np.int32)
-    s1 = np.zeros(scalings.shape[0], dtype=np.float64)
+                c_matrix_noscaling, s0, timestep):
 
-    ierr = c_pyrezeq.model(delta, alphas, scalings, \
-                    nu_vector, \
+    nval = scalings.shape[0]
+    fluxes = np.zeros(scalings.shape, dtype=np.float64)
+    niter = np.zeros(nval, dtype=np.int32)
+    s1 = np.zeros(nval, dtype=np.float64)
+
+    ierr = c_pyrezeq.quad_model(alphas, scalings, \
                     a_matrix_noscaling, \
                     b_matrix_noscaling, \
                     c_matrix_noscaling, \
-                    s0, niter, s1, fluxes)
+                    s0, timestep, niter, s1, fluxes)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.run returns {ierr}")
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.quad_model returns {ierr} ({mess})")
 
     return niter, s1, fluxes
 

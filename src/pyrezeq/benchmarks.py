@@ -6,18 +6,61 @@ if has_c_module():
 else:
     raise ImportError("Cannot run rezeq without C module. Please compile C code")
 
+# --- Non linear routing model ---
+def nonlinrouting_fluxes_noscaling(nu):
+    """ fluxes from reservoir dS/dt = inflow-q0*(S/theta)**nu
+        or d(S/theta)/dt = inflow/theta-q0/theta*(S/theta)**nu
 
-def nonlinrouting(nsubdiv, delta, theta, nu, q0, s0, inflows):
+        Consequently non scaled fluxes are
+        f1 = 1. (inflow to be multiplied by inflow/theta)
+        f2 = -x^nu (outflow to be multiplied by q0/theta)
+    """
+    assert nu>1
+    fin = lambda x: 1.
+    fout = lambda x: -x**nu if x>=0 else 0.
+    fluxes = [fin, fout]
+
+    dfin = lambda x: 0.
+    dfout = lambda x: -nu*x**(nu-1.) if x>=0 else 0.
+    dfluxes = [dfin, dfout]
+
+    return fluxes, dfluxes
+
+
+def nonlinrouting_fluxes_scaled(inflow, q0, theta, nu):
+    """ Non linear routing model solved for x=S/theta
+        dx/dt = inflow/theta-q0/theta*x^nu
+    """
+    # normalised fluxes
+    normf, dnormf = nonlinrouting_fluxes_noscaling(nu)
+
+    fin = lambda x: inflow/theta*normf[0](x)
+    fout = lambda x: q0/theta*normf[1](x)
+    fluxes = [fin, fout]
+    sumf = lambda x: fin(x)+fout(x)
+
+    dfin = lambda x: inflow/theta*dnormf[0](x)
+    dfout = lambda x: q0/theta*dnormf[1](x)
+    dfluxes = [dfin, dfout]
+    dsumf = lambda x: dfin(x)+dfout(x)
+
+    return sumf, dsumf, fluxes, dfluxes
+
+
+
+def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyrezeq.nonlinrouting(nsubdiv, delta, theta, nu, \
+    ierr = c_pyrezeq.nonlinrouting(nsubdiv, timestep, theta, nu, \
                                     q0, s0, inflows, outflows)
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr}")
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr} ({mess})")
 
     return outflows
 
 
+# --- GR4J model ---
 def gr4jprod_fluxes_noscaling(eta=1./2.25):
     """ GR4J production store fluxes: Ps, Es, Perc without climate input scaling """
     fpr = lambda x: (1.-x**2) if x>0 else 1.
@@ -67,8 +110,10 @@ def gr4jprod(nsubdiv, X1, s0, inputs):
     outputs = np.zeros((len(inputs), 6))
 
     ierr = c_pyrezeq.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
+
     if ierr>0:
-        raise ValueError(f"c_pyrezeq.gr4jprod returns {ierr}")
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.gr4jprod returns {ierr} ({mess})")
 
     return outputs
 

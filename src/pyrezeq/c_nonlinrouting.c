@@ -17,22 +17,22 @@ int c_nonlinrouting(int nval, int nsubdiv, double timestep,
         omega = exp(-q0/theta*dt);
     }
 
-    if(nsubdiv<1 || nsubdiv>10000)
-        return NONLINROUT_ERROR + __LINE__;
+    if(nsubdiv<1 || nsubdiv>100000)
+        return REZEQ_BENCH_NSUBDIV_TOO_HIGH;
 
     if(theta<1e-5)
-        return NONLINROUT_ERROR + __LINE__;
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     /* Cannot have nu<1 otherwise function is not
      * Lipschitz continuous */
     if(nu<1 || nu>10)
-        return NONLINROUT_ERROR + __LINE__;
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(q0<1e-5)
-        return NONLINROUT_ERROR + __LINE__;
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(s0<0 || s0>1e1*theta)
-        return NONLINROUT_ERROR + __LINE__;
+        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
 
     /* Time series loop */
     for(i=0; i<nval; i++){
@@ -68,10 +68,6 @@ int c_nonlinrouting(int nval, int nsubdiv, double timestep,
         /* outflow computed from mass balance */
         qout = qi+(s0-s1)/timestep;
         outflows[i] = qout;
-
-        //fprintf(stdout, "[%4d] theta=%3.3e nu=%3.3e qi=%3.3e s0=%3.3e "
-        //                    "-> s1=%3.3e qo=%3.3e\n",
-        //                        i, theta, nu, qi, s0, s1, qout);
 
         /* Loop */
         s0 = s1;

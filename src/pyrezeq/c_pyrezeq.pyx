@@ -331,8 +331,8 @@ def quad_model(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     cdef int nfluxes = a_matrix_noscaling.shape[1]
     cdef int nval = scalings.shape[0]
 
-    if scalings.shape[0] != nfluxes:
-        raise ValueError("scalings.shape[0] != nfluxes")
+    if scalings.shape[1] != nfluxes:
+        raise ValueError("scalings.shape[1] != nfluxes")
 
     if b_matrix_noscaling.shape[1] != nfluxes:
         raise ValueError("b_matrix_noscaling.shape[1] != nfluxes")

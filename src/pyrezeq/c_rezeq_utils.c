@@ -145,6 +145,15 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == REZEQ_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
 
+    else if(err_code == REZEQ_BENCH_NSUBDIV_TOO_HIGH)
+        strncpy(message, "Number of sub-division too high", len);
+
+    else if(err_code == REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS)
+        strncpy(message, "Parameters out of bounds", len);
+
+    else if(err_code == REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS)
+        strncpy(message, "Initialisation out of bounds", len);
+
     else
         strncpy(message, "Error code not found", len);
 

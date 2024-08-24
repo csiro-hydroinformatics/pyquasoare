@@ -508,7 +508,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
                             double s0, int * niter,
                             double * s1, double * fluxes) {
     int ierr, t;
-    double t0=0;
+    double t0=0.;
 
     for(t=0; t<nval; t++){
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,

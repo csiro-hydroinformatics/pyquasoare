@@ -11,15 +11,15 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
     double dt = 1./(double)nsubdiv;
 
     /* Check input data */
-    if(nsubdiv<1 || nsubdiv>10000)
-        return GR4JPROD_ERROR + __LINE__;
-
-    if(s0<1e-5 || s0>X1-1e-5)
-        return GR4JPROD_ERROR + __LINE__;
-    S = s0;
+    if(nsubdiv<1 || nsubdiv>100000)
+        return REZEQ_BENCH_NSUBDIV_TOO_HIGH;
 
     if(X1<5.||X1>10000.)
-        return GR4JPROD_ERROR + __LINE__;
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+
+    if(s0<1e-5 || s0>X1-1e-5)
+        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
+    S = s0;
 
     /* Time series loop */
     for(i=0; i<nval; i++){
@@ -65,10 +65,7 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
             S = S2;
         }
 
-        PR = P+(AE-PR)*X1+Ei*X1-E;
-        AE += P-Pi*X1;
-
-        /* Store */
+        /* Store normalised fluxes to match with quad */
         outputs[6*i] = S;
         outputs[6*i+1] = PS;
         outputs[6*i+2] = ES;

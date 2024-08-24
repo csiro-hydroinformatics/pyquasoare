@@ -7,8 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-/* Define Error message */
-#define NONLINROUT_ERROR 456000
+#include "c_rezeq_utils.h"
 
 int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,

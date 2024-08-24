@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from pyrezeq import has_c_module, approx
+from pyrezeq import has_c_module, approx, models
 
 if has_c_module():
     import c_pyrezeq
@@ -58,3 +58,18 @@ def quad_steady_scalings(alphas, scalings, \
     return steady
 
 
+def quad_steady_scalings_shooting(alphas, scalings, \
+                a_matrix_noscaling, \
+                b_matrix_noscaling, \
+                c_matrix_noscaling, s0_init, timestep, tol=1e-6):
+    """ Shooting method for boundary value problem """
+
+    s0 = s0_init
+    while abs(s0-s1[-1])>tol
+        niter, s1, fx = models.quad_model(alphas, scalings, \
+                                    a_matrix_noscaling, \
+                                    b_matrix_noscaling, \
+                                    c_matrix_noscaling, s0, timestep)
+        s0 = s1[-1]
+
+    return s1, fx
