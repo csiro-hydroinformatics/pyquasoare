@@ -205,11 +205,7 @@ def test_steady_shooting(allclose):
         s0 = 0.5
         nit, s1, fx = steady.quad_steady_scalings_shooting(alphas, means, \
                                 amat, bmat, cmat, s0, 1.)
-
-        import matplotlib.pyplot as plt
-        plt.plot(s1)
-        plt.show()
-        import pdb; pdb.set_trace()
-
+        assert abs(s1[0]-s1[-1])<1e-2
+        assert nit < 10
 
 
