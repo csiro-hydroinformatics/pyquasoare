@@ -15,6 +15,7 @@ else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
 
+
 def isequal(f1, f2, atol=REZEQ_ATOL, \
                     rtol=REZEQ_RTOL):
     """ Checking if two values are equal """

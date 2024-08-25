@@ -64,12 +64,16 @@ def quad_steady_scalings_shooting(alphas, scalings, \
                 c_matrix_noscaling, s0_init, timestep, tol=1e-6):
     """ Shooting method for boundary value problem """
 
-    s0 = s0_init
-    while abs(s0-s1[-1])>tol
-        niter, s1, fx = models.quad_model(alphas, scalings, \
+    srun = 1e100*np.ones(len(scalings))
+    srun[0] = s0_init
+    niter_max = 10000
+    niter = 0
+    while abs(srun[0]-srun[-1])>tol and niter<niter_max:
+        s0 = srun[0]
+        _, srun, fx = models.quad_model(alphas, scalings, \
                                     a_matrix_noscaling, \
                                     b_matrix_noscaling, \
                                     c_matrix_noscaling, s0, timestep)
-        s0 = s1[-1]
+        niter += 1
 
-    return s1, fx
+    return niter, srun, fx

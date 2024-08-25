@@ -14,7 +14,7 @@ double c_get_inf() {
 }
 
 double c_compiler_accuracy_kahan(){
-    long double s, t=3.0;
+    long double t=3.0;
     return 1.0-(4.0/t-1.0)*t;
 }
 
@@ -51,6 +51,7 @@ double diff_of_products(double a, double b, double c, double d)
     double f = fma(a, b, -w);
     return f+e;
 }
+
 
 int c_quad_constants(double a, double b, double c, double values[3]){
     double Delta = isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);

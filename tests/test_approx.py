@@ -5,6 +5,7 @@ import re
 import pytest
 import numpy as np
 import pandas as pd
+import time
 
 from hydrodiy.io import iutils
 
@@ -252,12 +253,54 @@ def test_get_nan():
     nan = c_pyrezeq.get_nan()
     assert np.isnan(nan)
 
-
 def test_get_inf():
     inf = c_pyrezeq.get_inf()
     assert inf>0
     assert np.isinf(inf)
 
+def test_function_runtime():
+    nrepeat = 5000000
+    LOGGER.info("")
+    funs = ["x2", "x4", "x6", "log", "exp", "tan", "tanh"]
+    runtimes = np.zeros(len(funs))
+    for ifun, fun in enumerate(funs):
+        # Argument range
+        if fun == "log":
+            x0, x1 = 1e-20, 20
+        elif fun == "tan":
+            x0, x1 = -math.pi/2+1e-5, math.pi/2-1e-5
+        else:
+            x0, x1 = -20, 20
+
+        x, dx = x0, (x1-x0)/(nrepeat-1)
+
+        # Repeated execution
+        start = time.time()
+        for i in range(nrepeat):
+            if fun == "x2":
+                y = x*x
+            elif fun == "x4":
+                y = x*x*x*x
+            elif fun == "x6":
+                y = x*x*x*x*x*x
+            elif fun == "log":
+                y = math.log(x)
+            elif fun == "exp":
+                y = math.exp(x)
+            elif fun == "tan":
+                y = math.tan(x)
+            elif fun == "tanh":
+                y = math.tanh(x)
+            x += dx
+
+        rt = (time.time()-start)*1e3
+        runtimes[ifun] = rt
+
+    for ifun, fun in enumerate(funs):
+        rt = runtimes[ifun]
+        rx2 = rt/runtimes[0]*100
+        mess = f"Runtime of fun {fun:4s} : {rt:2.2e}ms ({rx2:0.0f}% of x2)"
+        LOGGER.info(mess)
 
 def test_quad_fun(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples

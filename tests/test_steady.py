@@ -14,6 +14,8 @@ from pyrezeq import approx, steady, benchmarks
 
 from test_approx import generate_samples
 
+import data_reader
+
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
@@ -21,7 +23,7 @@ FTEST = source_file.parent
 
 LOGGER = iutils.get_logger("steady", flog=FTEST / "test_steady.log")
 
-def test_steady_state_kahan(allclose):
+def test_kahan(allclose):
     # Implementing tests by Kayan
     # https://people.eecs.berkeley.edu/%7Ewkahan/Qdrtcs.pdf
     #a1, b1, c1 = 10.27, 29.61, 85.37
@@ -103,7 +105,7 @@ def test_steady_state(allclose, generate_samples):
 
 
 
-def test_steady_state_scalings(allclose, generate_samples):
+def test_scalings(allclose, generate_samples):
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
     if ntry==0:
@@ -138,7 +140,7 @@ def test_steady_state_scalings(allclose, generate_samples):
 
 
 
-def test_steady_state_scalings_gr4j(allclose):
+def test_scalings_gr4j(allclose):
     nalphas = 25
     alphas = 0.05*np.arange(nalphas)
 
@@ -168,5 +170,46 @@ def test_steady_state_scalings_gr4j(allclose):
         feval = np.array([f(s0)*scalings[t, ifun] for ifun, f in enumerate(fluxes)])
         fsum = np.sum(feval, axis=0)
         assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-6)
+
+
+
+def test_steady_shooting(allclose):
+    nalphas = 20
+    alphas = np.linspace(0., 1.2, nalphas)
+    start, end = "2017-01", "2022-12-31"
+    nsubdiv = 50000
+    X1s = [50, 200, 1000]
+    LOGGER.info("")
+
+    # Compute approx coefs
+    fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
+    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+
+    # Loop over sites
+    for isite, siteid in enumerate(data_reader.SITEIDS):
+        # Get climate data
+        df = data_reader.get_data(siteid, "daily")
+        df = df.loc[start:end]
+        nval = len(df)
+        inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]]
+
+        X1 = 200
+        scalings = (inputs-inputs.iloc[:, [1, 0]].values).clip(0.)/X1
+        scalings = np.column_stack([scalings, np.ones(len(scalings))])
+        scalings = pd.DataFrame(scalings, index=inputs.index)
+
+        means = scalings.rolling("30D", closed="left").mean()\
+                    .groupby(inputs.index.dayofyear).mean().iloc[:-1]\
+                    .values
+
+        s0 = 0.5
+        nit, s1, fx = steady.quad_steady_scalings_shooting(alphas, means, \
+                                amat, bmat, cmat, s0, 1.)
+
+        import matplotlib.pyplot as plt
+        plt.plot(s1)
+        plt.show()
+        import pdb; pdb.set_trace()
+
 
 

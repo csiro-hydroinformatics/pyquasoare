@@ -14,11 +14,13 @@ cdef extern from 'c_rezeq_utils.h':
     double c_get_inf()
     double c_get_nan()
     double c_compiler_accuracy_kahan()
+
     int c_quad_constants(double a, double b, double c, double values[3])
 
     int c_find_alpha(int nalphas, double * alphas, double s0)
 
     int c_get_error_message(int err_code, char message[100])
+
 
 cdef extern from 'c_rezeq_quad.h':
     double c_quad_fun(double a, double b, double c, double s)
