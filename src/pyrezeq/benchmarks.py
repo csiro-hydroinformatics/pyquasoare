@@ -37,14 +37,12 @@ def nonlinrouting_fluxes_scaled(inflow, q0, theta, nu):
     fin = lambda x: inflow/theta*normf[0](x)
     fout = lambda x: q0/theta*normf[1](x)
     fluxes = [fin, fout]
-    sumf = lambda x: fin(x)+fout(x)
 
     dfin = lambda x: inflow/theta*dnormf[0](x)
     dfout = lambda x: q0/theta*dnormf[1](x)
     dfluxes = [dfin, dfout]
-    dsumf = lambda x: dfin(x)+dfout(x)
 
-    return sumf, dsumf, fluxes, dfluxes
+    return fluxes, dfluxes
 
 
 
@@ -92,15 +90,13 @@ def gr4jprod_fluxes_scaled(P, E, X1, eta=1./2.25):
     fae = lambda x: ei*normf[1](x)
     fperc = lambda x: normf[2](x)
     fluxes = [fpr, fae, fperc]
-    sumf = lambda x: fpr(x)+fae(x)+fperc(x)
 
     dfpr = lambda x: pi*dnormf[0](x)
     dfae = lambda x: ei*dnormf[1](x)
     dfperc = lambda x: dnormf[2](x)
     dfluxes = [dfpr, dfae, dfperc]
-    dsumf = lambda x: dfpr(x)+dfae(x)+dfperc(x)
 
-    return sumf, dsumf, fluxes, dfluxes
+    return fluxes, dfluxes
 
 
 

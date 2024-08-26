@@ -106,7 +106,8 @@ def test_delta_t_max(allclose, generate_samples):
         # Run solver first to see how far it goes
         f = lambda x: approx.quad_fun(a, b, c, x)
         df = lambda x: approx.quad_grad(a, b, c, x)
-        te, ns1, _, _= slow.integrate_numerical(f, df, [], [], t0, s0, t_eval)
+        te, ns1, _, _= slow.integrate_numerical([f], [df], t0, s0, t_eval)
+
         if len(te)==0:
             continue
 
@@ -123,8 +124,7 @@ def test_delta_t_max(allclose, generate_samples):
             t0, t1 = te[-3], te[-1]
             te = np.linspace(t0, 2*t1-t0, 500)
             s0 = ns1[-3]
-            te, ns1, nev, njac = slow.integrate_numerical(\
-                                                    f, df, [], [], t0, s0, te)
+            te, ns1, nev, njac = slow.integrate_numerical([f], [df], t0, s0, te)
             expected = te.max()
 
             # Compares with C code
@@ -215,8 +215,7 @@ def test_forward_vs_numerical(allclose, generate_samples):
 
         f = lambda x: approx.quad_fun(a, b, c, x)
         df = lambda x: approx.quad_grad(a, b, c, x)
-        te, expected, nev, njac = slow.integrate_numerical(f, df, [], [], \
-                                                            t0, s0, t_eval)
+        te, expected, nev, njac = slow.integrate_numerical([f], [df], t0, s0, t_eval)
         if len(te)<3:
             continue
 
@@ -527,10 +526,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
         # Numerical method
         start_exec = time.time()
-        tn, fn, nev, njac = slow.integrate_numerical(\
-                                        sfun, dsfun, \
-                                        funs, dfuns, \
-                                        t0, s0, t1)
+        tn, fn, nev, njac = slow.integrate_numerical(funs, dfuns, t0, s0, t1)
         end_exec = time.time()
         time_num += (end_exec-start_exec)*1e3
         numerical = fn[:, 0]
@@ -549,7 +545,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                                                 s_start, timestep)
 
             # Check mass balance
-            #assert allclose(fluxes.sum()-s_end+s_start, 0.)
+            assert allclose(fluxes.sum()-s_end+s_start, 0.)
 
             # Python code
             n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \

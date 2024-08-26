@@ -8,38 +8,53 @@ from pyrezeq.approx import REZEQ_EPS, REZEQ_PI
 from pyrezeq.approx import isequal, notequal, isnull, notnull
 from pyrezeq.integrate import quad_constants
 
-def integrate_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
+def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
-                            fun_args=None):
+                            scaling=None, v=None, m=None):
     method = method.title()
     nfluxes = len(fluxes)
     assert len(dfluxes) == nfluxes
+    multi_fluxes = nfluxes>1
 
-    v = np.zeros(nfluxes+1)
+    v = np.zeros(nfluxes+multi_fluxes) if v is None else v
     def fun_ivp(t, y):
-        v[0] = sumfun(y[0])
+        total = 0.
         for i in range(nfluxes):
-            v[i+1] = fluxes[i](y[0])
+            s = 1. if scaling is None else scaling[i]
+            f = fluxes[i](y[0])*s
+            total += f
+            v[i] = f
+
+        if multi_fluxes:
+            v[nfluxes] = total
         return v
 
-    m = np.zeros((nfluxes+1, nfluxes+1))
+    m = np.zeros((nfluxes+multi_fluxes, nfluxes+multi_fluxes)) \
+            if m is None else m
     jac_ivp = None
     if method == "Radau":
         def jac_ivp(t, y):
-            m[0, 0] = dsumfun(y[0])
+            total = 0.
             for i in range(nfluxes):
-                m[i+1, 0] = dfluxes[i](y[0])
+                s = 1. if scaling is None else scaling[i]
+                df = dfluxes[i](y[0])*s
+                total += df
+                m[i, 0] = df
+
+            if multi_fluxes:
+                m[nfluxes, 0] = total
             return m
+
+    y0 = [0.]*nfluxes+[s0] if multi_fluxes else [s0]
 
     res = solve_ivp(\
             fun=fun_ivp, \
             t_span=[t0, t[-1]], \
-            y0=[s0]+[0.]*nfluxes, \
+            y0=y0, \
             method=method, \
             max_step=max_step, \
             jac=jac_ivp, \
-            t_eval=t, \
-            args=fun_args)
+            t_eval=t)
 
     # Function evaluation
     nev = res.nfev
@@ -49,6 +64,32 @@ def integrate_numerical(sumfun, dsumfun, fluxes, dfluxes, t0, s0, t, \
         return np.array([]), np.array([]), nev, njac
     else:
         return res.t, res.y.T.squeeze(), nev, njac
+
+
+def numerical_model(fluxes, dfluxes, scalings, s0, timestep):
+    nval = scalings.shape[0]
+    sims = np.zeros(scalings.shape, dtype=np.float64)
+    niter = np.zeros(nval, dtype=np.int32)
+    s1 = np.zeros(nval, dtype=np.float64)
+    t0 = 0.
+    nfluxes = len(fluxes)
+    multi_fluxes = nfluxes>1
+    v = np.zeros(nfluxes+multi_fluxes)
+    m = np.zeros((nfluxes+multi_fluxes, nfluxes+multi_fluxes))
+
+    for t in range(nval):
+        # integrate
+        tn, send, nev, njac = slow.integrate_numerical(\
+                                        sfun, dsfun, \
+                                        funs, dfuns, \
+                                        0, s0, timestep, \
+                                        scaling=scalings[t], \
+                                        v=v, m=m)
+        s0 = send[0]
+        niter[t] = nev+njac
+        fluxes[t] = send[1:]
+
+    return niter, s1, fluxes
 
 
 # --- REZEQ functions translated from C for slow implementation ---
@@ -358,7 +399,7 @@ def quad_model(alphas, scalings, \
     t0 = 0.
 
     for t in range(nval):
-        niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings, \
+        niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings[t], \
                         a_matrix_noscaling, \
                         b_matrix_noscaling, \
                         c_matrix_noscaling, \
@@ -366,4 +407,5 @@ def quad_model(alphas, scalings, \
         s0 = s1[t]
 
     return niter, s1, fluxes
+
 

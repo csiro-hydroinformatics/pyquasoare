@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils
 
-from pyrezeq import approx, models, slow, benchmarks, steady
+from pyrezeq import approx, models, slow, benchmarks
 
 from test_approx import generate_samples, reservoir_function
 
@@ -64,6 +64,14 @@ def test_quad_model(allclose):
             sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
                                         -fx[:, 1]*X1, -fx[:, 2]*X1])
 
+            # Compare with slow
+            niter_slow, s1_slow, fx_slow = slow.quad_model(alphas, scalings, \
+                                            amat, bmat, cmat, s0, 1.)
+
+            sims_slow = np.column_stack([s1_slow*X1, fx_slow[:, 0]*X1, \
+                                        -fx_slow[:, 1]*X1, -fx_slow[:, 2]*X1])
+            assert allclose(sims, sims_slow)
+
             # Error analysis
             errmax = np.abs(sims-expected).max()
             errmax_max = max(errmax, errmax_max)
@@ -75,7 +83,7 @@ def test_quad_model(allclose):
 
             atol = 1e-3
             rtol = 1e-4
-            assert np.allclose(expected, sims, atol=atol, rtol=rtol)
+            assert allclose(expected, sims, atol=atol, rtol=rtol)
 
         mess = f"quad_model vs gr4jprod / site {isite+1}:"\
                     +f" errmax={errmax_max:3.3e}"\

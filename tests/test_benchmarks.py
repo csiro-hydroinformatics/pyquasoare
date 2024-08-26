@@ -146,17 +146,14 @@ def test_gr4jprod_vs_numerical(allclose):
                 P, E = inputs[t]
 
                 # fluxes equations
-                sumf, dsumf, fluxes, dfluxes = \
-                            benchmarks.gr4jprod_fluxes_scaled(P, E, X1)
+                fluxes, dfluxes = benchmarks.gr4jprod_fluxes_scaled(P, E, X1)
 
                 # Numerical integration
-                _, out, _, _ = slow.integrate_numerical(sumf, dsumf, \
-                                                fluxes, dfluxes, \
-                                                0, u_start, [1.])
-                numerical[t, 0] = out[0]*X1
-                numerical[t, 1] = out[1]*X1
-                numerical[t, 2] = -out[2]*X1
-                numerical[t, 3] = -out[3]*X1
+                _, out, _, _ = slow.integrate_numerical(fluxes, dfluxes, 0, u_start, [1.])
+                numerical[t, 0] = out[3]*X1
+                numerical[t, 1] = out[0]*X1
+                numerical[t, 2] = -out[1]*X1
+                numerical[t, 3] = -out[2]*X1
 
                 # loop
                 u_start = out[0]
@@ -264,10 +261,14 @@ def test_nonlinrouting_vs_numerical(allclose):
 
     for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "hourly")
-        # just 2022-Feb/March because it takes too much time otherwise
-        inflows = df.loc["2022-02":"2022-03", :].iloc[:, 0].values
-        q0 = inflows.mean()
-        theta = q0*timestep*10.
+        df = df.loc["2022-02-20": "2022-03-10"]
+
+        inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+        q0 = inflows.quantile(0.9)
+        inflows = inflows.values
+
+        # Stored volumne in 24h
+        theta = q0*24*timestep
 
         errmax_max = 0.
         for nu in nus:
@@ -285,9 +286,8 @@ def test_nonlinrouting_vs_numerical(allclose):
                             benchmarks.nonlinrouting_fluxes_scaled(qin, q0, theta, nu)
 
                 # Numerical integration
-                _, out, _, _ = slow.integrate_numerical(sumf, dsumf, \
-                                                fluxes, dfluxes, \
-                                                0, u_start, [timestep])
+                _, out, _, _ = slow.integrate_numerical(fluxes, dfluxes, 0, u_start, [timestep])
+                assert ~np.isnan(out[0])
                 numerical[t] = -out[2]*theta/timestep
 
                 # loop
