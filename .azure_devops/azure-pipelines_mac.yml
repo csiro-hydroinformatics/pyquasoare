@@ -1,0 +1,120 @@
+# Pipeline to create ananconda environment and run my tests
+
+resources:
+    repositories:
+
+    - repository: hydrodiy
+      type: git
+      name: hydrodiy/hydrodiy
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_mini_v2.yml
+
+    - repository: pygme
+      type: git
+      name: pygme/pygme
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_mini_v2.yml
+
+trigger:
+- master
+
+pool:
+  vmImage: macos-latest
+strategy:
+  matrix:
+    Python310:
+      python.version: '3.10'
+
+variables:
+  CONDA_ENV_NAME: env_mini_v2
+  CONDA_HOME: /usr/share/miniconda/envs/$(CONDA_ENV_NAME)/
+  BUILD_DIR: $(System.DefaultWorkingDirectory)
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(python.version)'
+  displayName: 'Use Python $(python.version)'
+
+- bash: echo "##vso[task.prependpath]$CONDA/bin"
+  displayName: Add conda to PATH
+
+- checkout: self
+- checkout: hydrodiy
+- checkout: pygme
+
+- task: Cache@2
+  displayName: Use cached Anaconda environment
+  inputs:
+    key: conda | $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
+    path: $(CONDA_HOME)
+    cacheHitVar: CONDA_CACHE_RESTORED
+
+- bash: conda env create --file  $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
+  displayName: Create Anaconda environment (if not restored from cache)
+  condition: eq(variables.CONDA_CACHE_RESTORED, 'false')
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/hydrodiy
+    pip install -e .
+  displayName: hydrodiy_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/pygme
+    pip install -e .
+  displayName: pygme_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/pyrezeq
+    pip install -e .
+  displayName: package_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/pyrezeq
+    pytest --ntry=200 --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
+  displayName: test
+  timeoutInMinutes: 90
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(BUILD_DIR)/pyrezeq/tests'
+    contents: '*.log'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+  displayName: copy_test_log
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: test_log
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '**/test-*.xml'
+    testRunTitle: 'Publish test results for Python $(python.version)'
+
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish Cobertura Coverage Report'
+  inputs:
+    codeCoverageTool: Cobertura
+    summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+    reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'
+
