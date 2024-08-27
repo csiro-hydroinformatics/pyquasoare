@@ -67,7 +67,8 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
         return res.t, res.y.T.squeeze(), nev, njac
 
 
-def numerical_model(fluxes, dfluxes, scalings, s0, timestep):
+def numerical_model(fluxes, dfluxes, scalings, s0, timestep, \
+                                method="Radau"):
     nval = scalings.shape[0]
     sims = np.zeros(scalings.shape, dtype=np.float64)
     niter = np.zeros(nval, dtype=np.int32)
@@ -84,7 +85,8 @@ def numerical_model(fluxes, dfluxes, scalings, s0, timestep):
                                         fluxes, dfluxes, \
                                         0, s0, [timestep], \
                                         scaling=scalings[t], \
-                                        v=v, m=m)
+                                        v=v, m=m, \
+                                        method=method)
         s0 = send[-1]
         s1[t] = s0
         niter[t] = nev+njac
