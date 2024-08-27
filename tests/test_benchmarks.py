@@ -128,10 +128,17 @@ def test_gr4jprod_vs_numerical(allclose):
     nsubdiv = 50000
     LOGGER.info("")
 
+    # fluxes equations
+    fluxes, dfluxes = benchmarks.gr4jprod_fluxes_noscaling()
+
     for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "daily")
         # just 2022 because it takes too much time otherwise
         inputs = df.loc["2022", ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+
+        # scalings
+        nval = len(inputs)
+        scalings = np.ones((nval, 3))
 
         errmax_max = 0.
         for X1 in X1s:
@@ -139,27 +146,18 @@ def test_gr4jprod_vs_numerical(allclose):
             gp = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)
 
             # Numerical simulation
-            numerical = np.zeros((len(gp), 4))
-            u_start = s0/X1
-            for t in range(len(inputs)):
-                # climate inputs
-                P, E = inputs[t]
+            scalings[:, 0] = np.maximum(inputs[:, 0]-inputs[:, 1], 0)/X1
+            scalings[:, 1] = np.maximum(inputs[:, 1]-inputs[:, 0], 0)/X1
+            niter, s1, numerical = slow.numerical_model(fluxes, dfluxes, \
+                                                            scalings, s0/X1, 1.)
+            # .. Scale back
+            s1 *= X1
+            numerical = np.abs(numerical)*X1
 
-                # fluxes equations
-                fluxes, dfluxes = benchmarks.gr4jprod_fluxes_scaled(P, E, X1)
-
-                # Numerical integration
-                _, out, _, _ = slow.integrate_numerical(fluxes, dfluxes, 0, u_start, [1.])
-                numerical[t, 0] = out[3]*X1
-                numerical[t, 1] = out[0]*X1
-                numerical[t, 2] = -out[1]*X1
-                numerical[t, 3] = -out[2]*X1
-
-                # loop
-                u_start = out[0]
-
-            assert allclose(numerical, gp[:, :4], atol=1e-4, rtol=1e-5)
-            errmax = np.abs(gp[:, :4]-numerical).max()
+            # .. error
+            assert allclose(s1, gp[:, 0], atol=1e-4, rtol=1e-5)
+            assert allclose(numerical, gp[:, 1:4], atol=1e-4, rtol=1e-5)
+            errmax = np.abs(gp[:, 1:4]-numerical).max()
             errmax_max = max(errmax, errmax_max)
 
         mess = f"gr4jprod vs num /site  errmax={errmax_max:3.3e}"
@@ -259,47 +257,45 @@ def test_nonlinrouting_vs_numerical(allclose):
     nsubdiv = 50000
     LOGGER.info("")
 
-    for isite, siteid in enumerate(data_reader.SITEIDS):
-        df = data_reader.get_data(siteid, "hourly")
-        df = df.loc["2022-02-20": "2022-03-10"]
+    errmax_max = 0.
+    for nu in nus:
+        fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
 
-        inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
-        q0 = inflows.quantile(0.9)
-        inflows = inflows.values
+        for isite, siteid in enumerate(data_reader.SITEIDS):
+            df = data_reader.get_data(siteid, "hourly")
+            df = df.loc["2022-02-20": "2022-03-10"]
 
-        # Stored volumne in 24h
-        theta = q0*24*timestep
+            inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+            q0 = inflows.quantile(0.9)
+            inflows = inflows.values
 
-        errmax_max = 0.
-        for nu in nus:
+            # Stored volumne in 24h
+            theta = q0*24*timestep
+
+            errmax_max = 0.
             s0 = 0.
             sim = benchmarks.nonlinrouting(nsubdiv, timestep, theta,\
                                         nu, q0, s0, inflows)
 
             # Numerical simulation
-            numerical = np.zeros(len(sim))
-            u_start = s0/theta
-            for t in range(len(inflows)):
-                # fluxes equations
-                qin = inflows[t]
-                sumf, dsumf, fluxes, dfluxes = \
-                            benchmarks.nonlinrouting_fluxes_scaled(qin, q0, theta, nu)
+            nval = len(sim)
+            scalings = np.column_stack([inflows/theta, \
+                                    q0/theta*np.ones(nval)])
 
-                # Numerical integration
-                _, out, _, _ = slow.integrate_numerical(fluxes, dfluxes, 0, u_start, [timestep])
-                assert ~np.isnan(out[0])
-                numerical[t] = -out[2]*theta/timestep
+            niter, s1, numerical = slow.numerical_model(fluxes, dfluxes, \
+                                                            scalings, s0/theta, \
+                                                            timestep)
+            # .. scale back
+            numerical = -numerical[:, 1]*theta/timestep
 
-                # loop
-                u_start = out[0]
-
+            # .. error
             errmax = np.abs(sim-numerical).max()
             errmax_max = max(errmax, errmax_max)
             assert allclose(numerical, sim, atol=1e-4, rtol=1e-5)
 
-        mess = f"nonlinrouting vs num /site {isite+1}:"\
-                +f" errmax={errmax_max:3.3e}"
-        LOGGER.info(mess)
+            mess = f"nonlinrouting vs num /site {isite+1}:"\
+                    +f" errmax={errmax_max:3.3e}"
+            LOGGER.info(mess)
 
 
 

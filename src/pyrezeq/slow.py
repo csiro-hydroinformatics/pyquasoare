@@ -11,17 +11,17 @@ from pyrezeq.integrate import quad_constants
 def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
                             scaling=None, v=None, m=None):
-    method = method.title()
     nfluxes = len(fluxes)
     assert len(dfluxes) == nfluxes
     multi_fluxes = nfluxes>1
 
+    # ODE derivative - can be initialised outside to save time
     v = np.zeros(nfluxes+multi_fluxes) if v is None else v
     def fun_ivp(t, y):
         total = 0.
         for i in range(nfluxes):
             s = 1. if scaling is None else scaling[i]
-            f = fluxes[i](y[0])*s
+            f = fluxes[i](y[-1])*s
             total += f
             v[i] = f
 
@@ -29,6 +29,7 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
             v[nfluxes] = total
         return v
 
+    # ODE Hessian - can be initialised outside to save time
     m = np.zeros((nfluxes+multi_fluxes, nfluxes+multi_fluxes)) \
             if m is None else m
     jac_ivp = None
@@ -37,7 +38,7 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
             total = 0.
             for i in range(nfluxes):
                 s = 1. if scaling is None else scaling[i]
-                df = dfluxes[i](y[0])*s
+                df = dfluxes[i](y[-1])*s
                 total += df
                 m[i, 0] = df
 
@@ -79,17 +80,17 @@ def numerical_model(fluxes, dfluxes, scalings, s0, timestep):
 
     for t in range(nval):
         # integrate
-        tn, send, nev, njac = slow.integrate_numerical(\
-                                        sfun, dsfun, \
-                                        funs, dfuns, \
-                                        0, s0, timestep, \
+        tn, send, nev, njac = integrate_numerical(\
+                                        fluxes, dfluxes, \
+                                        0, s0, [timestep], \
                                         scaling=scalings[t], \
                                         v=v, m=m)
-        s0 = send[0]
+        s0 = send[-1]
+        s1[t] = s0
         niter[t] = nev+njac
-        fluxes[t] = send[1:]
+        sims[t] = send[:-1]
 
-    return niter, s1, fluxes
+    return niter, s1, sims
 
 
 # --- REZEQ functions translated from C for slow implementation ---

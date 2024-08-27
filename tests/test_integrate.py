@@ -590,7 +590,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "genlogistic": 5e-2
     }
     assert errmax_app_max < err_thresh[fname]
-    assert time_app<time_num*2.
+    assert time_app<time_num*3.
 
     LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")

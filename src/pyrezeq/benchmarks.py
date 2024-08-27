@@ -27,25 +27,6 @@ def nonlinrouting_fluxes_noscaling(nu):
     return fluxes, dfluxes
 
 
-def nonlinrouting_fluxes_scaled(inflow, q0, theta, nu):
-    """ Non linear routing model solved for x=S/theta
-        dx/dt = inflow/theta-q0/theta*x^nu
-    """
-    # normalised fluxes
-    normf, dnormf = nonlinrouting_fluxes_noscaling(nu)
-
-    fin = lambda x: inflow/theta*normf[0](x)
-    fout = lambda x: q0/theta*normf[1](x)
-    fluxes = [fin, fout]
-
-    dfin = lambda x: inflow/theta*dnormf[0](x)
-    dfout = lambda x: q0/theta*dnormf[1](x)
-    dfluxes = [dfin, dfout]
-
-    return fluxes, dfluxes
-
-
-
 def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
