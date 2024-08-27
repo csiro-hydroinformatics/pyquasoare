@@ -48,7 +48,8 @@ args = parser.parse_args()
 debug = args.debug
 
 model_names = ["QR", "BCR", "GRP", "GRPM"]
-methods = ["analytical", "radau", "quasoare5", "quasoare100"]
+methods = ["analytical", "radau", "rk45", "quasoare5", \
+                    "quasoare100"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -102,6 +103,7 @@ for isite, siteid in enumerate(data_reader.SITEIDS):
     # Run models
     for mname in model_names:
         LOGGER.info(f"Model {mname}")
+
         # Model setup
         routing = mname in ["QR", "BCR"]
         if routing:
@@ -133,7 +135,7 @@ for isite, siteid in enumerate(data_reader.SITEIDS):
             dfgw = lambda x: -2./(1+10*x)**2 if x>0 else -2. -2. -2. -2.
             dfluxes = [dfpr, dfae, dfperc, dfgw]
 
-
+        # Run models
         for method, (iparam, param) in prod(methods, enumerate(params)):
             LOGGER.info(f"Method {method} / param {iparam+1}/{len(params)}", ntab=1)
 
@@ -145,17 +147,18 @@ for isite, siteid in enumerate(data_reader.SITEIDS):
                     theta = param
                     sim = benchmarks.nonlinrouting(nsubdiv, timestep, theta, \
                                         nu, q0, s0, inflows)
-
                 elif mname == "GRP":
                     X1 = param
                     sim = benchmarks.gr4jprod(nsubdiv, X1, s0, climate)
 
-            elif method == "radau":
-                slow.
+            elif method in ["radau", "rk45"]:
+                m = "Radau" if method=="radau" else "RK45"
+                slow.numerical_model(fluxes, dfluxes, scalings, s0, timestep)
 
             elif method.startswith("quasoare"):
                 nalphas = int(re.sub("quasoare", method))
-                alphas = np.linspace(0, 2., nalphas)
+                alpha_max = 1.2 if mname.startswith("GR") else 3.
+                alphas = np.linspace(0, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 
         sys.exit()
