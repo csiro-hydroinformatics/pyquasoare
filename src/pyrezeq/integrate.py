@@ -13,6 +13,10 @@ def find_alpha(alphas, u0):
     return c_pyrezeq.find_alpha(alphas, u0)
 
 
+def eta_fun(x, Delta):
+    return c_pyrezeq.eta_fun(x, Delta)
+
+
 def quad_constants(a, b, c):
     constants = np.zeros(3)
     ierr = c_pyrezeq.quad_constants(a, b, c, constants)

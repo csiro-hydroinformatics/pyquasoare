@@ -66,7 +66,12 @@ double c_eta_fun(double x, double Delta){
     if(Delta<0.)
         return atan(x);
     else
-        return abs(x)<1 ? -atanh(x) : -atanh(1./x);
+        if(fabs(x)<1.)
+            return -atanh(x);
+        else if (fabs(x)>1.)
+            return -atanh(1./x);
+        else
+            return x<0 ? c_get_inf() : -1.*c_get_inf();
 }
 
 double c_omega_fun(double x, double Delta){

@@ -52,6 +52,20 @@ def test_find_alpha(allclose):
     assert ialpha == 2
 
 
+def test_eta_fun(allclose):
+    xx = -2+0.1*np.arange(20)
+    for x in xx:
+        c1 = integrate.eta_fun(x, 1.)
+        s1 = slow.eta_fun(x, 1.)
+        assert allclose(c1, s1)
+        if x in [-1, 1]:
+            assert not np.isfinite(c1)
+
+        c2 = integrate.eta_fun(x, -1.)
+        s2 = slow.eta_fun(x, -1.)
+        assert allclose(c2, s2)
+
+
 def test_quad_constants(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)

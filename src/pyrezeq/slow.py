@@ -100,8 +100,12 @@ def eta_fun(x, Delta):
     if Delta<0.:
         return math.atan(x)
     else:
-        return -math.atanh(x) if abs(x)<1 else -math.atanh(1./x)
-
+        if abs(x)<1:
+            return -math.atanh(x)
+        elif abs(x)>1:
+            return -math.atanh(1./x)
+        else:
+            return np.inf if x<0 else -np.inf
 
 def omega_fun(x, Delta):
     return math.tan(x) if Delta<0. else math.tanh(x)
@@ -224,12 +228,10 @@ def quad_integrate(alphas, scalings, \
     nalphas = len(alphas)
     alpha_min=alphas[0]
     alpha_max=alphas[nalphas-1]
-    debug = False
+    debug = True
 
     if debug:
-        print("")
-        print("-"*50)
-        print(f"nalphas = {nalphas}")
+        print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
         txt = " ".join([f"scl[{i}]={s:0.3f}" for i, s in enumerate(scalings)])
         print(f"scalings: {txt}")
 
@@ -347,28 +349,26 @@ def quad_integrate(alphas, scalings, \
 
             # Increment time
             if extrapolating:
-                # Extrapolation, we cut integration at t_final
-                t_end = t_final
                 # we also need to correct s_end that is infinite
                 s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
-                                                t_start, s_start, t_end)
+                                                t_start, s_start, t_final)
                 # Ensure that s_end remains just inside interpolation range
                 if funval<0:
                     s_end = max(alpha_max-2*REZEQ_EPS, s_end)
                 else:
                     s_end = min(alpha_min+2*REZEQ_EPS, s_end)
-            else:
-                # No extrapolation, we can reach s_end
-                t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
-                                                                s_start, s_end)
+
+            t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
+                                                            s_start, s_end)
+            t_end = t_final if np.isfinite(t_end) else t_end
 
         if debug:
-            print(f"\n\n[{nit}] low={str(extrapolating_low)[0]}"\
+            print(f"\n[{nit}] low={str(extrapolating_low)[0]}"\
                     +f" high={str(extrapolating_high)[0]} "\
                     +f"/ fun={funval:3.3e}"\
-                    +f"/ t:={t_start:3.3e}>{t_end:3.3e}"\
-                    +f"/ j:{jalpha}>{jalpha_next}"\
-                    +f" / s:{s_start:3.3e}>{s_end:3.3e}")
+                    +f"/ t={t_start:3.3e}>{t_end:3.3e}"\
+                    +f"/ j={jalpha}>{jalpha_next}"\
+                    +f" / s={s_start:3.3e}>{s_end:3.3e}\n")
 
         # Increment fluxes during the last interval
         quad_fluxes(a_vect, b_vect, c_vect, \
@@ -377,8 +377,6 @@ def quad_integrate(alphas, scalings, \
 
         # Loop for next band
         funval_prev = quad_fun(aoj, boj, coj, s_end)
-        #print(" "*4+f"f({nu:3.3e}, {aoj:3.3e}, {boj:3.3e}, "\
-        #        +f"{coj:3.3e}, {s_end:3.3e})={funval_prev:3.3e}")
         t_start = t_end
         s_start = s_end
         jalpha = jalpha_next

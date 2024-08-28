@@ -17,6 +17,8 @@ cdef extern from 'c_rezeq_utils.h':
 
     int c_quad_constants(double a, double b, double c, double values[3])
 
+    double c_eta_fun(double x, double Delta);
+
     int c_find_alpha(int nalphas, double * alphas, double s0)
 
     int c_get_error_message(int err_code, char message[100])
@@ -100,6 +102,9 @@ def get_inf():
 
 def compiler_accuracy_kahan():
     return c_compiler_accuracy_kahan()
+
+def eta_fun(double x, double Delta):
+    return c_eta_fun(x, Delta)
 
 def quad_constants(double a, double b, double c, \
                 np.ndarray[double, ndim=1, mode='c'] values not None):
