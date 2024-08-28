@@ -26,16 +26,20 @@ import tables
 from hydrodiy.io import csv, iutils
 
 from pyrezeq import approx, steady, benchmarks, models, slow
+import io_hdf5
 
 # Tool to read data from tests
 source_file = Path(__file__).resolve()
 froot = source_file.parent.parent
 
-import importlib.util
+import importlib
 freader = froot / "tests" / "data_reader.py"
 spec = importlib.util.spec_from_file_location("data_reader", freader)
 data_reader = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(data_reader)
+
+importlib.reload(io_hdf5)
+importlib.reload(slow)
 
 #----------------------------------------------------------------------
 # @Config
@@ -55,7 +59,7 @@ model_names = ["QR", "BCR", "GRP", "GRPM"]
 methods = ["analytical", "radau", "rk45", \
                 "py_quasoare_5", "py_quasoare_100", \
                 "c_quasoare_5", "c_quasoare_100"]
-methods = ["rk45"]
+methods = ["py_quasoare_5"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -81,16 +85,6 @@ LOGGER.log_dict(vars(args), "Command line arguments")
 #----------------------------------------------------------------------
 # @Process
 #----------------------------------------------------------------------
-# HDF5 simulation table structure
-class Simulation(tables.IsDescription):
-    flux1 = tables.Float64Col()
-    flux2 = tables.Float64Col()
-    flux3 = tables.Float64Col()
-    flux4 = tables.Float64Col()
-    s1 = tables.Float64Col()
-    niter = tables.Int32Col()
-
-
 fres = fout / "simulations.hdf5"
 with tables.open_file(fres, "w", title="ODE simulations") as h5:
     # Create a group by model
@@ -100,7 +94,7 @@ with tables.open_file(fres, "w", title="ODE simulations") as h5:
 
     # Run models for each site
     for isite, siteid in enumerate(data_reader.SITEIDS):
-        if debug and isite>1:
+        if debug and isite>0:
             break
 
         LOGGER.context = f"{siteid}"
@@ -237,17 +231,15 @@ with tables.open_file(fres, "w", title="ODE simulations") as h5:
                         s1 *= param
 
                     # Store result
+                    simdata = io_hdf5.format(time_index, sim, s1, niter)
+                    tname = f"S{siteid}_{re.sub('_', '', method)}_param{iparam}"
                     gr = groups[model_name]
-                    tname = f"{siteid}_{re.sub('_', '', method)}_param{iparam}"
-                    simdata = np.column_stack([sim, s1, niter])
-                    ar = h5.create_array(gr, tname, simdata,\
-                                            "ODE simulation",\
-                                            atom=tables.Float64Atom(),\
-                                            shape=simdata.shape)
-                    ar.attrs.created = datetime.now()
-                    ar.attrs.ode_method = method
-                    ar.attrs.model_name = model_name
-                    ar.attrs.runtime_ms = runtime
+                    tb = io_hdf5.store(h5, gr, tname, simdata)
+                    io_hdf5.addmeta(tb, \
+                            created=datetime.now(), \
+                            model_name=model_name, \
+                            ode_method=method, \
+                            runtime=runtime)
 
 LOGGER.completed()
 
