@@ -29,11 +29,15 @@ int main(){
     double t0 = 0.;
     double timestep = 0.1;
     double t1;
-    int i, nval = 10;
+    int i, nval = 50;
     double scalings[2] = {1., 1.}; // no scaling here
     int niter[1];
     double s1[1];
     double fluxes[2];
+
+    /* Print header in result file */
+    FILE *fp = fopen("example.csv", "w");
+    fprintf(fp, "step,s1,flux1,flux2\n");
 
     /* integrate */
     for(i=0; i<nval; i++){
@@ -41,9 +45,10 @@ int main(){
         c_quad_integrate(nalphas, nfluxes, alphas, scalings,
                             amat, bmat, cmat, t0, s0, t1,
                             niter, s1, fluxes);
-        fprintf(stdout, "[%3d] s1=%5.5e fx[0]=%5.5e fx[1]=%5.5e\n",
+        fprintf(fp, "%3d,%0.8f,%0.8f,%0.8f\n",
                     i, s1[0], fluxes[0], fluxes[1]);
     }
+    fclose(fp);
 
     return 0;
 }
