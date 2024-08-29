@@ -89,3 +89,27 @@ def test_quad_model(allclose):
                     +f" errmax={errmax_max:3.3e}"\
                     +f" errbalmax={errbalmax_max:3.3e}%"
         LOGGER.info(mess)
+
+def test_routing_convergence(allclose):
+    siteid = "203005"
+    start_hourly = "2022-02-01"
+    end_hourly = "2022-03-31"
+    hourly = data_reader.get_data(siteid, "hourly").loc[start_hourly:end_hourly]
+    inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+
+    q0 = inflows.quantile(0.9)
+    theta = 1173678.5
+    timestep = 3600.
+    nval = len(inflows)
+    scalings = np.column_stack([inflows/theta, \
+                                 q0/theta*np.ones(nval)])
+    nu = 2.
+    fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
+
+    nalphas = 5
+    alphas = np.linspace(0, 3., nalphas)
+    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    s0 = 0.
+    niter, s1, sim = slow.quad_model(alphas, scalings, \
+                            amat, bmat, cmat, s0, timestep)
+
