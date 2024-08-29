@@ -59,7 +59,7 @@ model_names = ["QR", "BCR", "GRP", "GRPM"]
 methods = ["analytical", "radau", "rk45", \
                 "py_quasoare_5", "py_quasoare_100", \
                 "c_quasoare_5", "c_quasoare_100"]
-methods = ["py_quasoare_5"]
+methods = ["c_quasoare_5"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -94,8 +94,8 @@ with tables.open_file(fres, "w", title="ODE simulations") as h5:
 
     # Run models for each site
     for isite, siteid in enumerate(data_reader.SITEIDS):
-        if debug and isite>0:
-            break
+        if debug and siteid!="203005":
+            continue
 
         LOGGER.context = f"{siteid}"
 
@@ -219,7 +219,6 @@ with tables.open_file(fres, "w", title="ODE simulations") as h5:
                         alpha_max = 1.2 if model_name.startswith("GR") else 3.
                         alphas = np.linspace(0, alpha_max, nalphas)
                         amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
-
                         quad_model = models.quad_model if method.startswith("c")\
                                                 else slow.quad_model
 
