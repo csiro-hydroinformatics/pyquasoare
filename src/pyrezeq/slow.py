@@ -228,7 +228,7 @@ def quad_integrate(alphas, scalings, \
     nalphas = len(alphas)
     alpha_min=alphas[0]
     alpha_max=alphas[nalphas-1]
-    debug = True
+    debug = False
 
     if debug:
         print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
@@ -263,9 +263,9 @@ def quad_integrate(alphas, scalings, \
     # Time loop
     while t_final>t_end and nit<niter_max:
         nit += 1
-        extrapolating_low = jalpha<0
-        extrapolating_high = jalpha>=nalphas-1
-        extrapolating = extrapolating_low or extrapolating_high
+        extrapolating_low = int(jalpha<0)
+        extrapolating_high = int(jalpha>=nalphas-1)
+        extrapolating = int(extrapolating_low or extrapolating_high)
 
         # Get band limits
         alpha0 = -np.inf if extrapolating_low else alphas[jalpha]
@@ -353,18 +353,18 @@ def quad_integrate(alphas, scalings, \
                 s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
                                                 t_start, s_start, t_final)
                 # Ensure that s_end remains just inside interpolation range
-                if funval<0:
+                if funval<0 and extrapolating_high:
                     s_end = max(alpha_max-2*REZEQ_EPS, s_end)
-                else:
+                elif funval>0 and extrapolating_low:
                     s_end = min(alpha_min+2*REZEQ_EPS, s_end)
 
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
-            t_end = t_final if np.isfinite(t_end) else t_end
+            t_end = t_end if np.isfinite(t_end) else t_final
 
         if debug:
-            print(f"\n[{nit}] low={str(extrapolating_low)[0]}"\
-                    +f" high={str(extrapolating_high)[0]} "\
+            print(f"\n[{nit}] low={extrapolating_low}"\
+                    +f" high={extrapolating_high} "\
                     +f"/ fun={funval:3.3e}"\
                     +f"/ t={t_start:3.3e}>{t_end:3.3e}"\
                     +f"/ j={jalpha}>{jalpha_next}"\

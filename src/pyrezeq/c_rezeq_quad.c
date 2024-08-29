@@ -264,12 +264,12 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=1;
+    int REZEQ_DEBUG=0;
 
     int i, nit=0, jalpha_next=0, err_flux;
     double aoj=0., boj=0., coj=0.;
     double a=0., b=0., c=0.;
-    double constants[2], Delta, qD, sbar;
+    double constants[3], Delta, qD, sbar;
     double funval=0., funval_prev=0., grad=0.;
     double alpha0, alpha1;
     double alpha_min=alphas[0];
@@ -296,7 +296,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double t_start=t0, t_end=t0;
     double s_start=s0, s_end=s0;
 
-    if(nfluxes>REZEQ_NFLUXES_MAX)
+    if(nfluxes>=REZEQ_NFLUXES_MAX)
         return REZEQ_QUAD_NFLUXES_TOO_LARGE;
 
     for(i=0; i<nfluxes; i++)
@@ -376,15 +376,6 @@ int c_quad_integrate(int nalphas, int nfluxes,
         if(isnan(aoj) || isnan(boj) || isnan(coj))
             return REZEQ_QUAD_NAN_COEFF;
 
-        if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\nCoefs:\n");
-            for(i=0; i<nfluxes; i++)
-                fprintf(stdout, " av[%d]=%3.3e bv[%d]=%3.3e cv[%d]=%3.3e\n",
-                                    i, a_vect[i], i, b_vect[i], i, c_vect[i]);
-            fprintf(stdout, " aoj=%3.3e boj=%3.3e coj=%3.3e\n",
-                            aoj, boj, coj);
-        }
-
         /* Compute discriminant variables */
         c_quad_constants(aoj, boj, coj, constants);
         Delta = constants[0];
@@ -461,23 +452,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
                     s_start, s_end);
 
         /* Increment fluxes during the last interval */
-        if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\nCoefs:\n");
-            for(i=0; i<nfluxes; i++)
-                fprintf(stdout, " av[%d]=%3.3e bv[%d]=%3.3e cv[%d]=%3.3e\n",
-                                    i, a_vect[i], i, b_vect[i], i, c_vect[i]);
-            fprintf(stdout, " aoj=%3.3e boj=%3.3e coj=%3.3e\n",
-                            aoj, boj, coj);
-        }
-
-
         err_flux = c_quad_fluxes(nfluxes,
                     a_vect, b_vect, c_vect,
                     aoj, boj, coj, Delta, qD, sbar,
                     t_start, t_end, s_start, s_end, fluxes);
-        if(REZEQ_DEBUG==1)
-            fprintf(stdout, "   err flux = %d\n", err_flux);
-
         if(err_flux>0)
             return err_flux;
 
