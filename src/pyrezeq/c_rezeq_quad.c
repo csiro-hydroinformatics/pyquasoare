@@ -88,7 +88,13 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
             b = -2*a0*a+B/da;
             c = a0*a0*a-B*a0/da+f0;
         }
+
+        /* Set coefficients close to 0 exactly to 0 */
+        a = fabs(a)>REZEQ_EPS ? a : 0.;
+        b = fabs(b)>REZEQ_EPS ? b : 0.;
+        c = fabs(c)>REZEQ_EPS ? c : 0.;
      }
+
      coefs[0] = a;
      coefs[1] = b;
      coefs[2] = c;
@@ -312,7 +318,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
     }
 
     /* Time loop */
-    while ((t_end<t_final) && nit<niter_max) {
+    while (notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL)
+                                                    && nit<niter_max) {
         nit += 1;
 
         /* Extrapolation is triggered if s_start is
@@ -387,7 +394,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
         /* Check continuity except for first iteration */
         if(nit>1){
-            if(notequal(funval_prev, funval_prev, REZEQ_EPS*1e2, 1e-5)) {
+            if(notequal(funval_prev, funval_prev, REZEQ_ATOL, REZEQ_RTOL)) {
                 if(REZEQ_DEBUG==1)
                     fprintf(stdout, "    jalpha=%d/%d "
                                 "funval(%0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
@@ -474,9 +481,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
         fprintf(stdout, "\nEnd integrate s1=%0.5f j=%d\n", s_end, jalpha);
 
     /* Convergence problem */
-    if(t_final-t_end>0) {
+    if(notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL))
         return REZEQ_QUAD_NO_CONVERGENCE;
-    }
+
     return 0;
 }
 

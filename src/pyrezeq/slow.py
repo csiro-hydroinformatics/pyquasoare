@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, REZEQ_PI
+from pyrezeq.approx import REZEQ_EPS, REZEQ_PI, REZEQ_ATOL, REZEQ_RTOL
 from pyrezeq.approx import isequal, notequal, isnull, notnull
 from pyrezeq.integrate import quad_constants
 
@@ -232,7 +232,7 @@ def quad_integrate(alphas, scalings, \
 
     if debug:
         print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
-        txt = " ".join([f"scl[{i}]={s:0.3f}" for i, s in enumerate(scalings)])
+        txt = " ".join([f"scl[{i}]={s:3.3e}" for i, s in enumerate(scalings)])
         print(f"scalings: {txt}")
 
     # Initial interval
@@ -261,7 +261,8 @@ def quad_integrate(alphas, scalings, \
     fluxes = np.zeros(nfluxes)
 
     # Time loop
-    while t_final>t_end and nit<niter_max:
+    while notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL)\
+                                and nit<niter_max:
         nit += 1
         extrapolating_low = int(jalpha<0)
         extrapolating_high = int(jalpha>=nalphas-1)
@@ -382,7 +383,7 @@ def quad_integrate(alphas, scalings, \
         jalpha = jalpha_next
 
     # Convergence problem
-    if t_final>t_end:
+    if notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL):
         raise ValueError("No convergence")
 
     return nit, s_end, fluxes

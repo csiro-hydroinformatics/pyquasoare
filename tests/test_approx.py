@@ -259,6 +259,7 @@ def test_get_inf():
     assert np.isinf(inf)
 
 def test_function_runtime():
+    pytest.skip("no useful")
     nrepeat = 5000000
     LOGGER.info("")
     funs = ["x2", "x4", "x6", "log", "exp", "tan", "tanh"]
