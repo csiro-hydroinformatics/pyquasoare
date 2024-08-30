@@ -5,6 +5,8 @@ import tables
 TIME_START = pd.to_datetime("1970-01-01")
 NFLUX_MAX = 4
 
+COMPRESSION_FILTER = tables.Filters(complevel=9)
+
 class Simulation(tables.IsDescription):
     time = tables.Int64Col(pos=0)
     flux1 = tables.Float64Col(pos=1)
@@ -41,7 +43,11 @@ def format(time_index, sim, s1, niter):
 
 
 def store(h5, group, table_name, simdata):
-    tb = h5.create_table(group, table_name, description=Simulation)
+    nval = len(simdata)
+    tb = h5.create_table(group, table_name, \
+                        description=Simulation, \
+                        expectedrows=nval, \
+                        filters=COMPRESSION_FILTER)
     tb.append(simdata)
     return tb
 
@@ -51,9 +57,11 @@ def addmeta(tb, **kwargs):
         tb.attrs[nm] = value
 
 
-def read(group, table_name):
-    tb = group[table_name][:]
+def convert(tb):
     tb = pd.DataFrame(tb)
     tb.loc[:, "time"] = pd.to_datetime(tb.time, unit="s")
     return tb
 
+def read(group, table_name):
+    tb = group[table_name][:]
+    return convert(tb)
