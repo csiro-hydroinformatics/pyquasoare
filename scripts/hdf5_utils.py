@@ -59,7 +59,8 @@ def addmeta(tb, **kwargs):
 
 def convert(tb):
     tb = pd.DataFrame(tb)
-    tb.loc[:, "time"] = pd.to_datetime(tb.time, unit="s")
+    tb.loc[:, "time"] = pd.to_datetime(tb.time.astype(np.float64), unit="s")
+    tb = tb.set_index("time")
     return tb
 
 def read(group, table_name):

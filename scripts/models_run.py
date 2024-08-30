@@ -141,17 +141,16 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         fluxes, dfluxes = benchmarks.gr4jprod_fluxes_noscaling()
 
     elif model_name == "GRPM":
-        eta = 1./2.25
         fpr = lambda x: (1.-x**3*(10-15*x+6*x**2)) if x>0 else 1.
         fae = lambda x: -(16*(x-0.5)**5+0.5) if x<1. else 4.-5.*x
-        fperc = lambda x: -eta**4/4.*x**7 if x>0 else 0.
-        fgw = lambda x: -2*x/(1+10*x) if x>0 else -2*x
+        fperc = lambda x: -0.1*x**7 if x>0 else 0.
+        fgw = lambda x: -0.5*x/(1+10*x) if x>0 else -2*x
         fluxes = [fpr, fae, fperc, fgw]
 
         dfpr = lambda x: -30.*x**2+60.*x**3-30*x**4 if x>0 else 0.
         dfae = lambda x: -5.+40*x-120*x**2+160.*x**3-80*x**4 if x<1. else -5.
-        dfperc = lambda x: -eta**4*7./4.*x**6 if x>0 else 0.
-        dfgw = lambda x: -2./(1+10*x)**2 if x>0 else -2. -2. -2. -2.
+        dfperc = lambda x: -0.7*x**6 if x>0 else 0.
+        dfgw = lambda x: -0.5/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
         dfluxes = [dfpr, dfae, dfperc, dfgw]
 
     # Run model for each parameter
@@ -177,15 +176,16 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                     np.maximum(evap-rain, 0)/X1, ones, ones])
 
         # Loop over ODE ode_method
+        LOGGER.info(f"Param {iparam+1}/{nparams}")
         for ode_method in ode_methods:
-            if iparam == 0:
-                LOGGER.info(f"ODE method [{ode_method}]")
+            LOGGER.info(f"{ode_method} - start", ntab=1)
 
             if ode_method == "analytical":
                 # Quasi analytical method
                 alpha_max = np.nan
 
                 if model_name == "GRPM":
+                    LOGGER.info(f"{ode_method} - no analytical sol, skip", ntab=1)
                     continue
 
                 elif model_name in ["QR", "BCR"]:
@@ -250,6 +250,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 s1 *= param
 
             # Store result
+            LOGGER.info(f"{ode_method} - store", ntab=1)
             simdata = hdf5_utils.format(time_index, sim, s1, niter)
             tname = f"S{siteid}_{re.sub('_', '', ode_method)}_param{iparam:03d}"
             h5_group = h5_groups[ode_method]
