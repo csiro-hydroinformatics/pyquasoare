@@ -36,17 +36,20 @@ parser = argparse.ArgumentParser(\
     description="Run the 4 models using different ODE resolution methods", \
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument("-c", "--config", help="Configuration model/siteid", \
+parser.add_argument("-t", "--taskid", help="Configuration ID (model/siteid)", \
                     type=int, required=True)
 parser.add_argument("-d", "--debug", help="Debug mode", \
                     action="store_true", default=False)
+parser.add_argument("-l", "--flogs", help="Log folder", \
+                    type=str, default="")
 args = parser.parse_args()
 
 debug = args.debug
-config = args.config
+taskid = args.taskid
+flogs = args.flogs
 
 # Get model name and siteid
-model_name, siteid = data_utils.get_config(config)
+model_name, siteid = data_utils.get_config(taskid)
 
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
@@ -74,9 +77,13 @@ fout.mkdir(exist_ok=True, parents=True)
 # @Logging
 #----------------------------------------------------------------------
 basename = source_file.stem
-flogs = froot / "logs" / "rezeqrun"
-flogs.mkdir(exist_ok=True, parents=True)
-flog = flogs / f"rezeqrun_{config}.log"
+if flogs == "":
+    flogs = froot / "logs" / "rezeqrun"
+    flogs.mkdir(exist_ok=True, parents=True)
+else:
+    assert flogs.exists()
+
+flog = flogs / f"rezeqrun_TASK{taskid}.log"
 LOGGER = iutils.get_logger(basename, contextual=True, flog=flog)
 LOGGER.log_dict(vars(args), "Command line arguments")
 LOGGER.info(f"nconfig: {len(data_utils.CONFIGS)}")
