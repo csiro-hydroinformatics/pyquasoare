@@ -27,26 +27,29 @@ int main(){
     /* Setup ODE */
     double s0 = 0.1;
     double t0 = 0.;
-    double timestep = 0.1;
+    double timestep = 0.01;
     double t1;
-    int i, nval = 50;
+    int i, nval = 300;
     double scalings[2] = {1., 1.}; // no scaling here
     int niter[1];
     double s1[1];
     double fluxes[2];
+    double anl, omega;
 
     /* Print header in result file */
     FILE *fp = fopen("example.csv", "w");
-    fprintf(fp, "step,s1,flux1,flux2\n");
+    fprintf(fp, "time,s1,flux1,flux2,s1_analytical\n");
 
     /* integrate */
     for(i=0; i<nval; i++){
         t1 = t0+timestep*i;
+        omega = tanh(t1);
+        anl = (s0+omega)/(1+s0*omega);
         c_quad_integrate(nalphas, nfluxes, alphas, scalings,
                             amat, bmat, cmat, t0, s0, t1,
                             niter, s1, fluxes);
-        fprintf(fp, "%3d,%0.8f,%0.8f,%0.8f\n",
-                    i, s1[0], fluxes[0], fluxes[1]);
+        fprintf(fp, "%0.8f,%0.8f,%0.8f,%0.8f,%0.8f\n",
+                    t1, s1[0], fluxes[0], fluxes[1], anl);
     }
     fclose(fp);
 
