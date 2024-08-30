@@ -81,6 +81,7 @@ if flogs == "":
     flogs = froot / "logs" / "rezeqrun"
     flogs.mkdir(exist_ok=True, parents=True)
 else:
+    flogs = Path(flogs)
     assert flogs.exists()
 
 flog = flogs / f"rezeqrun_TASK{taskid}.log"
@@ -93,13 +94,14 @@ LOGGER.info(f"Siteid : {siteid}")
 #----------------------------------------------------------------------
 # @Process
 #----------------------------------------------------------------------
-fres = fout / f"simulations_CFG{config}_{model_name}_{siteid}.hdf5"
+fres = fout / f"simulations_TASK{taskid}.hdf5"
 cfilt = hdf5_utils.COMPRESSION_FILTER
 
 with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     # Create h5 groups
-    h5_groups = {ode_method: h5.create_group("/", ode_method) for ode_method in ode_methods}
+    h5_groups = {ode_method: h5.create_group("/", ode_method) \
+                                        for ode_method in ode_methods}
 
     LOGGER.context = f"{siteid}"
     LOGGER.info("Load data")
@@ -120,7 +122,8 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
     routing = model_name in ["QR", "BCR"]
     if routing:
         timestep = 3600. # time step in seconds
-        params = q0*timestep*24*np.linspace(0.2, 10., nparams) # store q0 for 0.2 to 10 days
+        # store q0 for 0.2 to 10 days
+        params = q0*timestep*24*np.linspace(0.2, 10., nparams)
 
         # routing exponent
         nu = 2. if model_name == "QR" else 6.
