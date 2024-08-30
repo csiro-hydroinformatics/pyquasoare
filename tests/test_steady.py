@@ -108,12 +108,10 @@ def test_steady_state(allclose, generate_samples):
 def test_scalings(allclose, generate_samples):
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
-    if ntry==0:
-        pytest.skip("Skip param config")
 
     stdy, feval = [], []
-    alphas = np.array([-np.inf, 0, np.inf])
-    scalings = np.ones((3, 1))
+    alphas = np.array([-1e100, 0, 1e100])
+    scalings = np.ones((4, 1))
     tested = 0
     for a, b, c in params:
         amat, bmat, cmat = [np.ones((2, 1))*v for v in [a, b, c]]
@@ -121,7 +119,7 @@ def test_scalings(allclose, generate_samples):
                                             amat, bmat, cmat)
         stdy0 = steady.quad_steady(a, b, c)
         notnan = ~np.isnan(stdy0)
-        if stdy.shape[1]>0 or notnan.sum()>0:
+        if notnan.sum()>0:
             tested += 1
             # All values are identical in the 0 axis
             # because the scalings are identical
@@ -138,6 +136,27 @@ def test_scalings(allclose, generate_samples):
 
     LOGGER.info(f"[{case}:{cname}] steady scalings: tested={(100.*tested)/ntry:0.0f}%")
 
+
+def test_scalings_extrapolation(allclose):
+    al0, al1, al2 = 0., 1., 2.
+    alphas = np.array([al0, al1, al2])
+    a0, b0, c0 = approx.quad_coefficients(al0, al1, -1., 1., 0.2, 1)
+    a1, b1, c1 = approx.quad_coefficients(al1, al2, 1., 0.1, 0.33, 1)
+    scalings = np.ones((10, 1))
+    amat = np.array([[a0], [a1]])
+    bmat = np.array([[b0], [b1]])
+    cmat = np.array([[c0], [c1]])
+
+    stdy = steady.quad_steady_scalings(alphas, scalings, \
+                                        amat, bmat, cmat)
+    assert stdy.shape[1] == 2
+    assert allclose(stdy[:, 0], stdy[0, 0])
+    assert allclose(stdy[:, 1], stdy[0, 1])
+    # steady state in extrapolationt
+    assert stdy[0, 1]>al2
+
+    feval = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, stdy[0])
+    assert allclose(feval, 0.)
 
 
 def test_scalings_gr4j(allclose):
@@ -170,5 +189,6 @@ def test_scalings_gr4j(allclose):
         feval = np.array([f(s0)*scalings[t, ifun] for ifun, f in enumerate(fluxes)])
         fsum = np.sum(feval, axis=0)
         assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-6)
+
 
 
