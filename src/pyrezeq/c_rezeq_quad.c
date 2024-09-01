@@ -307,16 +307,16 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
     if(REZEQ_DEBUG==1){
         fprintf(stdout, "\n\nNALPHAS=%d  NFLUXES=%d\n", nalphas, nfluxes);
+        fprintf(stdout, "t_final = %5.5e\n", t_final);
         fprintf(stdout, "scalings:");
         for(i=0; i<nfluxes; i++)
             fprintf(stdout, " scl[%d]=%3.3e", i, scalings[i]);
 
-        fprintf(stdout, "\nStart integrate s0=%0.3f j=%d\n", s0, jalpha);
+        fprintf(stdout, "\nStart integrate s0=%5.5e j=%d\n", s0, jalpha);
     }
 
     /* Time loop */
-    while (notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL)
-                                                    && nit<niter_max) {
+    while (t_end<t_final*(1-REZEQ_EPS) && nit<niter_max) {
         nit += 1;
 
         /* Extrapolation is triggered if s_start is
@@ -392,31 +392,22 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Check continuity except for first iteration */
         if(nit>1){
             if(notequal(funval_prev, funval_prev, REZEQ_ATOL, REZEQ_RTOL)) {
-                if(REZEQ_DEBUG==1)
-                    fprintf(stdout, "    jalpha=%d/%d "
-                                "funval(%0.5f, %0.5f, %0.5f, %0.5f)=%5.5e\n"
-                                "                 "
-                                "funval_prev=%5.5e diff=%5.5e\n",
-                                jalpha, nalphas-2, aoj, boj, coj,
-                                s_start, funval, funval_prev,
-                                fabs(funval-funval_prev));
                 return REZEQ_QUAD_NOT_CONTINUOUS;
             }
         }
 
         /* Try integrating up to the end of the time step */
-        s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
+        if(isnull(funval))
+            s_end = s_start;
+        else
+            s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
-        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating)
-                                                || isnull(funval)){
+        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating)){
             /* .. s_end is within band => complete */
             t_end = t_final;
             jalpha_next = jalpha;
-
-            if(isnull(funval))
-                s_end = s_start;
         }
         else {
             /* find next band depending if f is decreasing or non-decreasing */
@@ -435,18 +426,20 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
                                             t_start, s_start, t_final);
                 /* Ensure that s_end remains inside interpolation range */
-                if(funval<0 && extrapolating_high){
-                    s_end = s_end < alpha_max-2*REZEQ_EPS ?
-                                        alpha_max-2*REZEQ_EPS : s_end;
+                if(funval<0 && extrapolating_high
+                                && s_end<alpha_max-2*REZEQ_EPS){
+                    s_end = alpha_max-2*REZEQ_EPS;
                 }
-                else if (funval>0 && extrapolating_low){
-                    s_end = s_end > alpha_min+2*REZEQ_EPS ?
-                                        alpha_min+2*REZEQ_EPS : s_end;
+                else if (funval>0 && extrapolating_low
+                                    && s_end>alpha_min+2*REZEQ_EPS){
+                    s_end = alpha_min+2*REZEQ_EPS;
                 }
             }
-            t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, sbar,
-                                                    s_start, s_end);
-            t_end = isinf(t_end) ? t_final : t_end<t_start ? t_start : t_end;
+            t_end = t_start+c_quad_inverse(aoj, boj, coj,
+                                            Delta, qD, sbar,
+                                            s_start, s_end);
+            t_end = t_end<t_start ? t_start :
+                        t_end>t_final ? t_final : t_end;
         }
 
         if(REZEQ_DEBUG==1){
@@ -476,7 +469,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     *niter = nit;
 
     if(REZEQ_DEBUG==1)
-        fprintf(stdout, "\nEnd integrate s1=%0.5f j=%d\n", s_end, jalpha);
+        fprintf(stdout, "\nEnd integrate s1=%5.5e j=%d\n", s_end, jalpha);
 
     /* Convergence problem */
     if(notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL))

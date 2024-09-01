@@ -261,8 +261,7 @@ def quad_integrate(alphas, scalings, \
     fluxes = np.zeros(nfluxes)
 
     # Time loop
-    while notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL)\
-                                and nit<niter_max:
+    while t_end<t_final*(1-REZEQ_EPS) and nit<niter_max:
         nit += 1
         extrapolating_low = int(jalpha<0)
         extrapolating_high = int(jalpha>=nalphas-1)
@@ -326,18 +325,18 @@ def quad_integrate(alphas, scalings, \
                 raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
-        s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
+        if isnull(funval):
+            s_end = s_start
+        else:
+            s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
                                     t_start, s_start, t_final)
 
         # complete or move band if needed
-        if (s_end>=alpha0 and s_end<=alpha1 and not extrapolating)\
-                        or isnull(funval):
+        if (s_end>=alpha0 and s_end<=alpha1 and not extrapolating):
             # .. s_end is within band => complete
             t_end = t_final
             jalpha_next = jalpha
 
-            if isnull(funval):
-                s_end = s_start
         else:
             # .. find next band depending depending if f is decreasing
             #    or non-decreasing
@@ -361,7 +360,7 @@ def quad_integrate(alphas, scalings, \
 
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
-            t_end = max(t_start, t_end) if np.isfinite(t_end) else t_final
+            t_end = max(t_start, min(t_final, t_end))
 
         if debug:
             print(f"\n[{nit}] low={extrapolating_low}"\
