@@ -251,9 +251,6 @@ int c_quad_fluxes(int nfluxes,
     if(notequal(a, a_check, REZEQ_ATOL, REZEQ_RTOL) ||
             notequal(b, b_check, REZEQ_ATOL, REZEQ_RTOL) ||
             notequal(c, c_check, REZEQ_ATOL, REZEQ_RTOL)){
-        //fprintf(stdout, "a=%5.5e check=%5.5e diff=%5.5e\n", a, a_check, a-a_check);
-        //fprintf(stdout, "b=%5.5e check=%5.5e diff=%5.5e\n", b, b_check, b-b_check);
-        //fprintf(stdout, "c=%5.5e check=%5.5e diff=%5.5e\n", c, c_check, c-c_check);
         return REZEQ_QUAD_FAILEDSUMCHECK;
     }
     return 0;
@@ -412,7 +409,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
-        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating) || isnull(funval)){
+        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating)
+                                                || isnull(funval)){
             /* .. s_end is within band => complete */
             t_end = t_final;
             jalpha_next = jalpha;
@@ -448,16 +446,16 @@ int c_quad_integrate(int nalphas, int nfluxes,
             }
             t_end = t_start+c_quad_inverse(aoj, boj, coj, Delta, qD, sbar,
                                                     s_start, s_end);
-            t_end = isinf(t_end) ? t_final : t_end;
+            t_end = isinf(t_end) ? t_final : t_end<t_start ? t_start : t_end;
         }
 
-        if(REZEQ_DEBUG==1)
-            fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e"\
+        if(REZEQ_DEBUG==1){
+            fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e"
                     "/ t=%3.3e>%3.3e / j=%d>%d / s=%3.3e>%3.3e\n",
                     nit, extrapolating_low, extrapolating_high,
                     funval, t_start, t_end, jalpha, jalpha_next,
                     s_start, s_end);
-
+        }
         /* Increment fluxes during the last interval */
         err_flux = c_quad_fluxes(nfluxes,
                     a_vect, b_vect, c_vect,

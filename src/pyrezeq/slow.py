@@ -361,7 +361,7 @@ def quad_integrate(alphas, scalings, \
 
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
-            t_end = t_end if np.isfinite(t_end) else t_final
+            t_end = max(t_start, t_end) if np.isfinite(t_end) else t_final
 
         if debug:
             print(f"\n[{nit}] low={extrapolating_low}"\
