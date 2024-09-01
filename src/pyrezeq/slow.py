@@ -230,11 +230,6 @@ def quad_integrate(alphas, scalings, \
     alpha_max=alphas[nalphas-1]
     debug = False
 
-    if debug:
-        print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
-        txt = " ".join([f"scl[{i}]={s:3.3e}" for i, s in enumerate(scalings)])
-        print(f"scalings: {txt}")
-
     # Initial interval
     jmin = 0
     jmax = nalphas-2
@@ -246,6 +241,12 @@ def quad_integrate(alphas, scalings, \
         jalpha = jmax
     else:
         jalpha = jmax+1
+
+    if debug:
+        print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
+        print(f"Start integrate s0={s0:5.5e} j={jalpha}")
+        txt = " ".join([f"scl[{i}]={s:3.3e}" for i, s in enumerate(scalings)])
+        print(f"scalings: {txt}")
 
     # Initialise iteration
     nfluxes = a_matrix_noscaling.shape[1]
@@ -340,24 +341,30 @@ def quad_integrate(alphas, scalings, \
         else:
             # .. find next band depending depending if f is decreasing
             #    or non-decreasing
-            if funval<0:
-                s_end = alpha0
-                jalpha_next = max(-1, jalpha-1)
-            else:
-                s_end = alpha1
-                jalpha_next = min(nalphas-1, jalpha+1)
-
-            # Increment time
             if extrapolating:
-                # we also need to correct s_end that is infinite
+                # Correcting s_end if extrapolating
                 s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
                                                 t_start, s_start, t_final)
                 # Ensure that s_end remains just inside interpolation range
-                if funval<0 and extrapolating_high:
-                    s_end = max(alpha_max-2*REZEQ_EPS, s_end)
-                elif funval>0 and extrapolating_low:
-                    s_end = min(alpha_min+2*REZEQ_EPS, s_end)
+                s_low = alpha_min+2*REZEQ_EPS
+                s_high = alpha_max-2*REZEQ_EPS
+                if funval<0 and extrapolating_high and s_end<s_high:
+                    s_end = s_high
+                    jalpha_next = nalphas-2
+                elif funval>0 and extrapolating_low and s_end>s_low:
+                    s_end = s_low
+                    jalpha_next = 0
+                else:
+                    jalpha_next = jalpha
+            else:
+                if funval<0:
+                    s_end = alpha0
+                    jalpha_next = max(-1, jalpha-1)
+                else:
+                    s_end = alpha1
+                    jalpha_next = min(nalphas-1, jalpha+1)
 
+            # Increment time
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
             t_end = max(t_start, min(t_final, t_end))
@@ -381,9 +388,15 @@ def quad_integrate(alphas, scalings, \
         s_start = s_end
         jalpha = jalpha_next
 
+        if isnull(funval_prev):
+            break
+
     # Convergence problem
     if notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL):
         raise ValueError("No convergence")
+
+    if debug:
+        print(f"End integrate s1={s_end:5.5e} j={jalpha}")
 
     return nit, s_end, fluxes
 

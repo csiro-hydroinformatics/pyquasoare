@@ -267,7 +267,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=0;
+    int REZEQ_DEBUG=1;
 
     int i, nit=0, jalpha_next=0, err_flux;
     double aoj=0., boj=0., coj=0.;
@@ -295,6 +295,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int extrapolating = 0;
     int extrapolating_low = 0;
     int extrapolating_high = 0;
+    double s_low=0, s_high=0;
     double t_final = t0+timestep;
     double t_start=t0, t_end=t0;
     double s_start=s0, s_end=s0;
@@ -411,28 +412,34 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
         else {
             /* find next band depending if f is decreasing or non-decreasing */
-            if(funval<0) {
-                s_end = alpha0;
-                jalpha_next = jalpha>-1 ? jalpha-1 : -1;
-            }
-            else {
-                s_end = alpha1;
-                jalpha_next = jalpha>=nalphas-2 ? nalphas-1 : jalpha+1;
-            }
-
             /* Increment time */
             if(extrapolating) {
                 /* we also need to correct s_end because it is infinite */
                 s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
                                             t_start, s_start, t_final);
                 /* Ensure that s_end remains inside interpolation range */
-                if(funval<0 && extrapolating_high
-                                && s_end<alpha_max-2*REZEQ_EPS){
-                    s_end = alpha_max-2*REZEQ_EPS;
+                s_low = alpha_min+2*REZEQ_EPS;
+                s_high = alpha_max-2*REZEQ_EPS;
+                if(funval<0 && extrapolating_high && s_end<s_high){
+                    s_end = s_high;
+                    jalpha_next = nalphas-2;
                 }
-                else if (funval>0 && extrapolating_low
-                                    && s_end>alpha_min+2*REZEQ_EPS){
-                    s_end = alpha_min+2*REZEQ_EPS;
+                else if (funval>0 && extrapolating_low && s_end>s_low){
+                    s_end = s_low;
+                    jalpha_next = 0;
+                }
+                else {
+                    jalpha_next = jalpha;
+                }
+            }
+            else {
+                if(funval<0) {
+                    s_end = alpha0;
+                    jalpha_next = jalpha>-1 ? jalpha-1 : -1;
+                }
+                else {
+                    s_end = alpha1;
+                    jalpha_next = jalpha>=nalphas-2 ? nalphas-1 : jalpha+1;
                 }
             }
             t_end = t_start+c_quad_inverse(aoj, boj, coj,
@@ -462,6 +469,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
         t_start = t_end;
         s_start = s_end;
         jalpha = jalpha_next;
+
+        if(isnull(funval_prev))
+            break;
     }
 
     /* Store results */
