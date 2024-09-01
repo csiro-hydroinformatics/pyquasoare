@@ -230,10 +230,11 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 alpha_max = 3.
                 alphas = np.linspace(0, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
-                stdy = steady.quad_steady_scalings(alphas, scalings, amat, bmat, cmat)
+                stdy = steady.quad_steady_scalings(alphas, scalings, \
+                                                    amat, bmat, cmat)
 
                 # second go at alphas
-                alpha_max = np.nanmax(stdy)
+                alpha_max = np.nanmax(stdy)*0.8
                 alphas = np.linspace(0, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 

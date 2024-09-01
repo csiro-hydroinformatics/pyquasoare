@@ -15,8 +15,10 @@ SITEIDS = data_reader.SITEIDS
 MODEL_NAMES = ["QR", "BCR", "GRP", "GRPM"]
 
 ODE_METHODS = ["analytical", "radau", "rk45", \
-                "py_quasoare_5", "py_quasoare_100", \
-                "c_quasoare_5", "c_quasoare_100"]
+                "py_quasoare_3", "py_quasoare_5", \
+                "py_quasoare_10","py_quasoare_50", \
+                "c_quasoare_3", "c_quasoare_5", \
+                "c_quasoare_10","c_quasoare_50"]
 
 CONFIGS = np.array([(m, s) for m, s in prod(MODEL_NAMES, SITEIDS)])
 
