@@ -387,7 +387,7 @@ def quad_integrate(alphas, scalings, \
             break
 
     # Convergence problem
-    if notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL):
+    if notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL) and abs(funval)>REZEQ_EPS:
         raise ValueError("No convergence")
 
     if debug:

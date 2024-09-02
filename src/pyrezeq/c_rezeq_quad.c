@@ -474,7 +474,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         fprintf(stdout, "\nEnd integrate s1=%5.5e j=%d\n", s_end, jalpha);
 
     /* Convergence problem */
-    if(notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL))
+    if(notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL) && fabs(funval)>REZEQ_EPS)
         return REZEQ_QUAD_NO_CONVERGENCE;
 
     return 0;

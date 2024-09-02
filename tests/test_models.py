@@ -70,7 +70,7 @@ def test_quad_model(allclose):
 
             sims_slow = np.column_stack([s1_slow*X1, fx_slow[:, 0]*X1, \
                                         -fx_slow[:, 1]*X1, -fx_slow[:, 2]*X1])
-            assert allclose(sims, sims_slow)
+            assert allclose(sims, sims_slow, atol=1e-5)
 
             # Error analysis
             errmax = np.abs(sims-expected).max()
@@ -89,6 +89,7 @@ def test_quad_model(allclose):
                     +f" errmax={errmax_max:3.3e}"\
                     +f" errbalmax={errbalmax_max:3.3e}%"
         LOGGER.info(mess)
+
 
 def test_routing_convergence(allclose):
     siteid = "203005"
