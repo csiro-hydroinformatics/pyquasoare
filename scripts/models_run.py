@@ -185,7 +185,8 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 alpha_max = np.nan
 
                 if model_name == "GRPM":
-                    LOGGER.info(f"{ode_method} - no analytical sol, skip", ntab=1)
+                    LOGGER.info(f"{ode_method} - no analytical sol, skip",\
+                                        ntab=1)
                     continue
 
                 elif model_name in ["QR", "BCR"]:
@@ -234,9 +235,29 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                                     amat, bmat, cmat)
 
                 # second go at alphas
-                alpha_max = np.nanmax(stdy)*0.8
+                alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(0, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+
+                # Store flux approximation
+                xx = np.linspace(0, alpha_max, 500)
+                fx = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, xx)
+                nfluxes = amat.shape[1]
+                dfx = pd.DataFrame(xx[:, None], columns=["s"])
+                for iflux in range(4):
+                    if iflux<nfluxes:
+                        f = np.array([fluxes[iflux](x) for x in xx])
+                        dfx.loc[:, f"flux{iflux+1}_true"] = f
+                        dfx.loc[:, f"flux{iflux+1}_approx"] = fx[:, iflux]
+                    else:
+                        dfx.loc[:, f"flux{iflux+1}_true"] = np.nan
+                        dfx.loc[:, f"flux{iflux+1}_approx"] = np.nan
+
+                tname = f"S{siteid}_{re.sub('_', '', ode_method)}"+\
+                            f"_fluxes{iparam:03d}"
+                h5_group = h5_groups[ode_method]
+                hdf5_utils.store_flux(h5, h5_group, tname, dfx.values)
+
 
                 # Run model
                 quad_model = models.quad_model if ode_method.startswith("c")\
@@ -259,9 +280,10 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 # Store result
                 LOGGER.info(f"{ode_method} - store", ntab=1)
                 simdata = hdf5_utils.format(time_index, sim, s1, niter)
-                tname = f"S{siteid}_{re.sub('_', '', ode_method)}_param{iparam:03d}"
+                tname = f"S{siteid}_{re.sub('_', '', ode_method)}"+\
+                            f"_param{iparam:03d}"
                 h5_group = h5_groups[ode_method]
-                tb = hdf5_utils.store(h5, h5_group, tname, simdata)
+                tb = hdf5_utils.store_sim(h5, h5_group, tname, simdata)
                 hdf5_utils.addmeta(tb, \
                         created=datetime.now(), \
                         model_name=model_name, \
@@ -275,6 +297,8 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                         niter_mean=niter.mean(), \
                         nsubdiv=nsubdiv, \
                         timestep=timestep)
+
+    LOGGER.info("Closing hdf5 file")
 
 LOGGER.completed()
 

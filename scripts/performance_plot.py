@@ -57,9 +57,9 @@ ode_methods = data_utils.ODE_METHODS
 
 metrics = {
     "ERRABSMAX_FLUX": "Max absolute error", \
-    "ERRBAL_FLUX": "Mass balance error", \
-    "RUNTIME_RATIO": "Runtime ratio", \
-    "NITER_RATIO": "Iteration ratio"
+    "ERRBAL_FLUX[%]": "Mass balance error", \
+    "RUNTIME_RATIO[%]": "Runtime ratio", \
+    "NITER_RATIO[%]": "Iteration ratio"
 }
 
 # Image file extension
@@ -67,7 +67,7 @@ imgext = args.extension
 
 # Plot dimensions
 fdpi = 120
-awidth = 5
+awidth = 7
 aheight = 5
 
 # Figure transparency
@@ -106,7 +106,7 @@ results = results.loc[idx]
 
 results.loc[:, "ERRABSMAX_FLUX"] = results.filter(regex="ERRABSMAX", \
                                             axis=1).max(axis=1)
-results.loc[:, "ERRBAL_FLUX"] = results.filter(regex="ERRBAL", \
+results.loc[:, "ERRBAL_FLUX[%]"] = results.filter(regex="ERRBAL", \
                                             axis=1).max(axis=1)
 
 #------------------------------------------------------------
@@ -125,6 +125,7 @@ fig = plt.figure(constrained_layout=True, figsize=figsize)
 
 gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
 axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
+mleft = re.sub(".*/", "", mosaic[0][0])
 
 for iax, (aname, ax) in enumerate(axs.items()):
     model_name, metric = re.split("/", aname)
@@ -138,25 +139,39 @@ for iax, (aname, ax) in enumerate(axs.items()):
                     values=metric)
     df.columns = [re.sub("_", "\n", re.sub("py_", "", cn)) \
                             for cn in df.columns]
-    if metric.endswith("_FLUX"):
-        df = np.log10(1e-10+df)
+    df = np.log10(1e-10+df)
 
     #if not "analytical" in df.columns:
     #    df.loc[:, "analytical"] = np.nan
-    #cc = ["analytical", "rk45", "quasoare\n5", "quasoare\n100"]
-    cc = ["rk45", "quasoare\n5", "quasoare\n100"]
+    cc = ["rk45", "quasoare\n3", "quasoare\n5", "quasoare\n50"]
     df = df.loc[:, cc]
+
+    worst = df.loc[:, "quasoare\n3"].idxmax()
+    LOGGER.info(f"{model_name}/{metric} quasoare_3 worst: {worst}")
 
     vl = violinplot.Violin(df, show_text=False)
     vl.draw(ax=ax)
 
+    meds = vl.stats.loc["median", :]
+    for i, m in enumerate(meds):
+        ax.text(i, m, f"{10**m:0.1e}", \
+                    fontweight="bold", \
+                    va="bottom", ha="center")
+
     title = f"({letters[iax]}) {metrics[metric]}"
     ax.set_title(title)
 
-    if metric.endswith("_FLUX"):
-        ytk = ax.get_yticks()
-        ytxt = [r"$10^{{{v:0.0f}}}$".format(v=v) for v in ytk]
-        ax.set_yticklabels(ytxt)
+    ytk = np.unique(np.round(ax.get_yticks(), 0))
+    ytxt = [re.sub("-0", "0", r"$10^{{{v:0.0f}}}$".format(v=v)) for v in ytk]
+    ax.set_yticks(ytk)
+    ax.set_yticklabels(ytxt)
+
+    ylab = ""
+    if metric == mleft:
+        ylab= f"{model_name}\n"
+
+    ylab += re.sub("_", " ", metric.title())
+    ax.set_ylabel(ylab)
 
 # Save file
 fp = fimg / f"performance.{imgext}"

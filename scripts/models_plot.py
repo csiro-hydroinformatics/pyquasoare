@@ -48,10 +48,18 @@ parser = argparse.ArgumentParser(\
 
 parser.add_argument("-e", "--extension", help="Image file extension", \
                     type=str, default="png")
+parser.add_argument("-m", "--model_name", help="Model", \
+                    type=str, required=True)
+parser.add_argument("-s", "--siteid", help="Siteid", \
+                    type=str, required=True)
+parser.add_argument("-i", "--iparam", help="Parameter number", \
+                    type=int, required=True)
 args = parser.parse_args()
 
-ode_methods = ["radau", "c_quasoare_3", "c_quasoare_5"]
-iparam = 1
+ode_methods = ["radau", "c_quasoare_3", "c_quasoare_50"]
+model_name_selected = args.model_name
+siteid_selected = args.siteid
+iparam_selected = args.iparam
 
 # Image file extension
 imgext = args.extension
@@ -99,14 +107,27 @@ for f in lf:
     # Get model name and siteid
     taskid = int(re.sub(".*TASK", "", f.stem))
     model_name, siteid = data_utils.get_config(taskid)
+    if model_name != model_name_selected or \
+            siteid != siteid_selected:
+        continue
+
+    LOGGER.info(f"Plotting {model_name:4s}/{siteid} (TASK {taskid})")
 
     sims = {}
+    info = {}
     with tables.open_file(f, "r") as h5:
         for ode_method in ode_methods:
             gr = h5.root[ode_method]
             m = re.sub("_", "", ode_method)
-            tname = f"S{siteid}_{m}_param{iparam:03d}"
-            sims[ode_method] = hdf5_utils.convert(gr[tname][:])
+            tname = f"S{siteid}_{m}_param{iparam_selected:03d}"
+            tb = gr[tname]
+            sims[ode_method] = hdf5_utils.convert(tb[:])
+
+            info[ode_method] = {
+                            "s1_max": tb.attrs.s1_max, \
+                            "alpha_max": tb.attrs.alpha_max
+                        }
+    info = pd.DataFrame(info)
 
     plt.close("all")
     mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] \
@@ -132,3 +153,4 @@ for f in lf:
     #putils.blackwhite(fp)
 
 LOGGER.completed()
+

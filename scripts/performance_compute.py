@@ -69,8 +69,10 @@ LOGGER.log_dict(vars(args), "Command line arguments")
 # @Process
 #----------------------------------------------------------------------
 lf = list(fdata.glob("*.hdf5"))
+nfiles = len(lf)
 all_results = []
-for f in lf:
+for ifile, f in enumerate(lf):
+    LOGGER.info(f"Processing file {ifile+1}/{nfiles}")
     with tables.open_file(f, "r") as h5:
         sims = {}
         results = []
@@ -96,9 +98,9 @@ for f in lf:
         methods = results.ode_method.unique()
 
         cabs = [f"ERRABSMAX_FLUX{f}" for f in range(1, 5)]
-        cbal = [f"ERRBAL_FLUX{f}" for f in range(1, 5)]
-        crunt = "RUNTIME_RATIO"
-        cniter = "NITER_RATIO"
+        cbal = [f"ERRBAL_FLUX{f}[%]" for f in range(1, 5)]
+        crunt = "RUNTIME_RATIO[%]"
+        cniter = "NITER_RATIO[%]"
         results.loc[:, cabs+cbal+[crunt, cniter]] = np.nan
 
         for iparam in range(nparams):
@@ -116,7 +118,8 @@ for f in lf:
                 idx = (results.ode_method == method) & (results.iparam==iparam)
                 results.loc[idx, cabs] = eabsmax.values
 
-                ebal = np.abs(np.sum(sim-ref, axis=0))/np.abs(np.sum(ref, axis=0))
+                ebal = np.abs(np.sum(sim-ref, axis=0))\
+                            /np.abs(np.sum(ref, axis=0))*100
                 results.loc[idx, cbal] = ebal.values
 
                 runt = results.loc[idx, "runtime"].squeeze()

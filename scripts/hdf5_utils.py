@@ -16,6 +16,18 @@ class Simulation(tables.IsDescription):
     s1 = tables.Float64Col(pos=5)
     niter = tables.Int32Col(pos=6)
 
+class Fluxes(tables.IsDescription):
+    s = tables.Float64Col(pos=0)
+    flux1_true = tables.Float64Col(pos=1)
+    flux1_approx = tables.Float64Col(pos=2)
+    flux2_true = tables.Float64Col(pos=3)
+    flux2_approx = tables.Float64Col(pos=4)
+    flux3_true = tables.Float64Col(pos=5)
+    flux3_approx = tables.Float64Col(pos=6)
+    flux4_true = tables.Float64Col(pos=7)
+    flux4_approx = tables.Float64Col(pos=8)
+
+
 SIM_DTYPE = np.dtype([\
                         ("time", np.int64), \
                         ("flux1", np.float64), \
@@ -42,7 +54,7 @@ def format(time_index, sim, s1, niter):
     return simdata
 
 
-def store(h5, group, table_name, simdata):
+def store_sim(h5, group, table_name, simdata):
     nval = len(simdata)
     tb = h5.create_table(group, table_name, \
                         description=Simulation, \
@@ -50,6 +62,17 @@ def store(h5, group, table_name, simdata):
                         filters=COMPRESSION_FILTER)
     tb.append(simdata)
     return tb
+
+
+def store_flux(h5, group, table_name, fluxdata):
+    nval = len(fluxdata)
+    tb = h5.create_table(group, table_name, \
+                        description=Fluxes, \
+                        expectedrows=nval, \
+                        filters=COMPRESSION_FILTER)
+    tb.append(fluxdata)
+    return tb
+
 
 
 def addmeta(tb, **kwargs):
