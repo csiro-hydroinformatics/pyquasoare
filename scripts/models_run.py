@@ -243,32 +243,38 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                         else slow.quad_model
 
                 tstart = time.time()
-                niter, s1, sim = quad_model(alphas, scalings, \
+                try:
+                    niter, s1, sim = quad_model(alphas, scalings, \
                                         amat, bmat, cmat, s0, timestep)
-                runtime = (time.time()-tstart)*1e3
-                sim = param*np.abs(sim)/timestep
-                s1_max = np.nanmax(s1)
-                s1 *= param
+                    runtime = (time.time()-tstart)*1e3
+                    sim = param*np.abs(sim)/timestep
+                    s1_max = np.nanmax(s1)
+                    s1 *= param
+                except Exception as err:
+                    LOGGER.error(f"Error in {ode_method} run")
+                    LOGGER.error(str(err))
+                    sim = None
 
-            # Store result
-            LOGGER.info(f"{ode_method} - store", ntab=1)
-            simdata = hdf5_utils.format(time_index, sim, s1, niter)
-            tname = f"S{siteid}_{re.sub('_', '', ode_method)}_param{iparam:03d}"
-            h5_group = h5_groups[ode_method]
-            tb = hdf5_utils.store(h5, h5_group, tname, simdata)
-            hdf5_utils.addmeta(tb, \
-                    created=datetime.now(), \
-                    model_name=model_name, \
-                    siteid=siteid, \
-                    ode_method=ode_method, \
-                    runtime=runtime, \
-                    iparam=iparam, \
-                    param=param, \
-                    alpha_max=alpha_max, \
-                    s1_max=s1_max, \
-                    niter_mean=niter.mean(), \
-                    nsubdiv=nsubdiv, \
-                    timestep=timestep)
+            if not sim is None:
+                # Store result
+                LOGGER.info(f"{ode_method} - store", ntab=1)
+                simdata = hdf5_utils.format(time_index, sim, s1, niter)
+                tname = f"S{siteid}_{re.sub('_', '', ode_method)}_param{iparam:03d}"
+                h5_group = h5_groups[ode_method]
+                tb = hdf5_utils.store(h5, h5_group, tname, simdata)
+                hdf5_utils.addmeta(tb, \
+                        created=datetime.now(), \
+                        model_name=model_name, \
+                        siteid=siteid, \
+                        ode_method=ode_method, \
+                        runtime=runtime, \
+                        iparam=iparam, \
+                        param=param, \
+                        alpha_max=alpha_max, \
+                        s1_max=s1_max, \
+                        niter_mean=niter.mean(), \
+                        nsubdiv=nsubdiv, \
+                        timestep=timestep)
 
 LOGGER.completed()
 
