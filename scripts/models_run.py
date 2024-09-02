@@ -144,13 +144,13 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         fpr = lambda x: (1.-x**3*(10-15*x+6*x**2)) if x>0 else 1.
         fae = lambda x: -(16*(x-0.5)**5+0.5) if x<1. else 4.-5.*x
         fperc = lambda x: -0.1*x**7 if x>0 else 0.
-        fgw = lambda x: -0.5*x/(1+10*x) if x>0 else -2*x
+        fgw = lambda x: -0.1*x/(1+10*x) if x>0 else -2*x
         fluxes = [fpr, fae, fperc, fgw]
 
         dfpr = lambda x: -30.*x**2+60.*x**3-30*x**4 if x>0 else 0.
         dfae = lambda x: -5.+40*x-120*x**2+160.*x**3-80*x**4 if x<1. else -5.
         dfperc = lambda x: -0.7*x**6 if x>0 else 0.
-        dfgw = lambda x: -0.5/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
+        dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
         dfluxes = [dfpr, dfae, dfperc, dfgw]
 
     # Run model for each parameter

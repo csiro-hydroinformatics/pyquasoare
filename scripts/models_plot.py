@@ -50,7 +50,7 @@ parser.add_argument("-e", "--extension", help="Image file extension", \
                     type=str, default="png")
 args = parser.parse_args()
 
-ode_methods = ["radau", "c_quasoare_5", "c_quasoare_100"]
+ode_methods = ["radau", "c_quasoare_3", "c_quasoare_5"]
 iparam = 1
 
 # Image file extension
