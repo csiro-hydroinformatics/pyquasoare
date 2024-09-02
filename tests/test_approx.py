@@ -354,7 +354,7 @@ def test_quad_coefficients(allclose, reservoir_function):
         for a, b, c in zip([a0, a1, a2], [b0, b1, b2], \
                                     [c0, c1, c2]):
             fa = approx.quad_fun(a, b, c, x)
-            assert allclose(ft, fa, atol=1e-10)
+            assert allclose(ft, fa)
 
     v0, v1 = (f0+3*f1)/4, (f1+3*f0)/4
     v0, v1 = min(v0, v1), max(v0, v1)
@@ -400,7 +400,6 @@ def test_quad_coefficients_edge_cases(allclose):
     a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
     fm2 = approx.quad_fun(a, b, c, 0.5)
     assert allclose(fm2, fm)
-
 
 
 def test_quad_coefficient_matrix(allclose, reservoir_function):

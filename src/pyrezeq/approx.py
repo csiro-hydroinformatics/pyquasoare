@@ -67,7 +67,8 @@ def quad_grad(a, b, c, s):
         return o
 
 
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
+def quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
+                             approx_opt=1):
     """ Find approx coefficients for the interval [alphaj, alpjajp1]
         Fits the approx fun at x=a0, x=a1 and x=(a0+a1)/2.
         approx_opt:
@@ -76,7 +77,8 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
             2 = quadratic interpolation with no constraint
     """
     coefs = np.zeros(3)
-    ierr = c_pyrezeq.quad_coefficients(approx_opt, alphaj, alphajp1, f0, f1, fm, coefs)
+    ierr = c_pyrezeq.quad_coefficients(approx_opt, alphaj, alphajp1, \
+                                            f0, f1, fm, coefs)
     return coefs
 
 

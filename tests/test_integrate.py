@@ -153,6 +153,16 @@ def test_delta_t_max(allclose, generate_samples):
     LOGGER.info(mess)
 
 
+#def test_forward_edge_case(allclose):
+#    a, b, c = (-3.157967714489334e-13, -99.99999999999973, 0.9999999999999432)
+#    Delta, qD, sbar = integrate.quad_constants(a, b, c)
+#    t0 = 0.012531647088404797
+#    s0 = 0.6
+#    t1 = np.linspace(t0, 0.03, 1000)
+#    y = [slow.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t) for t in t1]
+
+
+
 def test_forward_vs_finite_difference(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     if case in [7, 10]:
@@ -403,7 +413,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     # Optimize approx
     nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
-    approx_opt = 2 if fname=="logistic" else 1
+    approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
     amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
 
     # Configure integration
@@ -432,10 +442,10 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         for i in range(len(t1)-1):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
-             # integrate - C code
+            # integrate - C code
             _, s_end, fluxes = integrate.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+                                            amat, bmat, cmat, t_start, \
+                                            s_start, timestep)
             # integrate - python code
             _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
                                                 amat, bmat, cmat, t_start, \
@@ -448,12 +458,13 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
 
         # Expect linear function for derivative of solution in extrapolation mode
         sims = np.array(sims)
-        dt = t1[1]-t1[0]
-        ds = (sims[2:]-sims[:-2])/dt/2. # Centered first order derivative
-        s = sims[1:-1]
+        h = t1[1]-t1[0]
+        ds = (-sims[4:]+8*sims[3:-1]-8*sims[1:-3]+sims[:-4])/h/12
+        t1d = t1[2:-2]
+        s = sims[2:-2]
 
         # .. lower extrapolation
-        ilow = np.where(s<alpha0-1e-3)[0][:-1]
+        ilow = np.where(s<alpha0-1e-3)[0][:-2]
         if len(ilow)>5:
             aoj, boj, coj = amat[0].sum(), bmat[0].sum(), cmat[0].sum()
             grad = approx.quad_grad(aoj, boj, coj, alpha0)
@@ -465,7 +476,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             errmax_max = max(errmax, errmax_max)
 
         # .. upper extrapolation
-        ihigh = np.where(s>alpha1+1e-3)[0][:-1]
+        ihigh = np.where(s>alpha1+1e-3)[0][:-2]
         if len(ihigh)>5:
             aoj, boj, coj = amat[-1].sum(), bmat[-1].sum(), cmat[-1].sum()
             grad = approx.quad_grad(aoj, boj, coj, alpha1)
@@ -476,23 +487,23 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             errmax = err.max()
             errmax_max = max(errmax, errmax_max)
 
-
-
     err_thresh = {
-        "x2": 1e-12, \
-        "x4": 1e-3, \
-        "x6": 1e-3, \
-        "x8": 5e-3, \
-        "tanh": 5e-3, \
-        "exp": 5e-5, \
-        "sin": 5e-3, \
-        "runge": 1e-3, \
-        "stiff": 5e-7, \
-        "ratio": 5e-2, \
-        "logistic": 1e-7, \
-        "genlogistic": 5e-2
+        "x2": 5e-6, \
+        "x4": 5e-5, \
+        "x6": 5e-4, \
+        "x8": 1e-10, \
+        "tanh": 1e-10, \
+        "exp": 1e-7, \
+        "sin": 5e-6, \
+        "recip": 1e-6, \
+        "recipquad": 5e-6, \
+        "runge": 1e-10, \
+        "stiff": 1e-10, \
+        "ratio": 5e-8, \
+        "logistic": 1e-10, \
+        "genlogistic": 5e-8
     }
-    #assert errmax_max < err_thresh[fname]
+    assert errmax_max < err_thresh[fname]
     LOGGER.info(f"[{fname}] approx extrapolation: errmax={errmax_max:3.2e}")
 
 
@@ -512,7 +523,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     # Optimize approx
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
-    approx_opt = 2 if fname=="logistic" else 1
+    approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
     amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
 
     # Adjust bounds to avoid numerical problems with analytical solution
@@ -587,17 +598,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             errmax_app_max = errmax
             s0_errmax = s0
 
-        #if errmax>1e-2:
-        #    import matplotlib.pyplot as plt
-        #    e, n, s = [d[isok] for d in [expected, numerical, sims]]
-        #    fig, axs = plt.subplots(ncols=2)
-        #    ax = axs[0]
-        #    ax.plot(e); ax.plot(n); ax.plot(s)
-        #    ax = axs[1]
-        #    ax.plot(n-e); ax.plot(s-e)
-        #    plt.show()
-        #    import pdb; pdb.set_trace()
-
         errmax = np.abs(numerical[isok]-expected[isok]).max()
         errmax_num_max = max(errmax, errmax_num_max)
 
@@ -608,12 +608,12 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
         "x8": 5e-3, \
         "tanh": 5e-3, \
         "exp": 5e-5, \
-        "sin": 3e-2, \
-        "runge": 5e-2, \
+        "sin": 5e-3, \
+        "runge": 1e-3, \
         "stiff": 5e-7, \
-        "ratio": 5e-2, \
-        "logistic": 1e-7, \
-        "genlogistic": 5e-2
+        "ratio": 5e-4, \
+        "logistic": 1e-12, \
+        "genlogistic": 5e-3
     }
     assert errmax_app_max < err_thresh[fname]
     #assert time_app<time_num*3.

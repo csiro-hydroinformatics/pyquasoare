@@ -88,11 +88,6 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
             b = -2*a0*a+B/da;
             c = a0*a0*a-B*a0/da+f0;
         }
-
-        /* Set coefficients close to 0 exactly to 0 */
-        a = fabs(a)>REZEQ_EPS ? a : 0.;
-        b = fabs(b)>REZEQ_EPS ? b : 0.;
-        c = fabs(c)>REZEQ_EPS ? c : 0.;
      }
 
      coefs[0] = a;
@@ -267,7 +262,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=1;
+    int REZEQ_DEBUG=0;
 
     int i, nit=0, jalpha_next=0, err_flux;
     double aoj=0., boj=0., coj=0.;
@@ -308,7 +303,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
     if(REZEQ_DEBUG==1){
         fprintf(stdout, "\n\nNALPHAS=%d  NFLUXES=%d\n", nalphas, nfluxes);
-        fprintf(stdout, "t_final = %5.5e\n", t_final);
+        fprintf(stdout, "Start t0=%5.5e s0=%5.5e j=%d t_final=%5.5e\n", t0, s0, jalpha, t_final);
         fprintf(stdout, "scalings:");
         for(i=0; i<nfluxes; i++)
             fprintf(stdout, " scl[%d]=%3.3e", i, scalings[i]);
@@ -405,7 +400,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
-        if((s_end>=alpha0 && s_end<=alpha1 && 1-extrapolating)){
+        if(s_end>=alpha0 && s_end<=alpha1){
             /* .. s_end is within band => complete */
             t_end = t_final;
             jalpha_next = jalpha;
@@ -414,9 +409,6 @@ int c_quad_integrate(int nalphas, int nfluxes,
             /* find next band depending if f is decreasing or non-decreasing */
             /* Increment time */
             if(extrapolating) {
-                /* we also need to correct s_end because it is infinite */
-                s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
-                                            t_start, s_start, t_final);
                 /* Ensure that s_end remains inside interpolation range */
                 s_low = alpha_min+2*REZEQ_EPS;
                 s_high = alpha_max-2*REZEQ_EPS;
@@ -428,11 +420,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
                     s_end = s_low;
                     jalpha_next = 0;
                 }
-                else {
-                    jalpha_next = jalpha;
-                }
             }
             else {
+                /* funval cannot be zero here because otherwise s_end
+                 * is in [alpha0, alpha1] */
                 if(funval<0) {
                     s_end = alpha0;
                     jalpha_next = jalpha>-1 ? jalpha-1 : -1;
@@ -442,11 +433,12 @@ int c_quad_integrate(int nalphas, int nfluxes,
                     jalpha_next = jalpha>=nalphas-2 ? nalphas-1 : jalpha+1;
                 }
             }
+
+            /* Increment time */
             t_end = t_start+c_quad_inverse(aoj, boj, coj,
                                             Delta, qD, sbar,
                                             s_start, s_end);
-            t_end = t_end<t_start ? t_start :
-                        t_end>t_final ? t_final : t_end;
+            t_end = t_end<t_final ? t_end : t_final;
         }
 
         if(REZEQ_DEBUG==1){
