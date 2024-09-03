@@ -56,12 +56,19 @@ parser.add_argument("-i", "--iparam", help="Parameter number", \
                     type=int, required=True)
 args = parser.parse_args()
 
-ode_methods = ["radau", "c_quasoare_10", "c_quasoare_50"]
-ode_method_flux = "c_quasoare_10"
+ode_methods = ["radau", "rk45", "c_quasoare_500"]
+ode_method_selected = "c_quasoare_500"
 
 model_name_selected = args.model_name
 siteid_selected = args.siteid
 iparam_selected = args.iparam
+
+#start = "2022-02-25"
+#end = "2022-03-01"
+start = "2022-02-03"
+end = "2022-02-06"
+#start = "2022"
+#end = "2022"
 
 # Image file extension
 imgext = args.extension
@@ -126,12 +133,9 @@ for f in lf:
             tb = gr[tname]
             sims[ode_method] = hdf5_utils.convert(tb[:])
 
-            info[ode_method] = {
-                            "s1_min": tb.attrs.s1_min, \
-                            "alpha_min": tb.attrs.alpha_min, \
-                            "s1_max": tb.attrs.s1_max, \
-                            "alpha_max": tb.attrs.alpha_max
-                        }
+            cc = ["s1_min", "s1_max", "alpha1_min", "alpha1_max", \
+                            "param"]
+            info[ode_method] = {cn: tb.attrs[cn] if cn in tb.attrs else np.nan for cn in cc}
             tname = f"S{siteid}_{m}_fluxes{iparam_selected:03d}"
             try:
                 tb = gr[tname]
@@ -156,11 +160,30 @@ for f in lf:
             ax2 = axs2[aname]
 
         for ode_method, sim in sims.items():
-            se = sim.loc[:, aname].loc["2022"]
-            lab = f"{ode_method}"
-            se.plot(ax=ax1, label=lab)
+            se = sim.loc[:, aname].loc[start:end]
+            if se.isnull().all():
+                ax1.axis("off")
+                ax2.axis("off")
+                continue
 
-            if ode_method == ode_method_flux and aname.startswith("flux"):
+            if aname == "s1":
+                theta = info[ode_method]["param"]
+                se /= theta
+
+            lab = f"{ode_method}"
+            lw = 3 if ode_method == "radau" else 2
+            se.plot(ax=ax1, label=lab, lw=lw)
+
+            if ode_method == ode_method_selected:
+                ser = sims["radau"].loc[se.index, aname]
+                err = se-ser
+                tax = ax1.twinx()
+                err.plot(ax=tax, lw=0.8, color="grey")
+                ax1.plot([], [], lw=0.8, color="grey", label="Error")
+
+
+            if ode_method == ode_method_selected and aname.startswith("flux")\
+                                                and ode_method in fluxes:
                 fx = fluxes[ode_method]
                 s = fx["s"]
                 fx_true = fx[f"{aname}_true"]
@@ -172,8 +195,12 @@ for f in lf:
 
                 tax = ax2.twinx()
                 tax.plot(s, fx_approx-fx_true, lw=0.8, color="grey")
+                ax2.plot([], [], lw=0.8, color="grey", label="Error")
+
 
         ax1.legend(loc=2, fontsize="x-small")
+        title = aname.title()
+        ax1.set(title=title, xlabel="")
 
     ftitle = f"{siteid} - Model {model_name}"
     fig1.suptitle(ftitle)

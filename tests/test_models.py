@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils
 
-from pyrezeq import approx, models, slow, benchmarks
+from pyrezeq import approx, models, slow, benchmarks, integrate
 
 from test_approx import generate_samples, reservoir_function
 
@@ -113,4 +113,43 @@ def test_routing_convergence(allclose):
     s0 = 0.
     niter, s1, sim = models.quad_model(alphas, scalings, \
                             amat, bmat, cmat, s0, timestep)
+
+
+def test_bicubic(allclose):
+    # Configure integration
+    timestep = 3600
+    theta = 287254474.57214785
+    fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu=6)
+    s0 = 56906./theta
+
+    # Get data
+    siteid = "203014"
+    start_hourly = "2022-02-03"
+    end_hourly = "2022-02-06"
+    hourly = data_reader.get_data(siteid, "hourly").loc[start_hourly:end_hourly]
+    inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+    outflows = hourly.loc[:, "STREAMFLOW_DOWN[m3/sec]"].interpolate()
+
+    inflows_rescaled = outflows.mean()/inflows.mean()*inflows
+    q0 = inflows_rescaled.quantile(0.9)
+    nval = len(inflows)
+    scalings = np.column_stack([inflows_rescaled/theta, \
+                            q0/theta*np.ones(nval)])
+
+    # Numerical
+    nitera, s1a, fxa = slow.numerical_model(fluxes, dfluxes, \
+                                           scalings, s0, \
+                                           timestep, method="Radau")
+
+    # Quasoare
+    alphas = np.linspace(0., 1.3, 500)
+    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    s_start = s0
+    for t in range(nval):
+        n, s_end, fx = slow.quad_integrate(alphas, scalings[t], \
+                                        amat, bmat, cmat, 0., s_start, \
+                                        timestep, debug=False)
+        assert allclose(fx, fxa[t])
+
+        s_start = s_end
 

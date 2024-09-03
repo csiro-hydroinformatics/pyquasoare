@@ -62,7 +62,7 @@ metrics = {
     "NITER_RATIO[%]": "Iteration ratio"
 }
 
-ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n100"]
+ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n500"]
 ode_method_worst = "quasoare\n10"
 
 
@@ -96,7 +96,10 @@ fimg.mkdir(exist_ok=True)
 # @Logging
 #------------------------------------------------------------
 basename = source_file.stem
-LOGGER = iutils.get_logger(basename)
+flogs = froot / "logs"
+flogs.mkdir(exist_ok=True)
+flog = flogs / f"{source_file.stem}.log"
+LOGGER = iutils.get_logger(basename, flog=flog)
 LOGGER.log_dict(vars(args), "Command line arguments")
 
 #------------------------------------------------------------
@@ -105,7 +108,7 @@ LOGGER.log_dict(vars(args), "Command line arguments")
 fr = fdata / "results.csv"
 results, _ = csv.read_csv(fr, dtype={"siteid": str})
 idx = ~results.ode_method.str.contains("radau|^c_", regex=True)
-idx = results.ode_method!="analytical"
+idx = results.ode_method != "analytical"
 results = results.loc[idx]
 
 results.loc[:, "ERRABSMAX_FLUX"] = results.filter(regex="ERRABSMAX", \
@@ -143,6 +146,7 @@ for iax, (aname, ax) in enumerate(axs.items()):
                     values=metric)
     df.columns = [re.sub("_", "\n", re.sub("py_", "", cn)) \
                             for cn in df.columns]
+
     df = np.log10(1e-10+df)
     df = df.loc[:, ode_method_selected]
 
@@ -171,7 +175,10 @@ for iax, (aname, ax) in enumerate(axs.items()):
     if metric == mleft:
         ylab= f"{model_name}\n"
 
-    ylab += re.sub("_", " ", metric.title())
+    m = re.sub("_", " ", metric.title())
+    if re.search("ABSMAX", metric):
+        m += " [mm/day]" if model_name.startswith("GR") else " [m3/s]"
+    ylab += m
     ax.set_ylabel(ylab)
 
 # Save file
