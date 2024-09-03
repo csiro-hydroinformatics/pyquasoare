@@ -78,18 +78,24 @@ for ifile, f in enumerate(lf):
         results = []
         for group in h5.root:
             for tb in h5.list_nodes(group, "Leaf"):
+                if not re.search("sim", tb.name):
+                    continue
+
                 info = {}
                 cc = ["ode_method", "siteid", "model_name", \
                             "param", "iparam", "runtime", \
-                            "timestep", "niter_mean", "alpha_max", \
-                            "s1_max"]
+                            "timestep", "niter_mean", \
+                            "alpha_min", "s1_min", \
+                            "alpha_max", "s1_max"]
+                attrs = tb.attrs
                 for cn in cc:
-                    info[cn] = getattr(tb.attrs, cn)
-                results.append(info)
+                    if hasattr(attrs, cn):
+                        info[cn] = getattr(attrs, cn)
 
                 df = hdf5_utils.convert(tb[:])
                 method, iparam = info["ode_method"], info["iparam"]
                 sims[(method, iparam)] = df
+                results.append(info)
 
         results = pd.DataFrame(results)
 

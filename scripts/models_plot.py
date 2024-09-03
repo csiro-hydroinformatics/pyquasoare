@@ -56,7 +56,9 @@ parser.add_argument("-i", "--iparam", help="Parameter number", \
                     type=int, required=True)
 args = parser.parse_args()
 
-ode_methods = ["radau", "c_quasoare_3", "c_quasoare_50"]
+ode_methods = ["radau", "c_quasoare_10", "c_quasoare_50"]
+ode_method_flux = "c_quasoare_10"
+
 model_name_selected = args.model_name
 siteid_selected = args.siteid
 iparam_selected = args.iparam
@@ -114,42 +116,74 @@ for f in lf:
     LOGGER.info(f"Plotting {model_name:4s}/{siteid} (TASK {taskid})")
 
     sims = {}
+    fluxes = {}
     info = {}
     with tables.open_file(f, "r") as h5:
         for ode_method in ode_methods:
             gr = h5.root[ode_method]
             m = re.sub("_", "", ode_method)
-            tname = f"S{siteid}_{m}_param{iparam_selected:03d}"
+            tname = f"S{siteid}_{m}_sim{iparam_selected:03d}"
             tb = gr[tname]
             sims[ode_method] = hdf5_utils.convert(tb[:])
 
             info[ode_method] = {
+                            "s1_min": tb.attrs.s1_min, \
+                            "alpha_min": tb.attrs.alpha_min, \
                             "s1_max": tb.attrs.s1_max, \
                             "alpha_max": tb.attrs.alpha_max
                         }
+            tname = f"S{siteid}_{m}_fluxes{iparam_selected:03d}"
+            try:
+                tb = gr[tname]
+                fluxes[ode_method] = hdf5_utils.convert(tb[:])
+            except:
+                pass
+
     info = pd.DataFrame(info)
 
     plt.close("all")
     mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] \
                         for t in np.array_split(np.arange(4), 2)]
     nrows, ncols = len(mosaic), len(mosaic[0])
-    fig = plt.figure(figsize=(awidth*ncols, aheight*nrows), layout="tight")
-    axs = fig.subplot_mosaic(mosaic)
+    fig1 = plt.figure(figsize=(awidth*ncols, aheight*nrows), layout="tight")
+    axs1 = fig1.subplot_mosaic(mosaic)
 
-    for iax, (aname, ax) in enumerate(axs.items()):
+    fig2 = plt.figure(figsize=(awidth*ncols, aheight*(nrows-1)), layout="tight")
+    axs2 = fig2.subplot_mosaic(mosaic[1:])
+
+    for iax, (aname, ax1) in enumerate(axs1.items()):
+        if aname in axs2:
+            ax2 = axs2[aname]
+
         for ode_method, sim in sims.items():
             se = sim.loc[:, aname].loc["2022"]
             lab = f"{ode_method}"
-            se.plot(ax=ax, label=lab)
+            se.plot(ax=ax1, label=lab)
 
-        ax.legend(loc=2, fontsize="x-small")
+            if ode_method == ode_method_flux and aname.startswith("flux"):
+                fx = fluxes[ode_method]
+                s = fx["s"]
+                fx_true = fx[f"{aname}_true"]
+                fx_approx = fx[f"{aname}_approx"]
+                ax2.plot(s, fx_true, label="True flux")
+                m = " ".join(re.split("_", ode_method)[1:])
+                ax2.plot(s, fx_approx, label=f"{m} flux")
+                ax2.legend(loc=2, fontsize="x-small")
+
+                tax = ax2.twinx()
+                tax.plot(s, fx_approx-fx_true, lw=0.8, color="grey")
+
+        ax1.legend(loc=2, fontsize="x-small")
 
     ftitle = f"{siteid} - Model {model_name}"
-    fig.suptitle(ftitle)
+    fig1.suptitle(ftitle)
+    fig2.suptitle(ftitle)
 
     # Save file
-    fp = fimg / f"{f.stem}.{imgext}"
-    fig.savefig(fp, dpi=fdpi, transparent=ftransparent)
+    fp = fimg / f"{f.stem}_sim.{imgext}"
+    fig1.savefig(fp, dpi=fdpi, transparent=ftransparent)
+    fp = fimg / f"{f.stem}_fluxes.{imgext}"
+    fig2.savefig(fp, dpi=fdpi, transparent=ftransparent)
     #putils.blackwhite(fp)
 
 LOGGER.completed()

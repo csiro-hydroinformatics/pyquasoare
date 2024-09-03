@@ -7,7 +7,7 @@ NFLUX_MAX = 4
 
 COMPRESSION_FILTER = tables.Filters(complevel=9)
 
-class Simulation(tables.IsDescription):
+class SimDescription(tables.IsDescription):
     time = tables.Int64Col(pos=0)
     flux1 = tables.Float64Col(pos=1)
     flux2 = tables.Float64Col(pos=2)
@@ -16,7 +16,16 @@ class Simulation(tables.IsDescription):
     s1 = tables.Float64Col(pos=5)
     niter = tables.Int32Col(pos=6)
 
-class Fluxes(tables.IsDescription):
+
+SIM_DTYPE = np.dtype([("time", np.int64), \
+                        ("flux1", np.float64), \
+                        ("flux2", np.float64), \
+                        ("flux3", np.float64), \
+                        ("flux4", np.float64), \
+                        ("s1", np.float64), \
+                        ("niter", np.int32)])
+
+class FluxesDescription(tables.IsDescription):
     s = tables.Float64Col(pos=0)
     flux1_true = tables.Float64Col(pos=1)
     flux1_approx = tables.Float64Col(pos=2)
@@ -28,17 +37,18 @@ class Fluxes(tables.IsDescription):
     flux4_approx = tables.Float64Col(pos=8)
 
 
-SIM_DTYPE = np.dtype([\
-                        ("time", np.int64), \
-                        ("flux1", np.float64), \
-                        ("flux2", np.float64), \
-                        ("flux3", np.float64), \
-                        ("flux4", np.float64), \
-                        ("s1", np.float64), \
-                        ("niter", np.int32)])
+FLUXES_DTYPE = np.dtype([("s", np.float64), \
+                        ("flux1_true", np.float64), \
+                        ("flux1_approx", np.float64), \
+                        ("flux2_true", np.float64), \
+                        ("flux2_approx", np.float64), \
+                        ("flux3_true", np.float64), \
+                        ("flux3_approx", np.float64), \
+                        ("flux4_true", np.float64), \
+                        ("flux4_approx", np.float64)])
 
 
-def format(time_index, sim, s1, niter):
+def format_sim(time_index, sim, s1, niter):
     nval, nfluxes = sim.shape
     simdata = np.empty(dtype=SIM_DTYPE, shape=nval)
     simdata["time"] = (time_index-TIME_START).total_seconds()\
@@ -54,25 +64,14 @@ def format(time_index, sim, s1, niter):
     return simdata
 
 
-def store_sim(h5, group, table_name, simdata):
-    nval = len(simdata)
+def store(h5, group, table_name, data, description):
+    nval = len(data)
     tb = h5.create_table(group, table_name, \
-                        description=Simulation, \
+                        description=description, \
                         expectedrows=nval, \
                         filters=COMPRESSION_FILTER)
-    tb.append(simdata)
+    tb.append(data)
     return tb
-
-
-def store_flux(h5, group, table_name, fluxdata):
-    nval = len(fluxdata)
-    tb = h5.create_table(group, table_name, \
-                        description=Fluxes, \
-                        expectedrows=nval, \
-                        filters=COMPRESSION_FILTER)
-    tb.append(fluxdata)
-    return tb
-
 
 
 def addmeta(tb, **kwargs):
@@ -82,9 +81,11 @@ def addmeta(tb, **kwargs):
 
 def convert(tb):
     tb = pd.DataFrame(tb)
-    tb.loc[:, "time"] = pd.to_datetime(tb.time.astype(np.float64), unit="s")
-    tb = tb.set_index("time")
+    if hasattr(tb, "time"):
+        tb.loc[:, "time"] = pd.to_datetime(tb.time.astype(np.float64), unit="s")
+        tb = tb.set_index("time")
     return tb
+
 
 def read(group, table_name):
     tb = group[table_name][:]

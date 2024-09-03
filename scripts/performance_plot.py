@@ -62,6 +62,10 @@ metrics = {
     "NITER_RATIO[%]": "Iteration ratio"
 }
 
+ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n100"]
+ode_method_worst = "quasoare\n10"
+
+
 # Image file extension
 imgext = args.extension
 
@@ -140,14 +144,11 @@ for iax, (aname, ax) in enumerate(axs.items()):
     df.columns = [re.sub("_", "\n", re.sub("py_", "", cn)) \
                             for cn in df.columns]
     df = np.log10(1e-10+df)
+    df = df.loc[:, ode_method_selected]
 
-    #if not "analytical" in df.columns:
-    #    df.loc[:, "analytical"] = np.nan
-    cc = ["rk45", "quasoare\n3", "quasoare\n5", "quasoare\n50"]
-    df = df.loc[:, cc]
-
-    worst = df.loc[:, "quasoare\n3"].idxmax()
-    LOGGER.info(f"{model_name}/{metric} quasoare_3 worst: {worst}")
+    worst = df.loc[:, ode_method_worst].idxmax()
+    m = re.sub("\n", " ", ode_method_worst)
+    LOGGER.info(f"{model_name}/{metric} {m} worst: {worst}")
 
     vl = violinplot.Violin(df, show_text=False)
     vl.draw(ax=ax)

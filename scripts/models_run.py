@@ -29,6 +29,10 @@ from pyrezeq import approx, steady, benchmarks, models, slow
 import hdf5_utils
 import data_utils
 
+import importlib
+importlib.reload(hdf5_utils)
+importlib.reload(data_utils)
+
 #----------------------------------------------------------------------
 # @Config
 #----------------------------------------------------------------------
@@ -53,6 +57,8 @@ model_name, siteid = data_utils.get_config(taskid)
 
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
+if debug:
+    ode_methods = ["radau", "c_quasoare_3"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -60,9 +66,9 @@ end_daily = "2022-12-31"
 start_hourly = "2022-02-01"
 end_hourly = "2022-03-31"
 
-nsubdiv = 50000
+nsubdiv = 100 #50000
 
-nparams = 3 if debug else 50
+nparams = 3 if debug else 20
 
 #----------------------------------------------------------------------
 # @Folders
@@ -83,6 +89,10 @@ if flogs == "":
 else:
     flogs = Path(flogs)
     assert flogs.exists()
+
+if debug:
+    fout = flogs / "simulations"
+    fout.mkdir(exist_ok=True)
 
 flog = flogs / f"rezeqrun_TASK{taskid}.log"
 LOGGER = iutils.get_logger(basename, contextual=True, flog=flog)
@@ -115,7 +125,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
     outflows = hourly.loc[:, "STREAMFLOW_DOWN[m3/sec]"].interpolate()
-    q0 = inflows.quantile(0.9)
+    # .. rescale inflow to match outflow volume
+    inflows_rescaled = outflows.mean()/inflows.mean()*inflows
+    q0 = inflows_rescaled.quantile(0.9)
 
     # Run models
     # .. model setup
@@ -160,7 +172,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             theta = param
             time_index = hourly.index
             nval = len(inflows)
-            scalings = np.column_stack([inflows/theta, \
+            scalings = np.column_stack([inflows_rescaled/theta, \
                                     q0/theta*np.ones(nval)])
         elif model_name == "GRP":
             X1 = param
@@ -182,7 +194,6 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
             if ode_method == "analytical":
                 # Quasi analytical method
-                alpha_max = np.nan
 
                 if model_name == "GRPM":
                     LOGGER.info(f"{ode_method} - no analytical sol, skip",\
@@ -209,11 +220,12 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     sim = sim[:, 1:]
                     niter = nsubdiv*np.ones(len(climate))
 
+                s1_min = np.nanmin(s1)/param
                 s1_max = np.nanmax(s1)/param
+                alpha_min, alpha_max = np.nan, np.nan
 
             elif ode_method in ["radau", "rk45"]:
                 # Numerical solver
-                alpha_max = np.nan
                 m = "Radau" if ode_method=="radau" else "RK45"
                 tstart = time.time()
                 niter, s1, sim = slow.numerical_model(fluxes, dfluxes, \
@@ -221,43 +233,58 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                                         timestep, method=m)
                 runtime = (time.time()-tstart)*1e3
                 sim = param*np.abs(sim)/timestep
+                s1_min = np.nanmin(s1)
                 s1_max = np.nanmax(s1)
                 s1 *= param
+                alpha_min, alpha_max = np.nan, np.nan
 
             elif re.search("quasoare", ode_method):
-                # Quasoare
-                nalphas = int(re.sub(".*_", "", ode_method))
                 # first go at alphas
-                alpha_max = 3.
-                alphas = np.linspace(0, alpha_max, nalphas)
+                alphas = np.linspace(0, 5., 500)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
                 stdy = steady.quad_steady_scalings(alphas, scalings, \
                                                     amat, bmat, cmat)
 
                 # second go at alphas
+                nalphas = int(re.sub(".*_", "", ode_method))
+                alpha_min = np.nanmin(stdy)
                 alpha_max = np.nanmax(stdy)
-                alphas = np.linspace(0, alpha_max, nalphas)
+                alphas = np.linspace(alpha_min, alpha_max, nalphas)
+                # .. insert a 0.
+                alphas = np.insert(alphas, 0, 0.)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 
                 # Store flux approximation
-                xx = np.linspace(0, alpha_max, 500)
+                xx = np.linspace(alpha_min, alpha_max, 500)
                 fx = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, xx)
                 nfluxes = amat.shape[1]
-                dfx = pd.DataFrame(xx[:, None], columns=["s"])
+                dfx = np.empty(fx.shape[0], dtype=hdf5_utils.FLUXES_DTYPE)
+                dfx["s"] = xx
                 for iflux in range(4):
                     if iflux<nfluxes:
                         f = np.array([fluxes[iflux](x) for x in xx])
-                        dfx.loc[:, f"flux{iflux+1}_true"] = f
-                        dfx.loc[:, f"flux{iflux+1}_approx"] = fx[:, iflux]
+                        dfx[f"flux{iflux+1}_true"] = f
+                        dfx[f"flux{iflux+1}_approx"] = fx[:, iflux]
                     else:
-                        dfx.loc[:, f"flux{iflux+1}_true"] = np.nan
-                        dfx.loc[:, f"flux{iflux+1}_approx"] = np.nan
+                        dfx[f"flux{iflux+1}_true"] = np.nan
+                        dfx[f"flux{iflux+1}_approx"] = np.nan
 
                 tname = f"S{siteid}_{re.sub('_', '', ode_method)}"+\
                             f"_fluxes{iparam:03d}"
                 h5_group = h5_groups[ode_method]
-                hdf5_utils.store_flux(h5, h5_group, tname, dfx.values)
-
+                tb = hdf5_utils.store(h5, h5_group, tname, dfx, \
+                                 hdf5_utils.FluxesDescription)
+                hdf5_utils.addmeta(tb, \
+                        reated=datetime.now(), \
+                        model_name=model_name, \
+                        siteid=siteid, \
+                        ode_method=ode_method, \
+                        iparam=iparam, \
+                        param=param, \
+                        alpha_min=alpha_min, \
+                        alpha_max=alpha_max, \
+                        s1_min=s1_min, \
+                        s1_max=s1_max)
 
                 # Run model
                 quad_model = models.quad_model if ode_method.startswith("c")\
@@ -269,6 +296,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                         amat, bmat, cmat, s0, timestep)
                     runtime = (time.time()-tstart)*1e3
                     sim = param*np.abs(sim)/timestep
+                    s1_min = np.nanmin(s1)
                     s1_max = np.nanmax(s1)
                     s1 *= param
                 except Exception as err:
@@ -279,11 +307,12 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             if not sim is None:
                 # Store result
                 LOGGER.info(f"{ode_method} - store", ntab=1)
-                simdata = hdf5_utils.format(time_index, sim, s1, niter)
+                simdata = hdf5_utils.format_sim(time_index, sim, s1, niter)
                 tname = f"S{siteid}_{re.sub('_', '', ode_method)}"+\
-                            f"_param{iparam:03d}"
+                            f"_sim{iparam:03d}"
                 h5_group = h5_groups[ode_method]
-                tb = hdf5_utils.store_sim(h5, h5_group, tname, simdata)
+                tb = hdf5_utils.store(h5, h5_group, tname, simdata, \
+                                      hdf5_utils.SimDescription)
                 hdf5_utils.addmeta(tb, \
                         created=datetime.now(), \
                         model_name=model_name, \
@@ -292,7 +321,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                         runtime=runtime, \
                         iparam=iparam, \
                         param=param, \
+                        alpha_min=alpha_min, \
                         alpha_max=alpha_max, \
+                        s1_min=s1_min, \
                         s1_max=s1_max, \
                         niter_mean=niter.mean(), \
                         nsubdiv=nsubdiv, \
