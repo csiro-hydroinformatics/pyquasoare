@@ -250,8 +250,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 alpha_min = np.nanmin(stdy)
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
-                # .. insert a 0.
-                alphas = np.insert(alphas, 0, 0.)
+                # .. insert a 0 if needed
+                if alphas[0]<1e-5:
+                    alphas = np.insert(alphas, 0, 0.)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 
                 # Store flux approximation
