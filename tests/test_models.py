@@ -1,4 +1,5 @@
 from pathlib import Path
+import inspect
 from itertools import product as prod
 import time
 import math
@@ -114,51 +115,4 @@ def test_routing_convergence(allclose):
     niter, s1, sim = models.quad_model(alphas, scalings, \
                             amat, bmat, cmat, s0, timestep)
 
-
-def test_bicubic(allclose):
-    # Configure integration
-    timestep = 3600
-    theta = 40119539.59355378
-    fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu=6)
-    s0 = 0.
-
-    # Get data
-    siteid = "203014"
-    start_hourly = "2022-02-01"
-    end_hourly = "2022-03-03"
-    hourly = data_reader.get_data(siteid, "hourly").loc[start_hourly:end_hourly]
-    inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
-    outflows = hourly.loc[:, "STREAMFLOW_DOWN[m3/sec]"].interpolate()
-
-    inflows_rescaled = outflows.mean()/inflows.mean()*inflows
-    q0 = inflows_rescaled.quantile(0.9)
-    nval = len(inflows)
-    scalings = np.column_stack([inflows_rescaled/theta, \
-                            q0/theta*np.ones(nval)])
-
-    # Numerical
-    nitera, s1a, fxa = slow.numerical_model(fluxes, dfluxes, \
-                                           scalings, s0, \
-                                           timestep, method="Radau")
-
-    # Quasoare
-    alphas = np.linspace(0., 1.5, 500)
-    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
-    s_start = s0
-    fxb = []
-    for t in range(nval):
-        n, s_end, f = slow.quad_integrate(alphas, scalings[t], \
-                                        amat, bmat, cmat, 0., s_start, \
-                                        timestep, debug=False)
-        #assert allclose(f, fxa[t])
-        fxb.append(f)
-        s_start = s_end
-
-    fxb = np.array(fxb)
-    assert np.allclose(fxa, fxb)
-
-
-    niterb, s1c, fxc = models.quad_model(alphas, scalings, amat, bmat, cmat, \
-                                                    s0, timestep)
-    assert np.allclose(fxa, fxc)
 

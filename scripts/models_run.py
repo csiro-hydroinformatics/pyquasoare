@@ -11,6 +11,7 @@
 
 import sys, os, re, json, math
 import argparse
+import inspect
 from pathlib import Path
 import time
 from datetime import datetime
@@ -64,9 +65,9 @@ start_daily = "2010-01-01"
 end_daily = "2022-12-31"
 
 start_hourly = "2022-02-01"
-end_hourly = "2022-03-31"
+end_hourly = "2022-04-10"
 
-nsubdiv = 100 #50000
+nsubdiv = 500 #50000
 
 nparams = 20
 
@@ -167,7 +168,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     # Run model for each parameter
     for iparam, param in enumerate(params):
-        if debug and iparam != 13:
+        if debug and iparam != 0:
             continue
 
         # Prepare scaling depending on param
@@ -177,18 +178,14 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             nval = len(inflows)
             scalings = np.column_stack([inflows_rescaled/theta, \
                                     q0/theta*np.ones(nval)])
-        elif model_name == "GRP":
+        elif model_name in ["GRP", "GRPM"]:
             X1 = param
             time_index = daily.index
             ones = np.ones(len(climate))
-            scalings = np.column_stack([np.maximum(rain-evap, 0)/X1, \
-                                    np.maximum(evap-rain, 0)/X1, ones])
-        elif model_name == "GRPM":
-            X1 = param
-            time_index = daily.index
-            ones = np.ones(len(climate))
-            scalings = np.column_stack([np.maximum(rain-evap, 0)/X1, \
-                                    np.maximum(evap-rain, 0)/X1, ones, ones])
+            scalings = [np.maximum(rain-evap, 0)/X1, \
+                                    np.maximum(evap-rain, 0)/X1, ones]
+            scalings = scalings+[ones] if model_name=="GRPM" else scalings
+            scalings = np.column_stack(scalings)
 
         # Loop over ODE ode_method
         LOGGER.info(f"Param {iparam+1}/{nparams}")
@@ -208,9 +205,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     theta = param
                     tstart = time.time()
                     qo = benchmarks.nonlinrouting(nsubdiv, timestep, theta, \
-                                        nu, q0, s0, inflows)
+                                        nu, q0, s0*theta, inflows_rescaled)
                     runtime = (time.time()-tstart)*1e3
-                    sim = np.column_stack([inflows, qo])
+                    sim = np.column_stack([inflows_rescaled, qo])
                     nval = len(inflows)
                     niter = nsubdiv*np.ones(nval)
                     s1 = np.nan*niter
@@ -251,12 +248,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
                 # second go at alphas
                 nalphas = int(re.sub(".*_", "", ode_method))
-                alpha_min = np.nanmin(stdy)
+                alpha_min = 0
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
-                # .. insert a 0 if needed
-                if alpha_min>1e-5:
-                    alphas = np.insert(alphas, 0, 0.)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
 
                 # Store flux approximation
@@ -310,7 +304,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     sim = None
 
             if not sim is None:
-                simall[ode_method] = pd.DataFrame(sim)
+                s = pd.DataFrame(sim)
+                s.loc[:, "s1"] = s1
+                simall[ode_method] = s
 
                 # Store result
                 LOGGER.info(f"{ode_method} - store", ntab=1)
