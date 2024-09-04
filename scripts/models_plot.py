@@ -166,10 +166,6 @@ for f in lf:
                 ax2.axis("off")
                 continue
 
-            if aname == "s1":
-                theta = info[ode_method]["param"]
-                se /= theta
-
             lab = f"{ode_method}"
             lw = 3 if ode_method == "radau" else 2
             se.plot(ax=ax1, label=lab, lw=lw)
@@ -202,7 +198,8 @@ for f in lf:
         title = aname.title()
         ax1.set(title=title, xlabel="")
 
-    ftitle = f"{siteid} - Model {model_name}"
+    theta = info.loc["param", "rk45"]
+    ftitle = f"{siteid} - Model {model_name} theta={theta:0.1f}"
     fig1.suptitle(ftitle)
     fig2.suptitle(ftitle)
 
