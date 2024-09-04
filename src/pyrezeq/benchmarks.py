@@ -39,6 +39,18 @@ def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     return outflows
 
 
+def quadrouting(timestep, theta, q0, s0, inflows):
+    inflows = np.array(inflows).astype(np.float64)
+    outflows = np.zeros_like(inflows)
+    ierr = c_pyrezeq.quadrouting(timestep, theta, \
+                                    q0, s0, inflows, outflows)
+    if ierr>0:
+        mess = c_pyrezeq.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr} ({mess})")
+
+    return outflows
+
+
 # --- GR4J model ---
 def gr4jprod_fluxes_noscaling(eta=1./2.25):
     """ GR4J production store fluxes: Ps, Es, Perc without climate input scaling """

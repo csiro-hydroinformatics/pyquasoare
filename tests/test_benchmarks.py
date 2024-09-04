@@ -164,7 +164,7 @@ def test_gr4jprod_vs_numerical(allclose):
         LOGGER.info(mess)
 
 
-def test_nonlinrouting_vs_analytical(allclose):
+def test_nonlinrouting_vs_splitting(allclose):
     timestep = 3600
     s0 = 0.
     LOGGER.info("")
@@ -297,5 +297,47 @@ def test_nonlinrouting_vs_numerical(allclose):
                     +f" errmax={errmax_max:3.3e}"
             LOGGER.info(mess)
 
+
+
+def test_quadrouting_vs_analytical(allclose):
+    timestep = 3600
+    s0 = 0.
+    LOGGER.info("")
+
+    for isite, siteid in enumerate(data_reader.SITEIDS):
+        df = data_reader.get_data(siteid, "hourly")
+        df = df.loc["2022-01-01": "2022-12-31"]
+
+        inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+        q0 = inflows.quantile(0.9)
+        inflows = inflows.values
+
+        # Stored volumne in 24h
+        theta = q0*24*timestep
+
+        # Simulation with high number of subdivisions
+        sim = benchmarks.quadrouting(timestep, theta,\
+                                        q0, s0, inflows)
+
+        # Analytical solution
+        s_start = s0
+        s_start_split = s0
+        expected = np.zeros_like(sim)
+        split = np.zeros_like(sim)
+        qi_prev = 0.
+        for t in range(len(inflows)):
+            qi = inflows[t]
+            A = math.sqrt(q0/qi)/theta
+            w = math.tanh(math.sqrt(q0*qi)/theta*timestep)
+            s_end = (s_start+w/A)/(1+w*A*s_start)
+
+            expected[t] = (s_start-s_end)/timestep+qi
+            s_start = s_end
+            qi_prev = qi
+
+        errmax = np.abs(sim-expected).max()
+        mess = f"quad routing /site {isite+1}: errmax={errmax:3.3e}"
+        LOGGER.info(mess)
+        assert allclose(sim, expected)
 
 

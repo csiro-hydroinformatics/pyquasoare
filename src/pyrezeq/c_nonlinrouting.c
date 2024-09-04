@@ -1,5 +1,47 @@
 #include "c_nonlinrouting.h"
 
+int c_quadrouting(int nval, double timestep,
+                        double theta, double q0,
+                        double s0, double *inflows, double * outflows){
+    int i;
+    double u0, u1, s1, qi, qout;
+    double sq0 = sqrt(q0);
+    double qi_prev = 0;
+    double sqi = 0;
+    double omega = 0;
+
+    if(theta<1e-5)
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+
+    if(q0<1e-5)
+        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+
+    if(s0<0 || s0>1e1*theta)
+        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
+
+    /* Time series loop */
+    for(i=0; i<nval; i++){
+        qi = inflows[i];
+        qi = isnan(qi) || qi<0 ? qi_prev : qi;
+        sqi = sqrt(qi);
+
+        omega = tanh(sqi*sq0/theta*timestep);
+        u0 = s0/theta;
+        u1 = (u0+sqi/sq0*omega)/(1+u0*sq0/sqi*omega);
+        s1 = u1*theta;
+
+        /* outflow computed from mass balance */
+        qout = qi+(s0-s1)/timestep;
+        outflows[i] = qout;
+
+        /* Loop */
+        s0 = s1;
+        qi_prev = qi;
+    }
+
+    return 0;
+}
+
 int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,
                         double s0, double *inflows, double * outflows){

@@ -76,6 +76,10 @@ cdef extern from 'c_rezeq_quad.h':
 
 
 cdef extern from 'c_nonlinrouting.h':
+    int c_quadrouting(int nval, double timestep,
+                        double theta, double q0,
+                        double s0, double *inflows, double * outflows)
+
     int c_nonlinrouting(int nval, int nsubdiv, double timestep,
                         double theta, double nu, double q0,
                         double s0, double *inflows, double * outflows)
@@ -379,6 +383,20 @@ def quad_model(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
+
+
+def quadrouting(double timestep, double theta, \
+                    double q0, double s0,
+                    np.ndarray[double, ndim=1, mode='c'] inflows not None,
+                    np.ndarray[double, ndim=1, mode='c'] outflows not None):
+
+    cdef int nval = inflows.shape[0]
+    if nval!=outflows.shape[0]:
+        raise ValueError("inflows.shape[0]!=outflows.shape[0]")
+
+    return c_quadrouting(nval, timestep, theta, q0, s0,
+                                <double*> np.PyArray_DATA(inflows),
+                                <double*> np.PyArray_DATA(outflows))
 
 
 def nonlinrouting(int nsubdiv, double timestep, double theta, double nu, \
