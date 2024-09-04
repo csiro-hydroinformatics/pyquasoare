@@ -58,7 +58,7 @@ model_name, siteid = data_utils.get_config(taskid)
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
 if debug:
-    ode_methods = ["radau", "c_quasoare_3"]
+    ode_methods = ["radau", "c_quasoare_500"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -68,7 +68,7 @@ end_hourly = "2022-03-31"
 
 nsubdiv = 100 #50000
 
-nparams = 3 if debug else 20
+nparams = 20
 
 #----------------------------------------------------------------------
 # @Folders
@@ -165,8 +165,25 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
         dfluxes = [dfpr, dfae, dfperc, dfgw]
 
+    elif model_name == "GRPM2":
+        fpr = lambda x: math.cos(math.pi*max(min(x, 1), 0))
+        fae = lambda x: 1.-math.cos(math.pi*max(min(x, 1), 0))
+        fperc = lambda x: -0.1*x**7 if x>0 else 0.
+        fgw = lambda x: -0.1*x/(1+10*x) if x>0 else -2*x
+        fluxes = [fpr, fae, fperc, fgw]
+
+        dfpr = lambda x: -math.pi*math.sin(math.pi*max(min(x, 1), 0))
+        dfae = lambda x: math.pi*math.sin(math.pi*max(min(x, 1), 0))
+        dfperc = lambda x: -0.7*x**6 if x>0 else 0.
+        dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
+        dfluxes = [dfpr, dfae, dfperc, dfgw]
+
+
     # Run model for each parameter
     for iparam, param in enumerate(params):
+        if debug and iparam != 13:
+            continue
+
         # Prepare scaling depending on param
         if routing:
             theta = param
@@ -189,6 +206,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
         # Loop over ODE ode_method
         LOGGER.info(f"Param {iparam+1}/{nparams}")
+        simall = {}
         for ode_method in ode_methods:
             LOGGER.info(f"{ode_method} - start", ntab=1)
 
@@ -306,6 +324,8 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     sim = None
 
             if not sim is None:
+                simall[ode_method] = pd.DataFrame(sim)
+
                 # Store result
                 LOGGER.info(f"{ode_method} - store", ntab=1)
                 simdata = hdf5_utils.format_sim(time_index, sim, s1, niter)
