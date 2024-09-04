@@ -142,18 +142,23 @@ def test_bicubic(allclose):
                                            timestep, method="Radau")
 
     # Quasoare
-    alphas = np.linspace(0., 1.3, 500)
+    alphas = np.linspace(0., 1.5, 500)
     amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
     s_start = s0
-    fx = []
+    fxb = []
     for t in range(nval):
         n, s_end, f = slow.quad_integrate(alphas, scalings[t], \
                                         amat, bmat, cmat, 0., s_start, \
                                         timestep, debug=False)
         #assert allclose(f, fxa[t])
-        fx.append(fx)
+        fxb.append(f)
         s_start = s_end
 
-    fx = np.array(fx)
-    #import pdb; pdb.set_trace()
+    fxb = np.array(fxb)
+    assert np.allclose(fxa, fxb)
+
+
+    niterb, s1c, fxc = models.quad_model(alphas, scalings, amat, bmat, cmat, \
+                                                    s0, timestep)
+    assert np.allclose(fxa, fxc)
 

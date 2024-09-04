@@ -165,20 +165,6 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
         dfluxes = [dfpr, dfae, dfperc, dfgw]
 
-    elif model_name == "GRPM2":
-        fpr = lambda x: math.cos(math.pi*max(min(x, 1), 0))
-        fae = lambda x: 1.-math.cos(math.pi*max(min(x, 1), 0))
-        fperc = lambda x: -0.1*x**7 if x>0 else 0.
-        fgw = lambda x: -0.1*x/(1+10*x) if x>0 else -2*x
-        fluxes = [fpr, fae, fperc, fgw]
-
-        dfpr = lambda x: -math.pi*math.sin(math.pi*max(min(x, 1), 0))
-        dfae = lambda x: math.pi*math.sin(math.pi*max(min(x, 1), 0))
-        dfperc = lambda x: -0.7*x**6 if x>0 else 0.
-        dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
-        dfluxes = [dfpr, dfae, dfperc, dfgw]
-
-
     # Run model for each parameter
     for iparam, param in enumerate(params):
         if debug and iparam != 13:
