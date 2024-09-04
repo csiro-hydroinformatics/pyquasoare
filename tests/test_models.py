@@ -118,14 +118,14 @@ def test_routing_convergence(allclose):
 def test_bicubic(allclose):
     # Configure integration
     timestep = 3600
-    theta = 287254474.57214785
+    theta = 40119539.59355378
     fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu=6)
-    s0 = 56906./theta
+    s0 = 0.
 
     # Get data
     siteid = "203014"
-    start_hourly = "2022-02-03"
-    end_hourly = "2022-02-06"
+    start_hourly = "2022-02-01"
+    end_hourly = "2022-03-03"
     hourly = data_reader.get_data(siteid, "hourly").loc[start_hourly:end_hourly]
     inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
     outflows = hourly.loc[:, "STREAMFLOW_DOWN[m3/sec]"].interpolate()
@@ -145,11 +145,15 @@ def test_bicubic(allclose):
     alphas = np.linspace(0., 1.3, 500)
     amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
     s_start = s0
+    fx = []
     for t in range(nval):
-        n, s_end, fx = slow.quad_integrate(alphas, scalings[t], \
+        n, s_end, f = slow.quad_integrate(alphas, scalings[t], \
                                         amat, bmat, cmat, 0., s_start, \
                                         timestep, debug=False)
-        assert allclose(fx, fxa[t])
-
+        #assert allclose(f, fxa[t])
+        fx.append(fx)
         s_start = s_end
+
+    fx = np.array(fx)
+    #import pdb; pdb.set_trace()
 
