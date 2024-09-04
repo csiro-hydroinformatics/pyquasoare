@@ -60,7 +60,7 @@ metrics = {
     "NITER_RATIO[%]": "Iteration ratio"
 }
 
-ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n100", "quasoare\n500"]
+ode_method_selected = ["rk45", "dop853", "quasoare\n10", "quasoare\n100", "quasoare\n500"]
 ode_method_worst = "quasoare\n10"
 
 

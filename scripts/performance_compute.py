@@ -128,7 +128,7 @@ for ifile, f in enumerate(lf):
             # Compute perf for each method
             for method in methods:
                 if iparam == 0:
-                    LOGGER.info(f".. perf for {method}", ntab=1)
+                    LOGGER.info(f"perf for {method}", ntab=1)
 
                 if method == method_ref:
                     continue

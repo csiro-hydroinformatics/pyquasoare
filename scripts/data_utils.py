@@ -14,7 +14,7 @@ SITEIDS = data_reader.SITEIDS
 
 MODEL_NAMES = ["QR", "CR", "BCR", "GRP", "GRPM", "GRPM2"]
 
-ODE_METHODS = ["analytical", "radau", "rk45"]
+ODE_METHODS = ["analytical", "radau", "rk45", "dop853"]
 ODE_METHODS += [f"{v}_quasoare_{n}" for v in["py", "c"] \
                         for n in [3, 5, 10, 20, 50, 100, 500]]
 

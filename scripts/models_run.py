@@ -59,7 +59,7 @@ model_name, siteid = data_utils.get_config(taskid)
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
 if debug:
-    ode_methods = ["analytical", "radau", "c_quasoare_500"]
+    ode_methods = ["analytical", "radau", "dop853", "c_quasoare_500"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -217,9 +217,10 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     sim = np.column_stack([inflows_rescaled, qo])
                     nval = len(inflows)
                     niter = np.ones(nval)
-                    s1 = np.nan*niter
-                    s1_min = np.nan
-                    s1_max = np.nan
+                    s1 = (inflows_rescaled-qo)*timestep/theta
+                    s1 = (s0+s1.cumsum()).values
+                    s1_min = np.nanmin(s1)
+                    s1_max = np.nanmax(s1)
                     alpha_min, alpha_max = np.nan, np.nan
                 else:
                     LOGGER.info(f"{ode_method}"\
@@ -227,9 +228,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                                     ntab=1)
                     sim = None
 
-            elif ode_method in ["radau", "rk45"]:
+            elif ode_method in ["radau", "rk45", "dop853"]:
                 # Numerical solver
-                m = "Radau" if ode_method=="radau" else "RK45"
+                m = "Radau" if ode_method=="radau" else ode_method.upper()
                 tstart = time.time()
                 niter, s1, sim = slow.numerical_model(fluxes, dfluxes, \
                                                         scalings, s0, \
@@ -249,7 +250,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
                 # second go at alphas
                 nalphas = int(re.sub(".*_", "", ode_method))
-                alpha_min = -0.01
+                alpha_min = 0.
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
@@ -330,9 +331,13 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                         s1_max=s1_max, \
                         niter_mean=niter.mean(), \
                         timestep=timestep)
+
     if debug:
         comp = pd.DataFrame({"radau": simall["radau"].loc[:, "s1"], \
+                            "dop853": simall["dop853"].loc[:, "s1"], \
                             "quasoare": simall["c_quasoare_500"].loc[:, "s1"]})
+        if "analytical" in simall:
+            comp.loc[:, "analytical"] = simall["analytical"].loc[:, "s1"]
 
     LOGGER.info("Closing hdf5 file")
 
