@@ -57,11 +57,11 @@ metrics = {
     "ERRABSMAX_FLUX": "Maximum abs. error on flux", \
     "ERRBAL_FLUX[%]": "Mass balance error", \
     "RUNTIME_RATIO[%]": "Runtime ratio", \
-    "NITER_RATIO[%]": "Iteration ratio"
+    #"NITER_RATIO[%]": "Iteration ratio"
 }
 
-ode_method_selected = ["rk45", "dop853", "quasoare\n10", "quasoare\n100", "quasoare\n500"]
-ode_method_worst = "quasoare\n10"
+ode_method_selected = ["rk45", "quasoare\n5", "quasoare\n50", "quasoare\n500"]
+ode_method_worst = "quasoare\n5"
 
 
 # Image file extension

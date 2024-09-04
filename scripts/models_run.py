@@ -59,7 +59,8 @@ model_name, siteid = data_utils.get_config(taskid)
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
 if debug:
-    ode_methods = ["analytical", "radau", "dop853", "c_quasoare_500"]
+    ode_methods = ["analytical", "radau", "c_quasoare_5", \
+                        "py_quasoarelin_5"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -67,7 +68,7 @@ end_daily = "2022-12-31"
 start_hourly = "2022-02-01"
 end_hourly = "2022-04-10"
 
-nparams = 20
+nparams = 10
 
 #----------------------------------------------------------------------
 # @Folders
@@ -133,14 +134,14 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
     routing = model_name in ["QR", "CR", "BCR"]
     if routing:
         timestep = 3600. # time step in seconds
-        # store q0 for 0.2 to 10 days
-        params = q0*timestep*24*np.linspace(0.2, 10., nparams)
+        # store q0 for 0.5 to 5 days
+        params = q0*timestep*24*np.linspace(0.5, 5., nparams)
 
         # routing exponent
         nu = dict(QR=2, CR=3, BCR=6)[model_name]
         s0 = 0.
     else:
-        params = np.linspace(100, 2550, nparams)
+        params = np.linspace(100, 1000, nparams)
         timestep = 1. # time step in days
         s0 = 1./2
 
@@ -243,8 +244,11 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
             elif re.search("quasoare", ode_method):
                 # first go at alphas
+                opt = 0 if re.search("lin", ode_method) else 1
                 alphas = np.linspace(0, 5., 500)
-                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes,
+                                                         alphas,
+                                                         approx_opt=opt)
                 stdy = steady.quad_steady_scalings(alphas, scalings, \
                                                     amat, bmat, cmat)
 
@@ -253,7 +257,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 alpha_min = 0.
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
-                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, \
+                                                         alphas,
+                                                         approx_opt=opt)
 
                 # Store flux approximation
                 xx = np.linspace(alpha_min, alpha_max, 500)
@@ -334,8 +340,8 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     if debug:
         comp = pd.DataFrame({"radau": simall["radau"].loc[:, "s1"], \
-                            "dop853": simall["dop853"].loc[:, "s1"], \
-                            "quasoare": simall["c_quasoare_500"].loc[:, "s1"]})
+                            "quasoarelin": simall["py_quasoarelin_5"].loc[:, "s1"], \
+                            "quasoare": simall["c_quasoare_5"].loc[:, "s1"]})
         if "analytical" in simall:
             comp.loc[:, "analytical"] = simall["analytical"].loc[:, "s1"]
 
