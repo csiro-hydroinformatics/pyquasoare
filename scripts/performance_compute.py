@@ -62,7 +62,10 @@ fout = fdata.parent
 # @Logging
 #----------------------------------------------------------------------
 basename = source_file.stem
-LOGGER = iutils.get_logger(basename, contextual=True)
+flogs = froot / "logs"
+flogs.mkdir(exist_ok=True)
+flog = flogs / f"{source_file.stem}.log"
+LOGGER = iutils.get_logger(basename, flog=flog)
 LOGGER.log_dict(vars(args), "Command line arguments")
 
 #----------------------------------------------------------------------
@@ -72,7 +75,7 @@ lf = list(fdata.glob("*.hdf5"))
 nfiles = len(lf)
 all_results = []
 for ifile, f in enumerate(lf):
-    LOGGER.info(f"Processing file {ifile+1}/{nfiles}")
+    LOGGER.info(f"Processing file {f.stem} - {ifile+1}/{nfiles}")
     with tables.open_file(f, "r") as h5:
         sims = {}
         results = []
@@ -108,20 +111,35 @@ for ifile, f in enumerate(lf):
         crunt = "RUNTIME_RATIO[%]"
         cniter = "NITER_RATIO[%]"
         results.loc[:, cabs+cbal+[crunt, cniter]] = np.nan
+        model_names = results.loc[:, "model_name"].unique()
 
-        for iparam in range(nparams):
-            ref = sims[("radau", iparam)].filter(regex="flux", axis=1)
-            idx = (results.ode_method == "radau") & (results.iparam==iparam)
+        for iparam, model_name in prod(range(nparams), model_names):
+            # Define reference results
+            method_ref = "analytical" if model_name=="QR" else "radau"
+            ref = sims[(method_ref, iparam)].filter(regex="flux", axis=1)
+
+            idx = (results.ode_method == method_ref) \
+                    & (results.iparam==iparam)\
+                    & (results.model_name==model_name)
+
             ref_runt = results.loc[idx, "runtime"].squeeze()
             ref_niter = results.loc[idx, "niter_mean"].squeeze()
 
+            # Compute perf for each method
             for method in methods:
-                if method == "radau":
+                if iparam == 0:
+                    LOGGER.info(f".. perf for {method}", ntab=1)
+
+                if method == method_ref:
                     continue
+
+                idx = (results.ode_method == method)\
+                        & (results.iparam==iparam)\
+                        & (results.model_name==model_name)
+
                 sim = sims[(method, iparam)].filter(regex="flux", axis=1)
 
                 eabsmax = np.abs(sim-ref).max()
-                idx = (results.ode_method == method) & (results.iparam==iparam)
                 results.loc[idx, cabs] = eabsmax.values
 
                 ebal = np.abs(np.sum(sim-ref, axis=0))\
@@ -129,10 +147,10 @@ for ifile, f in enumerate(lf):
                 results.loc[idx, cbal] = ebal.values
 
                 runt = results.loc[idx, "runtime"].squeeze()
-                results.loc[idx, crunt] = runt/ref_runt
+                results.loc[idx, crunt] = runt/ref_runt*100
 
                 niter = results.loc[idx, "niter_mean"].squeeze()
-                results.loc[idx, cniter] = niter/ref_niter
+                results.loc[idx, cniter] = niter/ref_niter*100
 
     all_results.append(results)
 

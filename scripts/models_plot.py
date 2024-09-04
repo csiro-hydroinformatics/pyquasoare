@@ -52,23 +52,21 @@ parser.add_argument("-m", "--model_name", help="Model", \
                     type=str, required=True)
 parser.add_argument("-s", "--siteid", help="Siteid", \
                     type=str, required=True)
+parser.add_argument("-o", "--ode_method", help="ODE integration method", \
+                    type=str, default="c_quasoare_10")
 parser.add_argument("-i", "--iparam", help="Parameter number", \
                     type=int, required=True)
 args = parser.parse_args()
 
-ode_methods = ["radau", "rk45", "c_quasoare_500"]
-ode_method_selected = "c_quasoare_500"
+ode_method_selected = args.ode_method
+ode_methods = ["radau", "rk45", ode_method_selected]
 
 model_name_selected = args.model_name
 siteid_selected = args.siteid
 iparam_selected = args.iparam
 
-#start = "2022-02-25"
-#end = "2022-03-01"
-start = "2022-02-03"
-end = "2022-02-06"
-#start = "2022"
-#end = "2022"
+start = "2022"
+end = "2022"
 
 # Image file extension
 imgext = args.extension
@@ -145,9 +143,11 @@ for f in lf:
 
     info = pd.DataFrame(info)
 
+    nfluxes = 2 if model_name in ["QR", "BCR"] else 4
+
     plt.close("all")
     mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] \
-                        for t in np.array_split(np.arange(4), 2)]
+                        for t in np.array_split(np.arange(nfluxes), nfluxes//2)]
     nrows, ncols = len(mosaic), len(mosaic[0])
     fig1 = plt.figure(figsize=(awidth*ncols, aheight*nrows), layout="tight")
     axs1 = fig1.subplot_mosaic(mosaic)

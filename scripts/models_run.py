@@ -59,15 +59,13 @@ model_name, siteid = data_utils.get_config(taskid)
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
 if debug:
-    ode_methods = ["radau", "c_quasoare_500"]
+    ode_methods = ["analytical", "radau", "c_quasoare_500"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
 
 start_hourly = "2022-02-01"
 end_hourly = "2022-04-10"
-
-nsubdiv = 500 #50000
 
 nparams = 20
 
@@ -132,14 +130,14 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     # Run models
     # .. model setup
-    routing = model_name in ["QR", "BCR"]
+    routing = model_name in ["QR", "CR", "BCR"]
     if routing:
         timestep = 3600. # time step in seconds
         # store q0 for 0.2 to 10 days
         params = q0*timestep*24*np.linspace(0.2, 10., nparams)
 
         # routing exponent
-        nu = 2. if model_name == "QR" else 6.
+        nu = dict(QR=2, CR=3, BCR=6)[model_name]
         s0 = 0.
     else:
         params = np.linspace(100, 2550, nparams)
@@ -166,9 +164,24 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
         dfluxes = [dfpr, dfae, dfperc, dfgw]
 
+    elif model_name == "GRPM2":
+        clip = lambda x: max(0., min(1., x))
+        fpr = lambda x: (1+math.tanh(10*(0.5-clip(x))))/2
+        fae = lambda x: (math.tanh(10*(0.2-clip(x)))-math.tanh(2.))/2
+        fperc = lambda x: -0.1*x**7 if x>0 else 0.
+        fgw = lambda x: -0.1*x/(1+10*x) if x>0 else -2*x
+        fluxes = [fpr, fae, fperc, fgw]
+
+        dfpr = lambda x: -5./math.cosh(10*(0.5-clip(x)))**2
+        dfae = lambda x: -5./math.cosh(10*(0.2-clip(x)))**2
+        dfperc = lambda x: -0.7*x**6 if x>0 else 0.
+        dfgw = lambda x: -0.1/(1+10*x)**2 if x>0 else -2. -2. -2. -2.
+        dfluxes = [dfpr, dfae, dfperc, dfgw]
+
+
     # Run model for each parameter
     for iparam, param in enumerate(params):
-        if debug and iparam != 0:
+        if debug and iparam != 2:
             continue
 
         # Prepare scaling depending on param
@@ -178,13 +191,13 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             nval = len(inflows)
             scalings = np.column_stack([inflows_rescaled/theta, \
                                     q0/theta*np.ones(nval)])
-        elif model_name in ["GRP", "GRPM"]:
+        elif model_name in ["GRP", "GRPM", "GRPM2"]:
             X1 = param
             time_index = daily.index
             ones = np.ones(len(climate))
             scalings = [np.maximum(rain-evap, 0)/X1, \
                                     np.maximum(evap-rain, 0)/X1, ones]
-            scalings = scalings+[ones] if model_name=="GRPM" else scalings
+            scalings = scalings+[ones] if model_name.startswith("GRPM") else scalings
             scalings = np.column_stack(scalings)
 
         # Loop over ODE ode_method
@@ -194,36 +207,25 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             LOGGER.info(f"{ode_method} - start", ntab=1)
 
             if ode_method == "analytical":
-                # Quasi analytical method
-
-                if model_name == "GRPM":
-                    LOGGER.info(f"{ode_method} - no analytical sol, skip",\
-                                        ntab=1)
-                    continue
-
-                elif model_name in ["QR", "BCR"]:
+                if model_name == "QR":
+                    # QR is the only anlalytical solution
                     theta = param
                     tstart = time.time()
-                    qo = benchmarks.nonlinrouting(nsubdiv, timestep, theta, \
-                                        nu, q0, s0*theta, inflows_rescaled)
+                    qo = benchmarks.quadrouting(timestep, theta, \
+                                                q0, s0*theta, inflows_rescaled)
                     runtime = (time.time()-tstart)*1e3
                     sim = np.column_stack([inflows_rescaled, qo])
                     nval = len(inflows)
-                    niter = nsubdiv*np.ones(nval)
+                    niter = np.ones(nval)
                     s1 = np.nan*niter
-
-                elif model_name == "GRP":
-                    X1 = param
-                    tstart = time.time()
-                    sim = benchmarks.gr4jprod(nsubdiv, X1, s0, climate)
-                    runtime = (time.time()-tstart)*1e3
-                    s1 = sim[:, 0]
-                    sim = sim[:, 1:]
-                    niter = nsubdiv*np.ones(len(climate))
-
-                s1_min = np.nanmin(s1)/param
-                s1_max = np.nanmax(s1)/param
-                alpha_min, alpha_max = np.nan, np.nan
+                    s1_min = np.nan
+                    s1_max = np.nan
+                    alpha_min, alpha_max = np.nan, np.nan
+                else:
+                    LOGGER.info(f"{ode_method}"\
+                                    +"- no anlytical solution, skip.", \
+                                    ntab=1)
+                    sim = None
 
             elif ode_method in ["radau", "rk45"]:
                 # Numerical solver
@@ -236,7 +238,6 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 sim = param*np.abs(sim)/timestep
                 s1_min = np.nanmin(s1)
                 s1_max = np.nanmax(s1)
-                s1 *= param
                 alpha_min, alpha_max = np.nan, np.nan
 
             elif re.search("quasoare", ode_method):
@@ -248,7 +249,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
                 # second go at alphas
                 nalphas = int(re.sub(".*_", "", ode_method))
-                alpha_min = 0
+                alpha_min = -0.01
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
                 amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
@@ -297,7 +298,6 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     sim = param*np.abs(sim)/timestep
                     s1_min = np.nanmin(s1)
                     s1_max = np.nanmax(s1)
-                    s1 *= param
                 except Exception as err:
                     LOGGER.error(f"Error in {ode_method} run")
                     LOGGER.error(str(err))
@@ -329,8 +329,10 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                         s1_min=s1_min, \
                         s1_max=s1_max, \
                         niter_mean=niter.mean(), \
-                        nsubdiv=nsubdiv, \
                         timestep=timestep)
+    if debug:
+        comp = pd.DataFrame({"radau": simall["radau"].loc[:, "s1"], \
+                            "quasoare": simall["c_quasoare_500"].loc[:, "s1"]})
 
     LOGGER.info("Closing hdf5 file")
 
