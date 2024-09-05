@@ -4,6 +4,8 @@ import importlib
 import numpy as np
 import pandas as pd
 
+from hydrodiy.io import csv
+
 FROOT = Path(__file__).resolve().parent.parent
 FREADER = FROOT / "tests" / "data_reader.py"
 spec = importlib.util.spec_from_file_location("data_reader", FREADER)
@@ -31,3 +33,10 @@ def get_config(config):
 
 def get_data(siteid, timestep):
     return data_reader.get_data(siteid, timestep)
+
+
+def get_sites():
+    fs = FROOT / "data" / "sites.csv"
+    sites, _ = csv.read_csv(fs, index_col="STATIONID", \
+                    dtype={"STATIONID": str, "UPSTREAM_STATIONID":str})
+    return sites.loc[SITEIDS]

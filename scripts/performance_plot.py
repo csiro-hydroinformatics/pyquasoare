@@ -50,12 +50,12 @@ parser.add_argument("-e", "--extension", help="Image file extension", \
 args = parser.parse_args()
 
 siteids = data_utils.SITEIDS
-model_names = data_utils.MODEL_NAMES
+model_names = ["CR", "BCR", "GRP", "GRPM"] #data_utils.MODEL_NAMES
 ode_methods = data_utils.ODE_METHODS
 
 metrics = {
-    "ERRABSMAX_FLUX": "Maximum abs. error on flux", \
-    "ERRBAL_FLUX[%]": "Mass balance error", \
+    "ERRABSMAX_FLUX": "Flux max absolute error", \
+    "ERRBAL_FLUX[%]": "Flux mass balance error", \
     "RUNTIME_RATIO[%]": "Runtime ratio", \
     #"NITER_RATIO[%]": "Iteration ratio"
 }
@@ -69,8 +69,8 @@ imgext = args.extension
 
 # Plot dimensions
 fdpi = 100 #300
-awidth = 7
-aheight = 5
+awidth = 6
+aheight = 4
 
 # Figure transparency
 ftransparent = False
@@ -120,7 +120,9 @@ results.loc[:, "ERRBAL_FLUX[%]"] = rbal.max(axis=1)
 
 plt.close("all")
 
-mosaic = [[f"{mo}/title"]+[f"{mo}/{me}" for me in metrics] for mo in model_names]
+mosaic = [["."]+[f"title/{me}" for me in metrics]]
+mosaic += [[f"{mo}/title"]+[f"{mo}/{me}" for me in metrics] for mo in model_names]
+
 fnrows = len(mosaic)
 fncols = len(mosaic[0])
 
@@ -128,18 +130,29 @@ fncols = len(mosaic[0])
 figsize = (awidth*fncols, aheight*fnrows)
 fig = plt.figure(constrained_layout=True, figsize=figsize)
 
-gw = dict(wspace=0.1, hspace=0.1, width_ratios=[0.2]+[5]*(fncols-1))
+gw = dict(wspace=0.1, hspace=0.1, width_ratios=[0.2]+[5]*(fncols-1), \
+                        height_ratios=[0.2]+[4]*(fnrows-1))
 axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
 mleft = re.sub(".*/", "", mosaic[0][0])
+iplot = 0
 
 for iax, (aname, ax) in enumerate(axs.items()):
     model_name, metric = re.split("/", aname)
 
     if metric=="title":
         ax.text(0.5, 0.5, model_name, rotation=90, \
-                    fontweight="bold", fontsize=25)
+                    fontweight="bold", ha="left", va="center", \
+                    fontsize=25)
         ax.axis("off")
         continue
+
+    if model_name=="title":
+        ax.text(0.5, 0.5, metrics[metric], \
+                    fontweight="bold", ha="center", \
+                    va="center", fontsize=25)
+        ax.axis("off")
+        continue
+
 
     idx = results.model_name==model_name
     if idx.sum()==0:
@@ -181,14 +194,14 @@ for iax, (aname, ax) in enumerate(axs.items()):
         fmt = "0.1e" if ylog else "0.1f"
         ax.plot([xx-width/2, xx+width/2], [vv]*2, "k-")
         ax.text(xx, vv, "{v10:{fmt}}".format(v10=v10,fmt=fmt), \
-                        va="bottom", fontsize=15, \
+                        va="bottom", fontsize=17, \
                         ha="center", color="w", fontweight="bold", \
                         path_effects=[pe.withStroke(linewidth=4, \
                                                     foreground="k")])
 
-    #title = f"({letters[iax]}) {metrics[metric]}"
-    title = f"{metrics[metric]}"
-    ax.set_title(title)
+    title = f"({letters[iplot]})"
+    ax.text(0.02, 0.98, title, fontweight="bold", fontsize=18, \
+                    va="top", ha="left", transform=ax.transAxes)
 
     if ylog:
         ytk = np.unique(np.round(ax.get_yticks(), 0))
@@ -203,6 +216,7 @@ for iax, (aname, ax) in enumerate(axs.items()):
     else:
         ylab = "Ratio [%]"
     ax.set_ylabel(ylab)
+    iplot += 1
 
 # Save file
 fp = fimg / f"performance.{imgext}"

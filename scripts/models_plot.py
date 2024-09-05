@@ -143,11 +143,12 @@ for f in lf:
 
     info = pd.DataFrame(info)
 
-    nfluxes = 2 if model_name in ["QR", "BCR"] else 4
+    nfluxes = 2 if model_name in ["QR", "CR", "BCR"] else 4
 
     plt.close("all")
-    mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] \
-                        for t in np.array_split(np.arange(nfluxes), nfluxes//2)]
+    fxs = [[0, 1]] if nfluxes==2 else [[0, 1], [2, 3]]
+    mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] for t in fxs]
+
     nrows, ncols = len(mosaic), len(mosaic[0])
     fig1 = plt.figure(figsize=(awidth*ncols, aheight*nrows), layout="tight")
     axs1 = fig1.subplot_mosaic(mosaic)
@@ -199,7 +200,7 @@ for f in lf:
         ax1.set(title=title, xlabel="")
 
     theta = info.loc["param", "rk45"]
-    ftitle = f"{siteid} - Model {model_name} theta={theta:0.1f}"
+    ftitle = f"{siteid} - Model {model_name} theta={theta:0.1e}"
     fig1.suptitle(ftitle)
     fig2.suptitle(ftitle)
 
