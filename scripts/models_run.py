@@ -125,9 +125,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
     outflows = hourly.loc[:, "STREAMFLOW_DOWN[m3/sec]"].interpolate()
-    # .. rescale inflow to match outflow volume
-    inflows_rescaled = outflows.mean()/inflows.mean()*inflows
-    q0 = inflows_rescaled.quantile(0.9)
+    q0 = inflows.quantile(0.9)
 
     # Run models
     # .. model setup
@@ -190,7 +188,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             theta = param
             time_index = hourly.index
             nval = len(inflows)
-            scalings = np.column_stack([inflows_rescaled/theta, \
+            scalings = np.column_stack([inflows/theta, \
                                     q0/theta*np.ones(nval)])
         elif model_name in ["GRP", "GRPM", "GRPM2"]:
             X1 = param
@@ -213,12 +211,12 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                     theta = param
                     tstart = time.time()
                     qo = benchmarks.quadrouting(timestep, theta, \
-                                                q0, s0*theta, inflows_rescaled)
+                                                q0, s0*theta, inflows)
                     runtime = (time.time()-tstart)*1e3
-                    sim = np.column_stack([inflows_rescaled, qo])
+                    sim = np.column_stack([inflows, qo])
                     nval = len(inflows)
                     niter = np.ones(nval)
-                    s1 = (inflows_rescaled-qo)*timestep/theta
+                    s1 = (inflows-qo)*timestep/theta
                     s1 = (s0+s1.cumsum()).values
                     s1_min = np.nanmin(s1)
                     s1_max = np.nanmax(s1)
