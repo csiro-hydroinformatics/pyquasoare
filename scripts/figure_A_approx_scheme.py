@@ -100,7 +100,7 @@ figsize = (awidth*fncols, aheight*fnrows)
 fig = plt.figure(constrained_layout=True, figsize=figsize)
 
 # Create mosaic with named axes
-kw = dict(width_ratios=[1, 2], hspace=0.1, wspace=0.1)
+kw = dict(width_ratios=[1, 1.7], hspace=0.1, wspace=0.1)
 axs = fig.subplot_mosaic(mosaic, sharey=True, gridspec_kw=kw)
 iax = 0
 
@@ -108,7 +108,7 @@ for nalphas in nnalphas:
     # Piecewise approx
     amin, amax = 0., 1.
     alphas = np.linspace(amin, amax, nalphas)
-    amat, bmat, cmat = approx.quad_coefficient_matrix([flux_fun], alphas)
+    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([flux_fun], alphas)
 
     u0 = 0.9
     tmax = 10.
@@ -153,19 +153,17 @@ for nalphas in nnalphas:
             ax.plot([flux_fun(a) for a in alphas], alphas, "s",\
                             color=col_nodes, label=lab, zorder=100)
 
-            axi = ax.inset_axes([0.72, 0.76, 0.28, 0.24])
-            axi.plot(x, res.quasoare-y, "-", color=col_qua)
-            axi.text(0.05, 0.95, "Interpolation\nerror", fontsize=8, \
-                    transform=axi.transAxes, va="top", ha="left")
+            axi = ax.inset_axes([0.62, 0.78, 0.38, 0.22])
+            axi.plot(res.quasoare_diff-x, y, "-", color=col_qua)
+            axi.text(0.97, 0.03, "Interpolation error", fontsize=7, \
+                    transform=axi.transAxes, va="bottom", ha="right")
 
-            ylim = axi.get_ylim()
-            ym = np.abs(ylim).max()
-            axi.set_xlim((-0.5, 0.))
-            axi.set_ylim((-ym, ym))
-            axi.set_xticks([])
-            for tk in axi.yaxis.get_major_ticks():
+            xlim = axi.get_xlim()
+            xm = np.abs(xlim).max()*1.1
+            axi.set(ylim=(0., 1.), xlim=(-xm, xm), ylabel=ylab, yticks=[])
+            for tk in axi.xaxis.get_major_ticks():
                 tk.label1.set_fontsize(7)
-            putils.line(axi, 1, 0, 0, 0, "k-", lw=0.5)
+            putils.line(axi, 0, 1, 0, 0, "k-", lw=0.5)
 
 
         else:
@@ -183,6 +181,20 @@ for nalphas in nnalphas:
             ax.plot(x, res.analytical, label=lab, lw=lw_ana, linestyle=ls_ana, \
                     color="0.5", zorder=100)
 
+
+            axi = ax.inset_axes([0.76, 0.78, 0.24, 0.22])
+            axi.plot(x, y-res.analytical, "-", color=col_qua)
+            axi.text(0.03, 0.97, "Simulation error", fontsize=7, \
+                    transform=axi.transAxes, va="top", ha="left")
+
+            ylim = axi.get_ylim()
+            ym = np.abs(ylim).max()*1.3
+            axi.set(ylim=(-ym, ym), xlabel=r"$t$", xticks=[])
+            for tk in axi.yaxis.get_major_ticks():
+                tk.label1.set_fontsize(7)
+            putils.line(axi, 1, 0, 0, 0, "k-", lw=0.5)
+
+
         ax.plot(x0, y0, "o", color=col_qua, label="Initial condition")
         ax.plot(x, y, linestyle=ls_qua, color=col_qua, lw=lw_qua, \
                                 label="QUASOARE solution")
@@ -193,8 +205,7 @@ for nalphas in nnalphas:
         ax.set_ylabel(ylab, fontsize=18)
 
         if nalphas==nnalphas[0]:
-            leg = ax.legend(loc=4 if aname.startswith("st") else 3, \
-                        fontsize="small", \
+            leg = ax.legend(loc=3, fontsize="small", \
                         framealpha=1.0)
             if len(nnalphas)>1:
                 ax.set(xticks=[])
