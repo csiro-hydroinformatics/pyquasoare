@@ -18,7 +18,7 @@ MODEL_NAMES = ["QR", "CR", "BCR", "GRP", "GRPM", "GRPM2"]
 
 ODE_METHODS = ["analytical", "radau", "rk45", "dop853"]
 
-NALPHAS = [5, 50, 500]
+NALPHAS = [5, 10, 50, 500]
 ODE_METHODS += [f"{v}_quasoare_{n}" for v in["py", "c"] for n in NALPHAS]
 ODE_METHODS += [f"{v}_quasoarelin_{n}" for v in["py"] for n in NALPHAS]
 

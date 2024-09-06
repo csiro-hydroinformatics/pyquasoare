@@ -60,8 +60,8 @@ metrics = {
     #"NITER_RATIO[%]": "Iteration ratio"
 }
 
-ode_method_selected = ["rk45", "quasoare\n5", "quasoare\n50", "quasoare\n500"]
-ode_method_worst = "quasoare\n5"
+ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n50", "quasoare\n500"]
+ode_method_worst = "quasoare\n10"
 
 
 # Image file extension

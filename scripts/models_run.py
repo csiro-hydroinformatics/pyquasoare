@@ -244,7 +244,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 # first go at alphas
                 opt = 0 if re.search("lin", ode_method) else 1
                 alphas = np.linspace(0, 5., 500)
-                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes,
+                amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes,
                                                          alphas,
                                                          approx_opt=opt)
                 stdy = steady.quad_steady_scalings(alphas, scalings, \
@@ -255,7 +255,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 alpha_min = 0.
                 alpha_max = np.nanmax(stdy)
                 alphas = np.linspace(alpha_min, alpha_max, nalphas)
-                amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, \
+                amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, \
                                                          alphas,
                                                          approx_opt=opt)
 
