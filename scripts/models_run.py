@@ -59,8 +59,7 @@ model_name, siteid = data_utils.get_config(taskid)
 # List of ODE ode_methods
 ode_methods = data_utils.ODE_METHODS
 if debug:
-    ode_methods = ["analytical", "radau", "c_quasoare_5", \
-                        "py_quasoarelin_5"]
+    ode_methods = ["analytical", "radau", "c_quasoare_10"]
 
 start_daily = "2010-01-01"
 end_daily = "2022-12-31"
@@ -180,7 +179,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     # Run model for each parameter
     for iparam, param in enumerate(params):
-        if debug and iparam != 2:
+        if debug and iparam != 4:
             continue
 
         # Prepare scaling depending on param
@@ -338,8 +337,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
 
     if debug:
         comp = pd.DataFrame({"radau": simall["radau"].loc[:, "s1"], \
-                            "quasoarelin": simall["py_quasoarelin_5"].loc[:, "s1"], \
-                            "quasoare": simall["c_quasoare_5"].loc[:, "s1"]})
+                            "quasoare": simall["c_quasoare_10"].loc[:, "s1"]})
         if "analytical" in simall:
             comp.loc[:, "analytical"] = simall["analytical"].loc[:, "s1"]
 

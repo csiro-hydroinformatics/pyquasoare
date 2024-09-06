@@ -73,8 +73,12 @@ imgext = args.extension
 
 # Plot dimensions
 fdpi = 120
-awidth = 8
-aheight = 5
+
+awidth1 = 15
+aheight1 = 6
+
+awidth2 = 8
+aheight2 = 6
 
 # Figure transparency
 ftransparent = False
@@ -82,6 +86,26 @@ ftransparent = False
 # Set matplotlib options
 #mpl.rcdefaults() # to reset
 putils.set_mpl()
+
+varnames = {
+    "QR": {"flux1": "Outflow"}, \
+    "CR": {"flux1": "Ooutflow"}, \
+    "BCR": {"flux1": "Outflow"}, \
+    "GRP": {\
+        "flux1": "Infiltrated rain", \
+        "flux2": "Actual ET", \
+        "flux3": "Percolation"
+    }, \
+    "GRPM": {\
+        "flux1": "Infiltrated rain", \
+        "flux2": "Actual ET", \
+        "flux3": "Percolation", \
+        "flux4": "Recharge"
+    },
+}
+
+for m, vn in varnames.items():
+    vn["s1"] = "Store level"
 
 #----------------------------------------------------------------------
 # @Folders
@@ -109,11 +133,12 @@ LOGGER.log_dict(vars(args), "Command line arguments")
 #------------------------------------------------------------
 # @Plot
 #------------------------------------------------------------
-def symbounds(ax):
+def format_errorax(ax):
     ylim = ax.get_ylim()
     ym = np.abs(ylim).max()*1.5
     ax.set_ylim((-ym, ym))
     putils.line(ax, 1, 0, 0, 0, color="grey", linestyle=":", lw=0.8)
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 
 lf = list(fdata.glob("*.hdf5"))
 for f in lf:
@@ -150,17 +175,18 @@ for f in lf:
 
     info = pd.DataFrame(info)
 
-    nfluxes = 2 if model_name in ["QR", "CR", "BCR"] else 4
 
     plt.close("all")
-    fxs = [[0, 1]] if nfluxes==2 else [[0, 1], [2, 3]]
-    mosaic = [["s1"]*2]+[[f"flux{i+1}" for i in t] for t in fxs]
+    vns = np.sort([vn for vn in varnames[model_name]\
+                        if vn != "s1"])
+    mosaic = [["s1"]]+[[vn] for vn in vns]
 
     nrows, ncols = len(mosaic), len(mosaic[0])
-    fig1 = plt.figure(figsize=(awidth*ncols, aheight*nrows), layout="tight")
+    fig1 = plt.figure(figsize=(awidth1*ncols, aheight1*nrows), layout="tight")
     axs1 = fig1.subplot_mosaic(mosaic)
 
-    fig2 = plt.figure(figsize=(awidth*ncols, aheight*(nrows-1)), layout="tight")
+    fig2 = plt.figure(figsize=(awidth2*ncols, aheight2*(nrows-1)), \
+                                        layout="tight")
     axs2 = fig2.subplot_mosaic(mosaic[1:])
 
     for iax, (aname, ax1) in enumerate(axs1.items()):
@@ -169,23 +195,19 @@ for f in lf:
 
         for ode_method, sim in sims.items():
             se = sim.loc[:, aname].loc[start:end]
-            if se.isnull().all():
-                ax1.axis("off")
-                ax2.axis("off")
-                continue
 
             lab = re.sub("_", " ", re.sub("^(c|py)_", "", ode_method))
-            lw = 3 if ode_method == "radau" else 2
+            lw = 5 if ode_method == "radau" else 3
             se.plot(ax=ax1, label=lab, lw=lw)
+
+            tax1, tax2 = None, None
 
             if ode_method == ode_method_selected:
                 ser = sims["radau"].loc[se.index, aname]
                 err = se-ser
-                tax = ax1.twinx()
-                err.plot(ax=tax, lw=0.8, color="grey")
-                ax1.plot([], [], lw=0.8, color="grey", label="Error")
-                symbounds(tax)
-
+                tax1 = ax1.twinx()
+                err.plot(ax=tax1, lw=1.0, color="grey")
+                format_errorax(tax1)
 
             if ode_method == ode_method_selected and aname.startswith("flux")\
                                                 and ode_method in fluxes:
@@ -196,29 +218,42 @@ for f in lf:
                 ax2.plot(s, fx_true, label="True flux")
                 m = " ".join(re.split("_", ode_method)[1:])
                 ax2.plot(s, fx_approx, label=f"{m} flux")
-                ax2.legend(loc=2, fontsize="x-small")
+                ax2.legend(loc=2, fontsize="large")
 
-                tax = ax2.twinx()
-                tax.plot(s, fx_approx-fx_true, lw=0.8, color="grey")
-                ax2.plot([], [], lw=0.8, color="grey", label="Error")
-                symbounds(tax)
+                unit = "day$^{-1}$" if model_name.startswith("GR") \
+                                else "sec^{-1}"
+                ax2.set_ylabel(f"Instantanous flux [{unit}]")
+                ax2.set_xlabel(r"Normalised store level $u$ [-]")
+
+                tax2 = ax2.twinx()
+                tax2.plot(s, fx_approx-fx_true, lw=1.0, color="grey")
+                format_errorax(tax2)
 
         if aname == "s1":
-            ax1.legend(loc=2)
+            ax1.legend(loc=2, fontsize="large")
 
-        title = aname.title()
+
+        title = varnames[model_name][aname]
         ax1.set(title=title, xlabel="")
 
-    theta = info.loc["param", "radau"]
-    ftitle = f"{siteid} - Model {model_name} theta={theta:0.1e}"
-    fig1.suptitle(ftitle)
-    fig2.suptitle(ftitle)
+        unit = "mm/day" if model_name.startswith("GR") else "m3/sec"
+        nm = "Store level" if aname=="s1" else "Flux"
+        ax1.set_ylabel(f"{nm} [{unit}]")
+
+        if not tax1 is None:
+            tax1.set_ylabel(f"Error [{unit}]")
+        if not tax2 is None:
+            tax2.set_ylabel(f"Error [{unit}]")
+
 
     # Save file
-    fp = fimg / f"{f.stem}_sim.{imgext}"
+    theta = info.loc["param", "radau"]
+    base = f"{f.stem}_{model_name}_{theta:0.0f}"
+    fp = fimg / f"{base}_sim.{imgext}"
     fig1.savefig(fp, dpi=fdpi, transparent=ftransparent)
-    fp = fimg / f"{f.stem}_fluxes.{imgext}"
+    fp = fimg / f"{base}_fluxes.{imgext}"
     fig2.savefig(fp, dpi=fdpi, transparent=ftransparent)
+
     #putils.blackwhite(fp)
 
 LOGGER.completed()
