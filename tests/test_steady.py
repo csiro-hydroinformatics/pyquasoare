@@ -114,7 +114,7 @@ def test_scalings(allclose, generate_samples):
     scalings = np.ones((4, 1))
     tested = 0
     for a, b, c in params:
-        amat, bmat, cmat = [np.ones((2, 1))*v for v in [a, b, c]]
+        amat, bmat, cmat =[np.ones((2, 1))*v for v in [a, b, c]]
         stdy = steady.quad_steady_scalings(alphas, scalings, \
                                             amat, bmat, cmat)
         stdy0 = steady.quad_steady(a, b, c)
@@ -164,7 +164,7 @@ def test_scalings_gr4j(allclose):
     alphas = 0.05*np.arange(nalphas)
 
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
 
     nval = 200
     scalings = np.random.uniform(0, 100, size=(nval, 3))

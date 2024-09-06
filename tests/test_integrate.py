@@ -414,7 +414,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(funs, alphas, approx_opt)
 
     # Configure integration
     t0 = 0 # Analytical solution always integrated from t0=0!
@@ -525,7 +525,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
 
     # Adjust bounds to avoid numerical problems with analytical solution
     if re.search("^x|^logistic|sin", fname):
@@ -642,7 +642,7 @@ def test_reservoir_equation_gr4j(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):

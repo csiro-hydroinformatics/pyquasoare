@@ -36,7 +36,7 @@ def test_quad_model(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -110,7 +110,7 @@ def test_routing_convergence(allclose):
 
     nalphas = 5
     alphas = np.linspace(0, 3., nalphas)
-    amat, bmat, cmat = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
     s0 = 0.
     niter, s1, sim = models.quad_model(alphas, scalings, \
                             amat, bmat, cmat, s0, timestep)

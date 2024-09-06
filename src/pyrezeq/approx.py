@@ -94,6 +94,7 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     a_matrix = np.zeros((nalphas-1, nfluxes))
     b_matrix = np.zeros((nalphas-1, nfluxes))
     c_matrix = np.zeros((nalphas-1, nfluxes))
+    constants = np.zeros((nalphas-1, nfluxes, 2))
 
     for j in range(nalphas-1):
         alphaj, alphajp1 = alphas[[j, j+1]]
@@ -103,12 +104,22 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
             fm = f((alphaj+alphajp1)/2)
             a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
                                         approx_opt)
-
             a_matrix[j, ifun] = a
             b_matrix[j, ifun] = b
             c_matrix[j, ifun] = c
 
-    return a_matrix, b_matrix, c_matrix
+            # Discriminant
+            cst = np.zeros(3)
+            ierr = c_pyrezeq.quad_constants(a, b, c, cst)
+            Delta, qD, sbar = cst
+
+            # Tmax
+            t1 = c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphaj)
+            t2 = c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphajp1)
+            tmax = min(t1, t2)
+            constants[j, ifun, :] = [Delta, tmax]
+
+    return a_matrix, b_matrix, c_matrix, constants
 
 
 def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):

@@ -418,9 +418,9 @@ def test_quad_coefficient_matrix(allclose, reservoir_function):
     nf = approx.REZEQ_NFLUXES_MAX
     fs = [lambda x: x**a for a in np.linspace(1, 2, nf+1)]
     with pytest.raises(ValueError, match="nfluxes"):
-        amat, bmat, cmat = approx.quad_coefficient_matrix(fs, alphas)
+        amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fs, alphas)
 
-    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas)
+    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas)
 
     # Check extrapolations
     out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
@@ -454,12 +454,12 @@ def test_quad_vs_lin(allclose, reservoir_function):
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
 
-    amat, bmat, cmat = approx.quad_coefficient_matrix(funs, alphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(funs, alphas)
     s = np.linspace(alpha0, alpha1, 10000)
     out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
     fapprox = out[:, 0]
 
-    amat_lin, bmat_lin, cmat_lin = approx.quad_coefficient_matrix(funs, alphas, 0)
+    amat_lin, bmat_lin, cmat_lin, _ = approx.quad_coefficient_matrix(funs, alphas, 0)
     out = approx.quad_fun_from_matrix(alphas, amat_lin, bmat_lin, cmat_lin, s)
     fapprox_lin = out[:, 0]
 
