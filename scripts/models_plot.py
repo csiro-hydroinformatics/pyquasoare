@@ -59,7 +59,7 @@ parser.add_argument("-i", "--iparam", help="Parameter number", \
 args = parser.parse_args()
 
 ode_method_selected = args.ode_method
-ode_methods = ["radau", "rk45", ode_method_selected]
+ode_methods = ["radau", ode_method_selected]
 
 model_name_selected = args.model_name
 siteid_selected = args.siteid
@@ -109,6 +109,12 @@ LOGGER.log_dict(vars(args), "Command line arguments")
 #------------------------------------------------------------
 # @Plot
 #------------------------------------------------------------
+def symbounds(ax):
+    ylim = ax.get_ylim()
+    ym = np.abs(ylim).max()*1.5
+    ax.set_ylim((-ym, ym))
+    putils.line(ax, 1, 0, 0, 0, color="grey", linestyle=":", lw=0.8)
+
 lf = list(fdata.glob("*.hdf5"))
 for f in lf:
     # Get model name and siteid
@@ -133,7 +139,8 @@ for f in lf:
 
             cc = ["s1_min", "s1_max", "alpha1_min", "alpha1_max", \
                             "param"]
-            info[ode_method] = {cn: tb.attrs[cn] if cn in tb.attrs else np.nan for cn in cc}
+            info[ode_method] = {cn: tb.attrs[cn] if cn in tb.attrs \
+                                            else np.nan for cn in cc}
             tname = f"S{siteid}_{m}_fluxes{iparam_selected:03d}"
             try:
                 tb = gr[tname]
@@ -167,7 +174,7 @@ for f in lf:
                 ax2.axis("off")
                 continue
 
-            lab = f"{ode_method}"
+            lab = re.sub("_", " ", re.sub("^(c|py)_", "", ode_method))
             lw = 3 if ode_method == "radau" else 2
             se.plot(ax=ax1, label=lab, lw=lw)
 
@@ -177,6 +184,7 @@ for f in lf:
                 tax = ax1.twinx()
                 err.plot(ax=tax, lw=0.8, color="grey")
                 ax1.plot([], [], lw=0.8, color="grey", label="Error")
+                symbounds(tax)
 
 
             if ode_method == ode_method_selected and aname.startswith("flux")\
@@ -193,13 +201,15 @@ for f in lf:
                 tax = ax2.twinx()
                 tax.plot(s, fx_approx-fx_true, lw=0.8, color="grey")
                 ax2.plot([], [], lw=0.8, color="grey", label="Error")
+                symbounds(tax)
 
+        if aname == "s1":
+            ax1.legend(loc=2)
 
-        ax1.legend(loc=2, fontsize="x-small")
         title = aname.title()
         ax1.set(title=title, xlabel="")
 
-    theta = info.loc["param", "rk45"]
+    theta = info.loc["param", "radau"]
     ftitle = f"{siteid} - Model {model_name} theta={theta:0.1e}"
     fig1.suptitle(ftitle)
     fig2.suptitle(ftitle)
