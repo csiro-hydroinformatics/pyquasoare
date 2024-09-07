@@ -115,7 +115,7 @@ source_file = Path(__file__).resolve()
 froot = source_file.parent.parent
 fdata = froot / "outputs" / "simulations"
 
-fimg = froot / "images" / "simulations"
+fimg = froot / "images" / "figures"
 fimg.mkdir(exist_ok=True, parents=True)
 
 #------------------------------------------------------------
@@ -215,10 +215,11 @@ for f in lf:
                 s = fx["s"]
                 fx_true = fx[f"{aname}_true"]
                 fx_approx = fx[f"{aname}_approx"]
-                ax2.plot(s, fx_true, label="True flux")
+                ax2.plot(s, fx_true, lw=5, label="True flux")
                 m = " ".join(re.split("_", ode_method)[1:])
-                ax2.plot(s, fx_approx, label=f"{m} flux")
-                ax2.legend(loc=2, fontsize="large")
+                ax2.plot(s, fx_approx, lw=3, label=f"{m} flux")
+                if aname=="flux1":
+                    ax2.legend(loc=3, fontsize="large")
 
                 unit = "day$^{-1}$" if model_name.startswith("GR") \
                                 else "sec^{-1}"
@@ -232,8 +233,7 @@ for f in lf:
         if aname == "s1":
             ax1.legend(loc=2, fontsize="large")
 
-
-        title = varnames[model_name][aname]
+        title = f"({letters[iax]}) {varnames[model_name][aname]}"
         ax1.set(title=title, xlabel="")
 
         unit = "mm/day" if model_name.startswith("GR") else "m3/sec"
@@ -244,14 +244,16 @@ for f in lf:
             tax1.set_ylabel(f"Error [{unit}]")
         if not tax2 is None:
             tax2.set_ylabel(f"Error [{unit}]")
+            title = f"({letters[iax-1]}) {varnames[model_name][aname]}"
+            ax2.set(title=title)
 
 
     # Save file
     theta = info.loc["param", "radau"]
     base = f"{f.stem}_{model_name}_{theta:0.0f}"
-    fp = fimg / f"{base}_sim.{imgext}"
+    fp = fimg / f"figure_C_{base}_sim.{imgext}"
     fig1.savefig(fp, dpi=fdpi, transparent=ftransparent)
-    fp = fimg / f"{base}_fluxes.{imgext}"
+    fp = fimg / f"figure_B_{base}_fluxes.{imgext}"
     fig2.savefig(fp, dpi=fdpi, transparent=ftransparent)
 
     #putils.blackwhite(fp)

@@ -78,12 +78,10 @@ for ifile, f in enumerate(lf):
     LOGGER.info(f"Processing file {f.stem} - {ifile+1}/{nfiles}")
     with tables.open_file(f, "r") as h5:
         sims = {}
+        fluxes = {}
         results = []
         for group in h5.root:
             for tb in h5.list_nodes(group, "Leaf"):
-                if not re.search("sim", tb.name):
-                    continue
-
                 info = {}
                 cc = ["ode_method", "siteid", "model_name", \
                             "param", "iparam", "runtime", \
@@ -97,8 +95,15 @@ for ifile, f in enumerate(lf):
 
                 df = hdf5_utils.convert(tb[:])
                 method, iparam = info["ode_method"], info["iparam"]
-                sims[(method, iparam)] = df
-                results.append(info)
+                if re.search("sim", tb.name):
+                    sims[(method, iparam)] = df
+                    info["ntimestep"] = len(df)
+                    nalphas = int(re.sub(".*quasoare_", "", method))\
+                                if re.search("quasoare_", method) else 0
+                    info["nalphas"] = nalphas
+                    results.append(info)
+                else:
+                    fluxes[(method, iparam)] = df
 
         results = pd.DataFrame(results)
 
@@ -106,11 +111,13 @@ for ifile, f in enumerate(lf):
         nparams = results.iparam.max()+1
         methods = results.ode_method.unique()
 
-        cabs = [f"ERRABSMAX_FLUX{f}" for f in range(1, 5)]
-        cbal = [f"ERRBAL_FLUX{f}[%]" for f in range(1, 5)]
+        cabs_sim = [f"ERRABSMAX_SIM_FLUX{f}" for f in range(1, 5)]
+        cbal = [f"ERRBAL_SIM_FLUX{f}[%]" for f in range(1, 5)]
+        cabs_interp = [f"ERRABSMAX_INTERP_FLUX{f}" for f in range(1, 5)]
         crunt = "RUNTIME_RATIO[%]"
         cniter = "NITER_RATIO[%]"
-        results.loc[:, cabs+cbal+[crunt, cniter]] = np.nan
+        cc = cabs_sim+cbal+cabs_interp+[crunt, cniter]
+        results.loc[:, cc] = np.nan
         model_names = results.loc[:, "model_name"].unique()
 
         for iparam, model_name in prod(range(nparams), model_names):
@@ -140,7 +147,7 @@ for ifile, f in enumerate(lf):
                 sim = sims[(method, iparam)].filter(regex="flux", axis=1)
 
                 eabsmax = np.abs(sim-ref).max()
-                results.loc[idx, cabs] = eabsmax.values
+                results.loc[idx, cabs_sim] = eabsmax.values
 
                 ebal = np.abs(np.sum(sim-ref, axis=0))\
                             /np.abs(np.sum(ref, axis=0))*100
@@ -152,12 +159,23 @@ for ifile, f in enumerate(lf):
                 niter = results.loc[idx, "niter_mean"].squeeze()
                 results.loc[idx, cniter] = niter/ref_niter*100
 
+                # flux approx
+                key = (method, iparam)
+                if key in fluxes:
+                    fx = fluxes[key]
+                    ft = fx.filter(regex="_true", axis=1)
+                    ft.columns = [re.sub("_.*", "", cn) for cn in ft.columns]
+                    fa = fx.filter(regex="_approx", axis=1)
+                    fa.columns = [re.sub("_.*", "", cn) for cn in fa.columns]
+                    results.loc[idx, cabs_interp] = np.abs(fa-ft).max().values
+
     all_results.append(results)
 
 fr = fout / "results.csv"
 all_results = pd.concat(all_results)
 csv.write_csv(all_results, fr, "Concatenated results", \
                 source_file, compress=False, lineterminator="\n", \
-                float_format="%8.8e")
+                float_format="%0.8e")
+
 LOGGER.completed()
 
