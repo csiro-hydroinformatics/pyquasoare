@@ -111,7 +111,7 @@ steps:
     testResultsFiles: '**/test-*.xml'
     testRunTitle: 'Publish test results for Python $(python.version)'
 
-- task: PublishCodeCoverageResults@1
+- task: PublishCodeCoverageResults@2
   displayName: 'Publish Cobertura Coverage Report'
   inputs:
     codeCoverageTool: Cobertura
