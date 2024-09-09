@@ -237,12 +237,14 @@ for f in lf:
         ax1.set(title=title, xlabel="")
 
         unit = "mm/day" if model_name.startswith("GR") else "m3/sec"
-        nm = "Store level" if aname=="s1" else "Flux"
+        unit = "-" if aname == "s1" else unit
+        nm = "Dimensionless store level" if aname=="s1" else "Flux"
         ax1.set_ylabel(f"{nm} [{unit}]")
 
         if not tax1 is None:
             tax1.set_ylabel(f"Error [{unit}]")
         if not tax2 is None:
+            unit = "day$^{-1}$" if model_name.startswith("GR") else "sec$^{-1}"
             tax2.set_ylabel(f"Error [{unit}]")
             title = f"({letters[iax-1]}) {varnames[model_name][aname]}"
             ax2.set(title=title)

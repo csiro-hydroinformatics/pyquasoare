@@ -60,6 +60,10 @@ metrics = {
     #"NITER_RATIO[%]": "Iteration ratio"
 }
 
+# Include error for each flux
+#for fx in range(4):
+#    metrics[f"ERRABSMAX_SIM_FLUX{fx+1}"] = f"Max abs error flux {fx+1}"
+
 ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n50", "quasoare\n500"]
 ode_method_worst = "quasoare\n10"
 
@@ -155,6 +159,7 @@ for iax, (aname, ax) in enumerate(axs.items()):
 
 
     idx = results.model_name==model_name
+    idx &= results.loc[:, metric].notnull()
     if idx.sum()==0:
         ax.axis("off")
         continue
