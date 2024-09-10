@@ -171,7 +171,6 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
                                 -c_eta_fun(a*(s0-sbar)/qD, Delta))/qD;
         }
     }
-    return c_get_nan();
 }
 
 
@@ -393,7 +392,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         /* Try integrating up to the end of the time step */
-        if(isnull(funval))
+        if(fabs(funval)<REZEQ_EPS)
             s_end = s_start;
         else
             s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
@@ -438,7 +437,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
             t_end = t_start+c_quad_inverse(aoj, boj, coj,
                                             Delta, qD, sbar,
                                             s_start, s_end);
-            t_end = t_end<t_final ? t_end : t_final;
+            t_end = t_end<t_final & isfinite(t_end) ? t_end : t_final;
         }
 
         if(REZEQ_DEBUG==1){

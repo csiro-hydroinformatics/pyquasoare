@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import scipy.integrate as sci_integrate
 
-from hydrodiy.io import iutils
+from hydrodiy.io import iutils, csv
 
 from pyrezeq import approx, integrate, slow, benchmarks, steady
 
@@ -692,3 +692,28 @@ def test_reservoir_equation_gr4j(allclose):
 
             assert np.allclose(expected, sims, atol=atol, rtol=rtol)
 
+
+
+def test_reservoir_interception(allclose):
+    fs = FTEST / "test_data_interception.csv"
+    scalings, _ = csv.read_csv(fs)
+    scalings = np.ascontiguousarray(scalings.values)[:, :2]
+
+    theta = 10.
+    fP = lambda x: 1-min(1, max(0, x))**6
+    fE = lambda x: -1+min(1, max(0, 1-x))**6
+
+    # .. first go
+    alphas = np.linspace(0, 5, 100)
+    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+    stdy = steady.quad_steady_scalings(alphas, scalings, amat, bmat, cmat)
+    # .. second go
+    alphas = np.linspace(0, np.nanmax(stdy), 50)
+    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+
+
+    s_start = 0.
+    for t in range(len(scalings)):
+        niter, s_end, sim = integrate.quad_integrate(alphas, scalings[t],\
+                                    amat, bmat, cmat, 0., s_start, 1.)
+        s_start = s_end
