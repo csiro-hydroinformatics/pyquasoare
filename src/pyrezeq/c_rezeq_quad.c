@@ -437,7 +437,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
             t_end = t_start+c_quad_inverse(aoj, boj, coj,
                                             Delta, qD, sbar,
                                             s_start, s_end);
-            t_end = t_end<t_final & isfinite(t_end) ? t_end : t_final;
+            t_end = t_end<t_final && fabs(funval)>REZEQ_EPS ? t_end : t_final;
         }
 
         if(REZEQ_DEBUG==1){

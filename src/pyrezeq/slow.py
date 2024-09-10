@@ -360,7 +360,7 @@ def quad_integrate(alphas, scalings, \
             # Increment time
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
-            t_end = min(t_end, t_final)
+            t_end = t_final if t_end>t_final or abs(funval)<REZEQ_EPS else t_end
 
         if debug:
             print(f"\n[{nit}] low={extrapolating_low}"\

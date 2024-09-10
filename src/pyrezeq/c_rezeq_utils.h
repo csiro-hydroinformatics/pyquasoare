@@ -38,7 +38,7 @@
 #define REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS 702
 
 /* Define small number */
-#define REZEQ_EPS 1e-15
+#define REZEQ_EPS 1e-12
 #define REZEQ_ATOL 1e-7
 #define REZEQ_RTOL 1e-5
 
