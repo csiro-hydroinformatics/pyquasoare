@@ -76,7 +76,9 @@ def quad_steady_scalings(alphas, scalings, \
         stdy = quad_steady(a, b, c)
 
         # Keep steady solution within band
-        out_of_range = (stdy-a0)*(a1-stdy)<0
+        # .. ignore nan
+        with np.errstate(invalid="ignore"):
+            out_of_range = (stdy-a0)*(a1-stdy)<0
         stdy[out_of_range] = np.nan
         jc = j+1
         steady[:, 2*jc:(2*jc+2)] = stdy

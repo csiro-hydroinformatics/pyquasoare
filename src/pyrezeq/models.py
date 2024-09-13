@@ -10,7 +10,8 @@ else:
 def quad_model(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
-                c_matrix_noscaling, s0, timestep):
+                c_matrix_noscaling, s0, timestep, \
+                errors="ignore"):
 
     nval = scalings.shape[0]
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
@@ -22,7 +23,8 @@ def quad_model(alphas, scalings, \
                     b_matrix_noscaling, \
                     c_matrix_noscaling, \
                     s0, timestep, niter, s1, fluxes)
-    if ierr>0:
+
+    if ierr>0 and errors=="raise":
         mess = c_pyrezeq.get_error_message(ierr).decode()
         raise ValueError(f"c_pyrezeq.quad_model returns {ierr} ({mess})")
 

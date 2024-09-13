@@ -399,7 +399,8 @@ def quad_integrate(alphas, scalings, \
 def quad_model(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
-                c_matrix_noscaling, s0, timestep):
+                c_matrix_noscaling, s0, timestep, \
+                errors="ignore"):
 
     nval = scalings.shape[0]
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
@@ -408,11 +409,17 @@ def quad_model(alphas, scalings, \
     t0 = 0.
 
     for t in range(nval):
-        niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings[t], \
+        try:
+            niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings[t], \
                         a_matrix_noscaling, \
                         b_matrix_noscaling, \
                         c_matrix_noscaling, \
                         t0, s0, timestep)
+        except Exception as err:
+            niter[t] = -1
+            if errors == "raise":
+                raise err
+
         s0 = s1[t]
 
     return niter, s1, fluxes

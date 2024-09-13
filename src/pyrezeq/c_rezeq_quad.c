@@ -493,7 +493,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
                             double * c_matrix_noscaling,
                             double s0, int * niter,
                             double * s1, double * fluxes) {
-    int ierr, t;
+    int ierr, ierr_final, t;
     double t0=0.;
 
     for(t=0; t<nval; t++){
@@ -506,12 +506,14 @@ int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
                             &(niter[t]),
                             &(s1[t]),
                             &(fluxes[nfluxes*t]));
+
+        ierr_final = ierr>ierr_final ? ierr : ierr_final;
         if(ierr>0)
-            return ierr;
+            niter[t] = -1;
 
         /* Loop initial state */
         s0 = s1[t];
     }
 
-    return 0;
+    return ierr_final;
 }
