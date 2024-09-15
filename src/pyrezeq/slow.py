@@ -1,3 +1,4 @@
+import warnings
 import math
 import numpy as np
 
@@ -7,6 +8,7 @@ from scipy.integrate import solve_ivp
 from pyrezeq.approx import REZEQ_EPS, REZEQ_PI, REZEQ_ATOL, REZEQ_RTOL
 from pyrezeq.approx import isequal, notequal, isnull, notnull
 from pyrezeq.integrate import quad_constants
+from pyrezeq.models import ERRORS
 
 def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -119,10 +121,10 @@ def quad_grad(a, b, c, s):
 
 
 def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
-    tmp = a*(s0-sbar)
     if isnull(a):
         delta_tmax = np.inf
     else:
+        tmp = a*(s0-sbar)
         if isnull(Delta):
             delta_tmax = np.inf if tmp<=0 else 1./tmp
         elif Delta<0:
@@ -188,6 +190,9 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector, \
     b = boj
     c = coj
 
+    if isnull(tau):
+        return
+
     # Integrate S and S2
     if isnull(a) and isnull(b):
         integS = s0*tau+c*tau2/2
@@ -212,10 +217,12 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector, \
 
     # increment fluxes
     if isnull(a):
-        fluxes += aj_vector*integS2+bj_vector*integS+cj_vector*tau
+        deltaf = aj_vector*integS2+bj_vector*integS+cj_vector*tau
     else:
-        fluxes += aj_vector/a*(s1-s0)+(bj_vector-aj_vector*b/a)*integS\
+        deltaf = aj_vector/a*(s1-s0)+(bj_vector-aj_vector*b/a)*integS\
                             +(cj_vector-aj_vector*c/a)*tau
+
+    fluxes += deltaf
 
 
 # Integrate reservoir equation over 1 time step and compute associated fluxes
@@ -311,6 +318,10 @@ def quad_integrate(alphas, scalings, \
             boj += b
             coj += c
 
+        # Round up coefficients
+        aoj = 0. if abs(aoj)<REZEQ_EPS else aoj
+        boj = 0. if abs(boj)<REZEQ_EPS else boj
+
         # Discriminant
         Delta, qD, sbar = quad_constants(aoj, boj, coj)
 
@@ -368,7 +379,7 @@ def quad_integrate(alphas, scalings, \
                     +f"/ fun={funval:3.3e}"\
                     +f"/ t={t_start:3.3e}>{t_end:3.3e}"\
                     +f"/ j={jalpha}>{jalpha_next}"\
-                    +f" / s={s_start:3.3e}>{s_end:3.3e}\n")
+                    +f" / s={s_start:3.3e}>{s_end:3.3e}")
 
         # Increment fluxes during the last interval
         quad_fluxes(a_vect, b_vect, c_vect, \
@@ -400,8 +411,8 @@ def quad_model(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, s0, timestep, \
-                errors="ignore"):
-
+                errors="ignore", debug=False):
+    assert errors in ERRORS
     nval = scalings.shape[0]
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
     niter = np.zeros(nval, dtype=np.int32)
@@ -414,11 +425,13 @@ def quad_model(alphas, scalings, \
                         a_matrix_noscaling, \
                         b_matrix_noscaling, \
                         c_matrix_noscaling, \
-                        t0, s0, timestep)
+                        t0, s0, timestep, debug=debug)
         except Exception as err:
             niter[t] = -1
             if errors == "raise":
                 raise err
+            elif errors == "warn":
+                warnings.warn(str(err))
 
         s0 = s1[t]
 

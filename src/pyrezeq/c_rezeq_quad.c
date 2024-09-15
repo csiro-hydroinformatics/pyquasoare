@@ -101,12 +101,13 @@ double c_quad_delta_t_max(double a, double b, double c,
                             double Delta, double qD, double sbar,
                             double s0){
     double delta_tmax=0.;
-    double tmp = a*(s0-sbar);
+    double tmp;
 
     if(isnull(a)){
         delta_tmax = c_get_inf();
     }
     else{
+        tmp = a*(s0-sbar);
         if(isnull(Delta))
             delta_tmax = tmp<=0 ? c_get_inf() : 1./tmp;
         else if (Delta<0)
@@ -196,6 +197,9 @@ int c_quad_fluxes(int nfluxes,
 
     if(t1<t0)
         return REZEQ_QUAD_TIME_TOOLOW;
+
+    if(isnull(tau))
+        return 0;
 
     /* Calculate integral of S and S^2 */
     if (isnull(a) && isnull(b)) {
@@ -372,8 +376,13 @@ int c_quad_integrate(int nalphas, int nfluxes,
             boj += b;
             coj += c;
         }
+
+        /* Check coefficients */
         if(isnan(aoj) || isnan(boj) || isnan(coj))
             return REZEQ_QUAD_NAN_COEFF;
+
+        aoj = fabs(aoj)<REZEQ_EPS ? 0. : aoj;
+        boj = fabs(boj)<REZEQ_EPS ? 0. : boj;
 
         /* Compute discriminant variables */
         c_quad_constants(aoj, boj, coj, constants);

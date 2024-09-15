@@ -717,3 +717,4 @@ def test_reservoir_interception(allclose):
         niter, s_end, sim = integrate.quad_integrate(alphas, scalings[t],\
                                     amat, bmat, cmat, 0., s_start, 1.)
         s_start = s_end
+
