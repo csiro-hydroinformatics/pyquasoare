@@ -395,7 +395,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
         /* Check continuity except for first iteration */
         if(nit>1){
-            if(notequal(funval_prev, funval_prev, REZEQ_ATOL, REZEQ_RTOL)) {
+            if(notequal(funval_prev, funval, REZEQ_ATOL, REZEQ_RTOL)) {
                 return REZEQ_QUAD_NOT_CONTINUOUS;
             }
         }
@@ -450,10 +450,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         if(REZEQ_DEBUG==1){
-            fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e"
+            fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e>%3.3e"
                     "/ t=%3.3e>%3.3e / j=%d>%d / s=%3.3e>%3.3e\n",
                     nit, extrapolating_low, extrapolating_high,
-                    funval, t_start, t_end, jalpha, jalpha_next,
+                    funval_prev, funval, t_start, t_end, jalpha, jalpha_next,
                     s_start, s_end);
         }
         /* Increment fluxes during the last interval */
@@ -494,15 +494,16 @@ int c_quad_integrate(int nalphas, int nfluxes,
 * - other input args identical to c_integrate
 * - s1 [nval] : final states
 * - fluxes [nval, nfluxes] : flux computed
+* - errors : 0=ignore, 1=raise, 2=warn
 **/
-int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
+int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep,
                             double * alphas, double * scalings,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
                             double s0, int * niter,
                             double * s1, double * fluxes) {
-    int ierr, ierr_final, t;
+    int ierr, t, j;
     double t0=0.;
 
     for(t=0; t<nval; t++){
@@ -516,13 +517,21 @@ int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
                             &(s1[t]),
                             &(fluxes[nfluxes*t]));
 
-        ierr_final = ierr>ierr_final ? ierr : ierr_final;
-        if(ierr>0)
-            niter[t] = -1;
+        if(ierr>0){
+            if(errors==1){
+                return ierr;
+            }
+            else if (errors==0 || errors==2){
+                niter[t] = -1;
+                s1[t] = s0;
+                for(j=0;j<nfluxes;j++)
+                    fluxes[nfluxes*t+j] = c_get_nan();
+            }
+        }
 
         /* Loop initial state */
         s0 = s1[t];
     }
 
-    return ierr_final;
+    return 0;
 }

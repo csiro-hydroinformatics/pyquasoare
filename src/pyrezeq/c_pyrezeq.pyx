@@ -66,7 +66,8 @@ cdef extern from 'c_rezeq_quad.h':
                                 double timestep,
                                 int *niter, double * s1, double * fluxes)
 
-    int c_quad_model(int nalphas, int nfluxes, int nval, double timestep,
+    int c_quad_model(int nalphas, int nfluxes, int nval, int errors,
+                            double timestep,
                             double * alphas, double * scalings,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
@@ -327,7 +328,7 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def quad_model(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
+def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         np.ndarray[double, ndim=2, mode='c'] scalings not None,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
@@ -373,7 +374,7 @@ def quad_model(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         raise ValueError("fluxes.shape[0] != nval")
 
     # Run C code
-    return c_quad_model(nalphas, nfluxes, nval, timestep,
+    return c_quad_model(nalphas, nfluxes, nval, errors, timestep,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),

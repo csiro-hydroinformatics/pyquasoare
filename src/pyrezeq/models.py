@@ -15,27 +15,29 @@ def quad_model(alphas, scalings, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, s0, timestep, \
                 errors="ignore"):
+
     assert errors in ERRORS
     nval = scalings.shape[0]
     fluxes = np.zeros(scalings.shape, dtype=np.float64)
     niter = np.zeros(nval, dtype=np.int32)
     s1 = np.zeros(nval, dtype=np.float64)
+    ierrors = np.int32(ERRORS.index(errors))
 
-    ierr = c_pyrezeq.quad_model(alphas, scalings, \
+    ierr = c_pyrezeq.quad_model(ierrors, alphas, scalings, \
                     a_matrix_noscaling, \
                     b_matrix_noscaling, \
                     c_matrix_noscaling, \
                     s0, timestep, niter, s1, fluxes)
 
-    if ierr>0:
+    if errors=="raise" and ierr>0:
         mess = c_pyrezeq.get_error_message(ierr).decode()
-        errmess = f"c_pyrezeq.quad_model returns {ierr} ({mess})"
+        raise ValueError(f"c_pyrezeq.quad_model returns {ierr} ({mess})")
 
-        if errors=="raise":
-            raise ValueError(errmess)
-
-        elif errors=="warn":
-            warnings.warn(errmess)
+    if errors=="warn":
+        if np.any(niter<0):
+            nerr = (niter<0).sum()
+            mess = f"{nerr} errors when running c_pyrezeq.quad_model"
+            warnings.warn(mess)
 
     return niter, s1, fluxes
 

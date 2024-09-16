@@ -26,6 +26,52 @@ source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_models.log")
 
+
+def test_quad_model_errors(allclose):
+    nalphas = 20
+    alphas = np.linspace(0., 1.2, nalphas)
+    start, end = "2017-01", "2022-12-31"
+    X1 = 200
+    LOGGER.info("")
+
+    # Compute approx coefs and introduce discontinuities
+    # (i.e. should generate errors)
+    fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
+    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat[:, 0] = np.random.uniform(-10, 10, len(amat))
+
+    # Get scaling data
+    siteid = data_reader.SITEIDS[0]
+    df = data_reader.get_data(siteid, "daily")
+    df = df.loc[start:end]
+    nval = len(df)
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    climdiff = inputs[:, 0]-inputs[:, 1]
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
+                                np.maximum(-climdiff, 0.)/X1, \
+                                np.ones(nval)])
+
+    # Run model without raising
+    s0 = 1./2
+    niter, s1, fx = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1.)
+    ierr = niter<0
+    assert np.any(ierr)
+    assert np.all(np.isnan(fx[ierr]))
+
+    # Trigger warnings
+    with pytest.warns(Warning):
+        niter, s1, fx = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1., \
+                                    errors="warn")
+
+    # Trigger error
+    with pytest.raises(ValueError, match="continuous"):
+        niter, s1, fx = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1., \
+                                    errors="raise")
+
+
 def test_quad_model(allclose):
     nalphas = 20
     alphas = np.linspace(0., 1.2, nalphas)
@@ -36,7 +82,7 @@ def test_quad_model(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):

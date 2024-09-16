@@ -303,6 +303,7 @@ def test_function_runtime():
         mess = f"Runtime of fun {fun:4s} : {rt:2.2e}ms ({rx2:0.0f}% of x2)"
         LOGGER.info(mess)
 
+
 def test_quad_fun(allclose, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)
