@@ -695,26 +695,26 @@ def test_reservoir_equation_gr4j(allclose):
 
 
 def test_reservoir_interception(allclose):
-    fs = FTEST / "test_data_interception.csv"
-    scalings, _ = csv.read_csv(fs)
-    scalings = np.ascontiguousarray(scalings.values)[:, :2]
+    siteid = "203900"
+    df = data_reader.get_data(siteid, "daily")
+    P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
 
-    theta = 10.
-    fP = lambda x: 1-min(1, max(0, x))**6
-    fE = lambda x: -1+min(1, max(0, 1-x))**6
+    theta = 0.1
+    scalings = np.column_stack([P/theta, E/theta])
 
-    # .. first go
-    alphas = np.linspace(0, 5, 100)
+    nuP, nuE = 8., 8.
+    fP = lambda x: 1-x**nuP
+    fE = lambda x: -1+(1-x)**nuE
+
+    alphas = np.linspace(0, 1.05, 10)
     amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
-    stdy = steady.quad_steady_scalings(alphas, scalings, amat, bmat, cmat)
-    # .. second go
-    alphas = np.linspace(0, np.nanmax(stdy), 50)
-    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
-
 
     s_start = 0.
+    niters = []
+    intfun = slow.quad_integrate
     for t in range(len(scalings)):
-        niter, s_end, sim = integrate.quad_integrate(alphas, scalings[t],\
-                                    amat, bmat, cmat, 0., s_start, 1.)
+        niter, s_end, sim = intfun(alphas, scalings[t],\
+                                    amat, bmat, cmat, 0., s_start, 1.,\
+                                    debug=True)
         s_start = s_end
 
