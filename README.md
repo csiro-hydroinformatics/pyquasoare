@@ -4,18 +4,18 @@
 Python and C package to solve the reservoir differential equation using a
 piecewise quadratic interpolation following the QuaSoARe method.
 
-# What is pydaisi?
+# What is pyquasoare?
 This package implements the Quadratic Solution of the Approximate Reservoir 
 Equation (QuaSoARe) method described in the following paper:
 Lerat, J. (2024),  
 "Quadratic solution of the approximate reservoir equation (QUASOARE)", HESS, Submitted.
 
 # Installation
-- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env_mini2.yml] (env_mini2.yml) file in this repository.
+- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_mini2.yml] (env_mini2.yml) file in this repository.
 - Git clone this repository and run `pip install .`
 
 # Basic use
-Solution of the production store from the GR4J daily rainfall-runoff model using QuaSoAre:
+Solution of the production store from the [![GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257)] daily rainfall-runoff model using QuaSoAre:
 
 ```python
 from pathlib import Path
@@ -28,7 +28,7 @@ from hydrodiy.io import csv
 # Package root path (might need modification)
 froot = Path(__file__).parent.parent
 
-# Get [![GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257)] production store flux functions. 
+# Get flux functions for the GR4J production store
 # The store capacity is X1 (mm) and its filling level is S. 
 #
 # P is the daily rainfall, E is the daily evapotranspiration.
