@@ -1,4 +1,4 @@
-#include "c_rezeq_utils.h"
+#include "c_quasoare_utils.h"
 
 double c_get_nan() {
     /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
@@ -59,7 +59,7 @@ int c_quad_constants(double a, double b, double c, double values[3]){
     values[0] = Delta;
     values[1] = qD;
     values[2] = -b/2./a;
-    return qD>=0. ? 0. : REZEQ_UTILS_QD_NEGATIVE;
+    return qD>=0. ? 0. : QUASOARE_UTILS_QD_NEGATIVE;
 }
 
 double c_eta_fun(double x, double Delta){
@@ -103,61 +103,61 @@ int c_get_error_message(int err_code, char message[100]){
     int ierr=0;
     int len=100;
 
-    if(err_code == REZEQ_ERROR_INTEGRATE_WRONG_NU)
+    if(err_code == QUASOARE_ERROR_INTEGRATE_WRONG_NU)
         strncpy(message, "Invalid nu", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_OUT_OF_BOUNDS)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_OUT_OF_BOUNDS)
         strncpy(message, "j index out of bounds", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_COEFF)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_NAN_COEFF)
         strncpy(message, "NaN values in coefficients", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_NOT_CONTINUOUS)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_NOT_CONTINUOUS)
         strncpy(message, "Approx function not continuous, please check coefficients", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_NAN_SIM)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_NAN_SIM)
         strncpy(message, "Simulation produces nan", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_NO_CONVERGENCE)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
-    else if(err_code == REZEQ_ERROR_NFLUXES_TOO_LARGE)
+    else if(err_code == QUASOARE_ERROR_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes too large", len);
 
-    else if(err_code == REZEQ_ERROR_INTEGRATE_TSTART_EQUAL_TEND)
+    else if(err_code == QUASOARE_ERROR_INTEGRATE_TSTART_EQUAL_TEND)
         strncpy(message, "end time identical to start time", len);
 
-    else if(err_code == REZEQ_QUAD_APPROX_SAMEALPHA)
+    else if(err_code == QUASOARE_QUAD_APPROX_SAMEALPHA)
         strncpy(message, "Collapsed approximation band", len);
 
-    else if(err_code == REZEQ_QUAD_TIME_TOOLOW)
+    else if(err_code == QUASOARE_QUAD_TIME_TOOLOW)
         strncpy(message, "Integration time is too low", len);
 
-    else if(err_code == REZEQ_QUAD_FAILEDSUMCHECK)
+    else if(err_code == QUASOARE_QUAD_FAILEDSUMCHECK)
         strncpy(message, "Coefficients sum is not consistent", len);
 
-    else if(err_code == REZEQ_QUAD_NFLUXES_TOO_LARGE)
+    else if(err_code == QUASOARE_QUAD_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes is too large", len);
 
-    else if(err_code == REZEQ_QUAD_NAN_COEFF)
+    else if(err_code == QUASOARE_QUAD_NAN_COEFF)
         strncpy(message, "Coefficient is nan", len);
 
-    else if(err_code == REZEQ_QUAD_NOT_CONTINUOUS)
+    else if(err_code == QUASOARE_QUAD_NOT_CONTINUOUS)
         strncpy(message, "Function is not continuous", len);
 
-    else if(err_code == REZEQ_QUAD_NO_CONVERGENCE)
+    else if(err_code == QUASOARE_QUAD_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
-    else if(err_code == REZEQ_UTILS_QD_NEGATIVE)
+    else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
 
-    else if(err_code == REZEQ_BENCH_NSUBDIV_TOO_HIGH)
+    else if(err_code == QUASOARE_BENCH_NSUBDIV_TOO_HIGH)
         strncpy(message, "Number of sub-division too high", len);
 
-    else if(err_code == REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS)
+    else if(err_code == QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS)
         strncpy(message, "Parameters out of bounds", len);
 
-    else if(err_code == REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS)
+    else if(err_code == QUASOARE_BENCH_INITIALISATION_OUT_OF_BOUNBDS)
         strncpy(message, "Initialisation out of bounds", len);
 
     else

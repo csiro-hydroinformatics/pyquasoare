@@ -1,22 +1,22 @@
 import math
 import numpy as np
 
-from pyrezeq import has_c_module, approx, models
+from pyquasoare import has_c_module, approx, models
 
 if has_c_module():
-    import c_pyrezeq
+    import c_pyquasoare
 else:
-    raise ImportError("Cannot run rezeq without C code. Please compile C code.")
+    raise ImportError("Cannot run quasoare without C code. Please compile C code.")
 
 
 def quad_steady(a, b, c):
     if approx.all_scalar(a, b, c):
         stdy = np.zeros(2)
-        ierr = c_pyrezeq.quad_steady(a, b, c, stdy)
+        ierr = c_pyquasoare.quad_steady(a, b, c, stdy)
     else:
         a, b, c = approx.get_vectors(a, b, c)
         stdy = np.zeros((len(a), 2))
-        ierr = c_pyrezeq.quad_steady_vect(a, b, c, stdy)
+        ierr = c_pyquasoare.quad_steady_vect(a, b, c, stdy)
     return stdy
 
 

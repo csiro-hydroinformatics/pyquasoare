@@ -1,5 +1,5 @@
-#ifndef __REZEQ_INTEG__
-#define __REZEQ_INTEG__
+#ifndef __QUASOARE_QUAD__
+#define __QUASOARE_QUAD__
 
 #include <math.h>
 #include <stdlib.h>
@@ -7,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_rezeq_utils.h"
+#include "c_quasoare_utils.h"
 
 double c_quad_fun(double a, double b, double c, double s);
 double c_quad_grad(double a, double b, double c, double s);

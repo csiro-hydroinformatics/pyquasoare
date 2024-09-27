@@ -9,8 +9,8 @@ import time
 
 from hydrodiy.io import iutils
 
-from pyrezeq import approx, slow
-import c_pyrezeq
+from pyquasoare import approx, slow
+import c_pyquasoare
 
 np.random.seed(5446)
 
@@ -246,15 +246,15 @@ def generate_samples(ntry, selcase, request):
 # ----- TESTS --------------------------------------------
 
 def test_accuracy():
-    eps = abs(approx.REZEQ_ACCURACY)
+    eps = abs(approx.QUASOARE_ACCURACY)
     assert eps>0
 
 def test_get_nan():
-    nan = c_pyrezeq.get_nan()
+    nan = c_pyquasoare.get_nan()
     assert np.isnan(nan)
 
 def test_get_inf():
-    inf = c_pyrezeq.get_inf()
+    inf = c_pyquasoare.get_inf()
     assert inf>0
     assert np.isinf(inf)
 
@@ -416,7 +416,7 @@ def test_quad_coefficient_matrix(allclose, reservoir_function):
     isin = (s>=alpha0)&(s<=alpha1)
 
     # Check max nfluxes
-    nf = approx.REZEQ_NFLUXES_MAX
+    nf = approx.QUASOARE_NFLUXES_MAX
     fs = [lambda x: x**a for a in np.linspace(1, 2, nf+1)]
     with pytest.raises(ValueError, match="nfluxes"):
         amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fs, alphas)

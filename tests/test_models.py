@@ -12,7 +12,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils, csv
 
-from pyrezeq import approx, models, slow, benchmarks, integrate, steady
+from pyquasoare import approx, models, slow, benchmarks, integrate, steady
 
 from test_approx import generate_samples, reservoir_function
 

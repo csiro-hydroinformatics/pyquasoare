@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils, csv
 
-from pyrezeq import approx, integrate, slow, benchmarks, steady
+from pyquasoare import approx, integrate, slow, benchmarks, steady
 
 from test_approx import generate_samples, reservoir_function
 
@@ -345,7 +345,7 @@ def test_increment_fluxes(allclose, generate_samples):
         s1 = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t1)
 
         # Check error if vectors too long
-        n = approx.REZEQ_NFLUXES_MAX+1
+        n = approx.QUASOARE_NFLUXES_MAX+1
         al = np.concatenate([avect, np.zeros(n)])
         bl = np.concatenate([bvect, np.zeros(n)])
         cl = np.concatenate([cvect, np.zeros(n)])

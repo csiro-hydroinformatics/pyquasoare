@@ -16,14 +16,14 @@ def read(fname):
         return fo.read()
 
 # C extensions
-ext_rezeq=Extension(name="c_pyrezeq",
+ext_quasoare=Extension(name="c_pyquasoare",
     sources=[
-        "src/pyrezeq/c_pyrezeq.pyx",
-        "src/pyrezeq/c_rezeq_utils.c",
-        "src/pyrezeq/c_rezeq_steady.c",
-        "src/pyrezeq/c_rezeq_quad.c",
-        "src/pyrezeq/c_nonlinrouting.c",
-        "src/pyrezeq/c_gr4jprod.c"
+        "src/pyquasoare/c_pyquasoare.pyx",
+        "src/pyquasoare/c_quasoare_utils.c",
+        "src/pyquasoare/c_quasoare_steady.c",
+        "src/pyquasoare/c_quasoare_quad.c",
+        "src/pyquasoare/c_nonlinrouting.c",
+        "src/pyquasoare/c_gr4jprod.c"
     ],
     extra_cflags=["-O3"],
     extra_compile_args=["-ffast-math"],
@@ -34,18 +34,18 @@ cmdclass["build_ext"] = build_ext
 
 # Package config
 setup(
-    name="pyrezeq",
+    name="pyquasoare",
     author= "Julien Lerat",
     author_email= "julien.lerat@csiro.au",
-    url= "https://github.com/csiro-hydroinformatics/pyrezeq",
-    download_url= "hhttps://github.com/csiro-hydroinformatics/pyrezeq/tags",
+    url= "https://github.com/csiro-hydroinformatics/pyquasoare",
+    download_url= "hhttps://github.com/csiro-hydroinformatics/pyquasoare/tags",
     version=versioneer.get_version(),
     description= "Solve the reservoir equation",
     long_description= read("README.md"),
     packages=find_packages(),
     package_dir={"": "src"},
     package_data={
-        "pyrezeq": [
+        "pyquasoare": [
             "tests/*.zip"
         ],
     },
@@ -57,7 +57,7 @@ setup(
         "pandas >= 0.16"
     ],
     cmdclass=cmdclass,
-    ext_modules=[ext_rezeq],
+    ext_modules=[ext_quasoare],
     classifiers=[
         "Operating System :: OS Independent",
         "Intended Audience :: Developers",

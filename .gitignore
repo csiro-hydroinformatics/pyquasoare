@@ -46,7 +46,7 @@ logs/
 images/
 data/
 outputs/
-src/pyrezeq/c_pyrezeq.c
+src/pyquasoare/c_pyquasoare.c
 .gitattributes
 *.png
 *.swp

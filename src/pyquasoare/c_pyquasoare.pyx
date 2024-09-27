@@ -4,12 +4,12 @@ cimport numpy as np
 np.import_array()
 
 # -- HEADERS --
-cdef extern from 'c_rezeq_utils.h':
-    cdef double REZEQ_EPS
-    cdef double REZEQ_ATOL
-    cdef double REZEQ_RTOL
-    cdef double REZEQ_PI
-    cdef int REZEQ_NFLUXES_MAX
+cdef extern from 'c_quasoare_utils.h':
+    cdef double QUASOARE_EPS
+    cdef double QUASOARE_ATOL
+    cdef double QUASOARE_RTOL
+    cdef double QUASOARE_PI
+    cdef int QUASOARE_NFLUXES_MAX
 
     double c_get_inf()
     double c_get_nan()
@@ -24,7 +24,7 @@ cdef extern from 'c_rezeq_utils.h':
     int c_get_error_message(int err_code, char message[100])
 
 
-cdef extern from 'c_rezeq_quad.h':
+cdef extern from 'c_quasoare_quad.h':
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
 
@@ -93,11 +93,11 @@ cdef extern from 'c_gr4jprod.h':
 def __cinit__(self):
     pass
 
-C_REZEQ_EPS = REZEQ_EPS
-C_REZEQ_ATOL = REZEQ_ATOL
-C_REZEQ_RTOL = REZEQ_RTOL
-C_REZEQ_PI = REZEQ_PI
-C_REZEQ_NFLUXES_MAX = REZEQ_NFLUXES_MAX
+C_QUASOARE_EPS = QUASOARE_EPS
+C_QUASOARE_ATOL = QUASOARE_ATOL
+C_QUASOARE_RTOL = QUASOARE_RTOL
+C_QUASOARE_PI = QUASOARE_PI
+C_QUASOARE_NFLUXES_MAX = QUASOARE_NFLUXES_MAX
 
 def get_nan():
     return c_get_nan()
@@ -256,8 +256,8 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
     # Check dimensions
     cdef int i
     cdef int nfluxes = aj_vector.shape[0]
-    if nfluxes>REZEQ_NFLUXES_MAX:
-        raise ValueError(f"aj_vector.shape[0] > REZEQ_NFLUXES_MAX ({REZEQ_NFLUXES_MAX}")
+    if nfluxes>QUASOARE_NFLUXES_MAX:
+        raise ValueError(f"aj_vector.shape[0] > QUASOARE_NFLUXES_MAX ({QUASOARE_NFLUXES_MAX}")
 
     if bj_vector.shape[0] != nfluxes:
         raise ValueError("bj_vector.shape[0] != nfluxes")

@@ -5,10 +5,10 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 
-from pyrezeq.approx import REZEQ_EPS, REZEQ_PI, REZEQ_ATOL, REZEQ_RTOL
-from pyrezeq.approx import isequal, notequal, isnull, notnull
-from pyrezeq.integrate import quad_constants
-from pyrezeq.models import ERRORS
+from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, QUASOARE_ATOL, QUASOARE_RTOL
+from pyquasoare.approx import isequal, notequal, isnull, notnull
+from pyquasoare.integrate import quad_constants
+from pyquasoare.models import ERRORS
 
 def integrate_numerical(fluxes, dfluxes, t0, s0, t, \
                             method="Radau", max_step=np.inf, \
@@ -97,7 +97,7 @@ def numerical_model(fluxes, dfluxes, scalings, s0, timestep, \
     return niter, s1, sims
 
 
-# --- REZEQ functions translated from C for slow implementation ---
+# --- QUASOARE functions translated from C for slow implementation ---
 def eta_fun(x, Delta):
     if Delta<0.:
         return math.atan(x)
@@ -128,7 +128,7 @@ def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
         if isnull(Delta):
             delta_tmax = np.inf if tmp<=0 else 1./tmp
         elif Delta<0:
-            delta_tmax = (REZEQ_PI/2.-eta_fun(tmp/qD, Delta))/qD
+            delta_tmax = (QUASOARE_PI/2.-eta_fun(tmp/qD, Delta))/qD
         else:
             delta_tmax = np.inf if tmp<qD else -eta_fun(tmp/qD, Delta)/qD
 
@@ -144,14 +144,14 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
     if tau<0 or tau>dtmax:
         return np.nan
 
-    if isequal(t0, t, REZEQ_EPS, 0.):
+    if isequal(t0, t, QUASOARE_EPS, 0.):
         return s0
 
     if isnull(a) and isnull(b):
         s1 = s0+c*tau
 
     elif isnull(a) and notnull(b):
-        s1 = -c/b+(s0+c/b)*math.exp(b*tau) if abs(b*tau)>REZEQ_EPS \
+        s1 = -c/b+(s0+c/b)*math.exp(b*tau) if abs(b*tau)>QUASOARE_EPS \
                     else s0*(1+b*tau)+c*tau
 
     else:
@@ -268,7 +268,7 @@ def quad_integrate(alphas, scalings, \
         print(f"scalings: {txt}")
 
     # Time loop
-    while t_end<t_final*(1-REZEQ_EPS) and nit<niter_max:
+    while t_end<t_final*(1-QUASOARE_EPS) and nit<niter_max:
         nit += 1
         extrapolating_low = int(jalpha<0)
         extrapolating_high = int(jalpha>=nalphas-1)
@@ -319,8 +319,8 @@ def quad_integrate(alphas, scalings, \
             coj += c
 
         # Round up coefficients
-        aoj = 0. if abs(aoj)<REZEQ_EPS else aoj
-        boj = 0. if abs(boj)<REZEQ_EPS else boj
+        aoj = 0. if abs(aoj)<QUASOARE_EPS else aoj
+        boj = 0. if abs(boj)<QUASOARE_EPS else boj
 
         # Discriminant
         Delta, qD, sbar = quad_constants(aoj, boj, coj)
@@ -352,8 +352,8 @@ def quad_integrate(alphas, scalings, \
             #    or non-decreasing
             if extrapolating:
                 # Ensure that s_end remains just inside interpolation range
-                s_low = alpha_min+2*REZEQ_EPS
-                s_high = alpha_max-2*REZEQ_EPS
+                s_low = alpha_min+2*QUASOARE_EPS
+                s_high = alpha_max-2*QUASOARE_EPS
                 if funval<0 and extrapolating_high and s_end<s_high:
                     s_end = s_high
                     jalpha_next = nalphas-2
@@ -371,7 +371,7 @@ def quad_integrate(alphas, scalings, \
             # Increment time
             t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
                                                             s_start, s_end)
-            t_end = t_final if t_end>t_final or abs(funval)<REZEQ_EPS else t_end
+            t_end = t_final if t_end>t_final or abs(funval)<QUASOARE_EPS else t_end
 
         if debug:
             print(f"\n[{nit}] low={extrapolating_low}"\
@@ -398,7 +398,7 @@ def quad_integrate(alphas, scalings, \
             break
 
     # Convergence problem
-    if notequal(t_end, t_final, REZEQ_ATOL, REZEQ_RTOL) and abs(funval)>REZEQ_EPS:
+    if notequal(t_end, t_final, QUASOARE_ATOL, QUASOARE_RTOL) and abs(funval)>QUASOARE_EPS:
         raise ValueError("No convergence")
 
     if debug:

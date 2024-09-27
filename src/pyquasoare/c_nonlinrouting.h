@@ -7,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_rezeq_utils.h"
+#include "c_quasoare_utils.h"
 
 int c_quadrouting(int nval, double timestep,
                         double theta, double q0,

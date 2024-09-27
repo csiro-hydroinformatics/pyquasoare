@@ -11,7 +11,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils
 
-from pyrezeq import benchmarks, slow
+from pyquasoare import benchmarks, slow
 
 from test_approx import generate_samples, reservoir_function
 

@@ -1,8 +1,8 @@
 import numpy as np
 
-from pyrezeq import has_c_module
+from pyquasoare import has_c_module
 if has_c_module():
-    import c_pyrezeq
+    import c_pyquasoare
 else:
     raise ImportError("Cannot run rezeq without C module. Please compile C code")
 
@@ -30,11 +30,11 @@ def nonlinrouting_fluxes_noscaling(nu):
 def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyrezeq.nonlinrouting(nsubdiv, timestep, theta, nu, \
+    ierr = c_pyquasoare.nonlinrouting(nsubdiv, timestep, theta, nu, \
                                     q0, s0, inflows, outflows)
     if ierr>0:
-        mess = c_pyrezeq.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr} ({mess})")
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
 
     return outflows
 
@@ -42,11 +42,11 @@ def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
 def quadrouting(timestep, theta, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyrezeq.quadrouting(timestep, theta, \
+    ierr = c_pyquasoare.quadrouting(timestep, theta, \
                                     q0, s0, inflows, outflows)
     if ierr>0:
-        mess = c_pyrezeq.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyrezeq.nonlinrouting returns {ierr} ({mess})")
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
 
     return outflows
 
@@ -98,11 +98,11 @@ def gr4jprod(nsubdiv, X1, s0, inputs):
     # Outputs variables = S, PR, AE, PERC, PR, AE
     outputs = np.zeros((len(inputs), 6))
 
-    ierr = c_pyrezeq.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
+    ierr = c_pyquasoare.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
 
     if ierr>0:
-        mess = c_pyrezeq.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyrezeq.gr4jprod returns {ierr} ({mess})")
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare.gr4jprod returns {ierr} ({mess})")
 
     return outputs
 

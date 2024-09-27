@@ -1,7 +1,7 @@
 
 #include <stdio.h>
-#include "../src/pyrezeq/c_rezeq_utils.h"
-#include "../src/pyrezeq/c_rezeq_quad.h"
+#include "../src/pyquasoare/c_quasoare_utils.h"
+#include "../src/pyquasoare/c_quasoare_quad.h"
 
 int main(){
     int nalphas = 4;

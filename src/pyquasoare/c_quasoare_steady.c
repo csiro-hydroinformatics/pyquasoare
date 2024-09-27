@@ -1,4 +1,4 @@
-#include "c_rezeq_steady.h"
+#include "c_quasoare_steady.h"
 
 int c_steady_state(double nu, double a, double b, double c, double steady[2]){
     double Delta = a*a-4*b*c;

@@ -12,13 +12,13 @@ int c_gr4jprod(int nval, int nsubdiv, double X1,
 
     /* Check input data */
     if(nsubdiv<1 || nsubdiv>100000)
-        return REZEQ_BENCH_NSUBDIV_TOO_HIGH;
+        return QUASOARE_BENCH_NSUBDIV_TOO_HIGH;
 
     if(X1<5.||X1>10000.)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(s0<1e-5 || s0>X1-1e-5)
-        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
     S = s0;
 
     /* Time series loop */

@@ -10,7 +10,7 @@ from hydrodiy.io import iutils
 
 from hydrodiy.io import csv
 
-from pyrezeq import approx, steady, benchmarks
+from pyquasoare import approx, steady, benchmarks
 
 from test_approx import generate_samples
 

@@ -11,13 +11,13 @@ int c_quadrouting(int nval, double timestep,
     double omega = 0;
 
     if(theta<1e-5)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(q0<1e-5)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(s0<0 || s0>1e1*theta)
-        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
 
     /* Time series loop */
     for(i=0; i<nval; i++){
@@ -60,21 +60,21 @@ int c_nonlinrouting(int nval, int nsubdiv, double timestep,
     }
 
     if(nsubdiv<1 || nsubdiv>100000)
-        return REZEQ_BENCH_NSUBDIV_TOO_HIGH;
+        return QUASOARE_BENCH_NSUBDIV_TOO_HIGH;
 
     if(theta<1e-5)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     /* Cannot have nu<1 otherwise function is not
      * Lipschitz continuous */
     if(nu<1 || nu>10)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(q0<1e-5)
-        return REZEQ_BENCH_PARAMS_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_PARAMS_OUT_OF_BOUNBDS;
 
     if(s0<0 || s0>1e1*theta)
-        return REZEQ_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
+        return QUASOARE_BENCH_INITIALISATION_OUT_OF_BOUNBDS;
 
     /* Time series loop */
     for(i=0; i<nval; i++){

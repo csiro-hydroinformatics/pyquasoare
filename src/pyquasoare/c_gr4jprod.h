@@ -7,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_rezeq_utils.h"
+#include "c_quasoare_utils.h"
 
 int c_gr4jprod(int nval, int nsubdiv, double X1,
                         double s0,

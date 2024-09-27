@@ -2,29 +2,29 @@ from itertools import product as prod
 import math
 import numpy as np
 
-from pyrezeq import has_c_module
+from pyquasoare import has_c_module
 if has_c_module():
-    import c_pyrezeq
-    REZEQ_EPS = c_pyrezeq.C_REZEQ_EPS
-    REZEQ_ATOL = c_pyrezeq.C_REZEQ_ATOL
-    REZEQ_RTOL = c_pyrezeq.C_REZEQ_RTOL
-    REZEQ_PI = c_pyrezeq.C_REZEQ_PI
-    REZEQ_NFLUXES_MAX = c_pyrezeq.C_REZEQ_NFLUXES_MAX
-    REZEQ_ACCURACY = c_pyrezeq.compiler_accuracy_kahan()
+    import c_pyquasoare
+    QUASOARE_EPS = c_pyquasoare.C_QUASOARE_EPS
+    QUASOARE_ATOL = c_pyquasoare.C_QUASOARE_ATOL
+    QUASOARE_RTOL = c_pyquasoare.C_QUASOARE_RTOL
+    QUASOARE_PI = c_pyquasoare.C_QUASOARE_PI
+    QUASOARE_NFLUXES_MAX = c_pyquasoare.C_QUASOARE_NFLUXES_MAX
+    QUASOARE_ACCURACY = c_pyquasoare.compiler_accuracy_kahan()
 else:
     raise ImportError("Cannot run rezeq without C code. Please compile C code.")
 
 
 
-def isequal(f1, f2, atol=REZEQ_ATOL, \
-                    rtol=REZEQ_RTOL):
+def isequal(f1, f2, atol=QUASOARE_ATOL, \
+                    rtol=QUASOARE_RTOL):
     """ Checking if two values are equal """
     errmax = atol+rtol*np.abs(f1)
     return np.abs(f1-f2)<errmax
 
 
-def notequal(f1, f2, atol=REZEQ_ATOL, \
-                    rtol=REZEQ_RTOL):
+def notequal(f1, f2, atol=QUASOARE_ATOL, \
+                    rtol=QUASOARE_RTOL):
     return 1-isequal(f1, f2, atol, rtol)
 
 
@@ -50,20 +50,20 @@ def get_vectors(*args, dtype=np.float64):
 def quad_fun(a, b, c, s):
     """ Approximation function f=a.s^2+b.s+c """
     if all_scalar(a, b, c, s):
-        return c_pyrezeq.quad_fun(a, b, c, s)
+        return c_pyquasoare.quad_fun(a, b, c, s)
     else:
         a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        ierr = c_pyrezeq.quad_fun_vect(a, b, c, s, o)
+        ierr = c_pyquasoare.quad_fun_vect(a, b, c, s, o)
         return o
 
 
 def quad_grad(a, b, c, s):
     """ Gradient of approximation function f=2a.s+b """
     if all_scalar(a, b, c, s):
-        return c_pyrezeq.quad_grad(a, b, c, s)
+        return c_pyquasoare.quad_grad(a, b, c, s)
     else:
         a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        ierr = c_pyrezeq.quad_grad_vect(a, b, c, s, o)
+        ierr = c_pyquasoare.quad_grad_vect(a, b, c, s, o)
         return o
 
 
@@ -77,7 +77,7 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
             2 = quadratic interpolation with no constraint
     """
     coefs = np.zeros(3)
-    ierr = c_pyrezeq.quad_coefficients(approx_opt, alphaj, alphajp1, \
+    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj, alphajp1, \
                                             f0, f1, fm, coefs)
     return coefs
 
@@ -86,8 +86,8 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     """ Generate coefficient matrices for flux functions """
     nalphas = len(alphas)
     nfluxes = len(funs)
-    if nfluxes>REZEQ_NFLUXES_MAX:
-        raise ValueError(f"Expected nfluxes<{REZEQ_NFLUXES_MAX}, "\
+    if nfluxes>QUASOARE_NFLUXES_MAX:
+        raise ValueError(f"Expected nfluxes<{QUASOARE_NFLUXES_MAX}, "\
                             +f"got {nfluxes}.")
 
     # we add one row at the top end bottom for continuity extension
@@ -110,12 +110,12 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
 
             # Discriminant
             cst = np.zeros(3)
-            ierr = c_pyrezeq.quad_constants(a, b, c, cst)
+            ierr = c_pyquasoare.quad_constants(a, b, c, cst)
             Delta, qD, sbar = cst
 
             # Tmax
-            t1 = c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphaj)
-            t2 = c_pyrezeq.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphajp1)
+            t1 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphaj)
+            t2 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphajp1)
             tmax = min(t1, t2)
             constants[j, ifun, :] = [Delta, tmax]
 

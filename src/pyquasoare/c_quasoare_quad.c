@@ -1,4 +1,4 @@
-#include "c_rezeq_quad.h"
+#include "c_quasoare_quad.h"
 
 /* Approximation functions */
 double c_quad_fun(double a, double b, double c, double s){
@@ -111,7 +111,7 @@ double c_quad_delta_t_max(double a, double b, double c,
         if(isnull(Delta))
             delta_tmax = tmp<=0 ? c_get_inf() : 1./tmp;
         else if (Delta<0)
-            delta_tmax = (REZEQ_PI/2-c_eta_fun(tmp/qD, Delta))/qD;
+            delta_tmax = (QUASOARE_PI/2-c_eta_fun(tmp/qD, Delta))/qD;
         else if (Delta>0)
             delta_tmax = tmp<qD ? c_get_inf() : -c_eta_fun(tmp/qD, Delta)/qD;
     }
@@ -133,7 +133,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     if(t<t0 || t>t0+delta_tmax)
         return s1;
 
-    if(isequal(t, t0, REZEQ_EPS, 0.))
+    if(isequal(t, t0, QUASOARE_EPS, 0.))
         return s0;
 
     if(isnull(a) && isnull(b)){
@@ -141,7 +141,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     else if((isnull(a) && notnull(b))){
         exparg = b*tau;
-        s1 = fabs(exparg)<REZEQ_EPS ? s0*(1+exparg)+c*tau : -c/b+(s0+c/b)*exp(exparg);
+        s1 = fabs(exparg)<QUASOARE_EPS ? s0*(1+exparg)+c*tau : -c/b+(s0+c/b)*exp(exparg);
     }
     else{
         if(isnull(Delta)){
@@ -196,7 +196,7 @@ int c_quad_fluxes(int nfluxes,
     double omega=0., signD=0., term1=0., term2=0.;
 
     if(t1<t0)
-        return REZEQ_QUAD_TIME_TOOLOW;
+        return QUASOARE_QUAD_TIME_TOOLOW;
 
     if(isnull(tau))
         return 0;
@@ -246,10 +246,10 @@ int c_quad_fluxes(int nfluxes,
             fluxes[i] += aij/a*(s1-s0)+(bij-aij*b/a)*integS+(cij-aij*c/a)*tau;
     }
 
-    if(notequal(a, a_check, REZEQ_ATOL, REZEQ_RTOL) ||
-            notequal(b, b_check, REZEQ_ATOL, REZEQ_RTOL) ||
-            notequal(c, c_check, REZEQ_ATOL, REZEQ_RTOL)){
-        return REZEQ_QUAD_FAILEDSUMCHECK;
+    if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
+            notequal(b, b_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
+            notequal(c, c_check, QUASOARE_ATOL, QUASOARE_RTOL)){
+        return QUASOARE_QUAD_FAILEDSUMCHECK;
     }
     return 0;
 }
@@ -265,7 +265,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int REZEQ_DEBUG=0;
+    int QUASOARE_DEBUG=0;
 
     int i, nit=0, jalpha_next=0, err_flux;
     double aoj=0., boj=0., coj=0.;
@@ -276,9 +276,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
 
-    double a_vect[REZEQ_NFLUXES_MAX];
-    double b_vect[REZEQ_NFLUXES_MAX];
-    double c_vect[REZEQ_NFLUXES_MAX];
+    double a_vect[QUASOARE_NFLUXES_MAX];
+    double b_vect[QUASOARE_NFLUXES_MAX];
+    double c_vect[QUASOARE_NFLUXES_MAX];
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -298,13 +298,13 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double t_start=t0, t_end=t0;
     double s_start=s0, s_end=s0;
 
-    if(nfluxes>=REZEQ_NFLUXES_MAX)
-        return REZEQ_QUAD_NFLUXES_TOO_LARGE;
+    if(nfluxes>=QUASOARE_NFLUXES_MAX)
+        return QUASOARE_QUAD_NFLUXES_TOO_LARGE;
 
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0.;
 
-    if(REZEQ_DEBUG==1){
+    if(QUASOARE_DEBUG==1){
         fprintf(stdout, "\n\nNALPHAS=%d  NFLUXES=%d\n", nalphas, nfluxes);
         fprintf(stdout, "Start t0=%5.5e s0=%5.5e j=%d t_final=%5.5e\n", t0, s0, jalpha, t_final);
         fprintf(stdout, "scalings:");
@@ -315,7 +315,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     }
 
     /* Time loop */
-    while (t_end<t_final*(1-REZEQ_EPS) && nit<niter_max) {
+    while (t_end<t_final*(1-QUASOARE_EPS) && nit<niter_max) {
         nit += 1;
 
         /* Extrapolation is triggered if s_start is
@@ -379,10 +379,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
         /* Check coefficients */
         if(isnan(aoj) || isnan(boj) || isnan(coj))
-            return REZEQ_QUAD_NAN_COEFF;
+            return QUASOARE_QUAD_NAN_COEFF;
 
-        aoj = fabs(aoj)<REZEQ_EPS ? 0. : aoj;
-        boj = fabs(boj)<REZEQ_EPS ? 0. : boj;
+        aoj = fabs(aoj)<QUASOARE_EPS ? 0. : aoj;
+        boj = fabs(boj)<QUASOARE_EPS ? 0. : boj;
 
         /* Compute discriminant variables */
         c_quad_constants(aoj, boj, coj, constants);
@@ -395,13 +395,13 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
         /* Check continuity except for first iteration */
         if(nit>1){
-            if(notequal(funval_prev, funval, REZEQ_ATOL, REZEQ_RTOL)) {
-                return REZEQ_QUAD_NOT_CONTINUOUS;
+            if(notequal(funval_prev, funval, QUASOARE_ATOL, QUASOARE_RTOL)) {
+                return QUASOARE_QUAD_NOT_CONTINUOUS;
             }
         }
 
         /* Try integrating up to the end of the time step */
-        if(fabs(funval)<REZEQ_EPS)
+        if(fabs(funval)<QUASOARE_EPS)
             s_end = s_start;
         else
             s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
@@ -418,8 +418,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
             /* Increment time */
             if(extrapolating) {
                 /* Ensure that s_end remains inside interpolation range */
-                s_low = alpha_min+2*REZEQ_EPS;
-                s_high = alpha_max-2*REZEQ_EPS;
+                s_low = alpha_min+2*QUASOARE_EPS;
+                s_high = alpha_max-2*QUASOARE_EPS;
                 if(funval<0 && extrapolating_high && s_end<s_high){
                     s_end = s_high;
                     jalpha_next = nalphas-2;
@@ -446,10 +446,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
             t_end = t_start+c_quad_inverse(aoj, boj, coj,
                                             Delta, qD, sbar,
                                             s_start, s_end);
-            t_end = t_end<t_final && fabs(funval)>REZEQ_EPS ? t_end : t_final;
+            t_end = t_end<t_final && fabs(funval)>QUASOARE_EPS ? t_end : t_final;
         }
 
-        if(REZEQ_DEBUG==1){
+        if(QUASOARE_DEBUG==1){
             fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e>%3.3e"
                     "/ t=%3.3e>%3.3e / j=%d>%d / s=%3.3e>%3.3e\n",
                     nit, extrapolating_low, extrapolating_high,
@@ -478,12 +478,12 @@ int c_quad_integrate(int nalphas, int nfluxes,
     *s1 = s_end;
     *niter = nit;
 
-    if(REZEQ_DEBUG==1)
+    if(QUASOARE_DEBUG==1)
         fprintf(stdout, "\nEnd integrate s1=%5.5e j=%d\n", s_end, jalpha);
 
     /* Convergence problem */
-    if(notequal(t_final, t_end, REZEQ_ATOL, REZEQ_RTOL) && fabs(funval)>REZEQ_EPS)
-        return REZEQ_QUAD_NO_CONVERGENCE;
+    if(notequal(t_final, t_end, QUASOARE_ATOL, QUASOARE_RTOL) && fabs(funval)>QUASOARE_EPS)
+        return QUASOARE_QUAD_NO_CONVERGENCE;
 
     return 0;
 }
