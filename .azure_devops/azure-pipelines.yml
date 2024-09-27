@@ -60,11 +60,11 @@ steps:
 - task: Cache@2
   displayName: Use cached Anaconda environment
   inputs:
-    key: conda | $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
+    key: conda | $(BUILD_DIR)/pyquasoare/env_mini_v2.yml
     path: $(CONDA_HOME)
     cacheHitVar: CONDA_CACHE_RESTORED
 
-- bash: conda env create --file  $(BUILD_DIR)/pyrezeq/env_mini_v2.yml
+- bash: conda env create --file  $(BUILD_DIR)/pyquasoare/env_mini_v2.yml
   displayName: Create Anaconda environment (if not restored from cache)
   condition: eq(variables.CONDA_CACHE_RESTORED, 'false')
 
@@ -82,20 +82,20 @@ steps:
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/pyrezeq
+    cd $(BUILD_DIR)/pyquasoare
     pip install -e .
   displayName: package_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/pyrezeq
-    pytest --ntry=200 --junitxml=junit/test-results.xml --cov=pyrezeq --cov-config=.coveragerc --cov-report=xml tests
+    cd $(BUILD_DIR)/pyquasoare
+    pytest --ntry=200 --junitxml=junit/test-results.xml --cov=pyquasoare --cov-config=.coveragerc --cov-report=xml tests
   displayName: test
   timeoutInMinutes: 90
 
 - task: CopyFiles@2
   inputs:
-    sourceFolder: '$(BUILD_DIR)/pyrezeq/tests'
+    sourceFolder: '$(BUILD_DIR)/pyquasoare/tests'
     contents: '*.log'
     targetFolder: '$(Build.ArtifactStagingDirectory)'
   displayName: copy_test_log
