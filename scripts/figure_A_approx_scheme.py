@@ -76,7 +76,7 @@ source_file = Path(__file__).resolve()
 froot = source_file.parent.parent
 
 fimg = froot / "images" / "figures"
-fimg.mkdir(exist_ok=True)
+fimg.mkdir(exist_ok=True, parents=True)
 
 #------------------------------------------------------------
 # @Logging
@@ -181,7 +181,6 @@ for nalphas in nnalphas:
             ax.plot(x, res.analytical, label=lab, lw=lw_ana, linestyle=ls_ana, \
                     color="0.5", zorder=100)
 
-
             axi = ax.inset_axes([0.76, 0.78, 0.24, 0.22])
             axi.plot(x, y-res.analytical, "-", color=col_qua)
             axi.text(0.03, 0.97, "Simulation error", fontsize=7, \
@@ -192,12 +191,14 @@ for nalphas in nnalphas:
             axi.set(ylim=(-ym, ym), xlabel=r"$t$", xticks=[])
             for tk in axi.yaxis.get_major_ticks():
                 tk.label1.set_fontsize(7)
+
             putils.line(axi, 1, 0, 0, 0, "k-", lw=0.5)
 
 
-        ax.plot(x0, y0, "o", color=col_qua, label="Initial condition")
+        ax.plot(x0, y0, "o", ms=7, color=col_qua, label="Initial condition")
+        txt = "interpolation" if aname.startswith("ds") else "solution"
         ax.plot(x, y, linestyle=ls_qua, color=col_qua, lw=lw_qua, \
-                                label="QUASOARE solution")
+                                label=f"QuaSoARe {txt}")
 
         title = f"({letters[iax]}) {title}"
         ax.set(title=title)
@@ -206,7 +207,8 @@ for nalphas in nnalphas:
 
         if nalphas==nnalphas[0]:
             leg = ax.legend(loc=3, fontsize="small", \
-                        framealpha=1.0)
+                        framealpha=1.0, \
+                        bbox_to_anchor=(0.02, 0.07, 0.98, 0.93))
             if len(nnalphas)>1:
                 ax.set(xticks=[])
 
