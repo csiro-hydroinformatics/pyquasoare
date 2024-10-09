@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
 
-from pyrezeq import approx, models
+from pyquasoare import approx, models
 
 #----------------------------------------------------------------------
 # @Config

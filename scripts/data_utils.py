@@ -14,7 +14,7 @@ spec.loader.exec_module(data_reader)
 
 SITEIDS = data_reader.SITEIDS
 
-MODEL_NAMES = ["QR", "CR", "BCR", "GRP", "GRPM", "GRPM2"]
+MODEL_NAMES = ["QR", "CR", "BCR", "GR", "GRM"]
 
 ODE_METHODS = ["analytical", "radau", "rk45", "dop853"]
 

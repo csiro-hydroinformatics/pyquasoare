@@ -91,12 +91,12 @@ varnames = {
     "QR": {"flux1": "Outflow"}, \
     "CR": {"flux1": "Ooutflow"}, \
     "BCR": {"flux1": "Outflow"}, \
-    "GRP": {\
+    "GR": {\
         "flux1": "Infiltrated rain", \
         "flux2": "Actual ET", \
         "flux3": "Percolation"
     }, \
-    "GRPM": {\
+    "GRM": {\
         "flux1": "Infiltrated rain", \
         "flux2": "Actual ET", \
         "flux3": "Percolation", \

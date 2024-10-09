@@ -146,10 +146,10 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
     if routing:
         fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
 
-    elif model_name == "GRP":
+    elif model_name == "GR":
         fluxes, dfluxes = benchmarks.gr4jprod_fluxes_noscaling()
 
-    elif model_name == "GRPM":
+    elif model_name == "GRM":
         fpr = lambda x: (1.-x**3*(10-15*x+6*x**2)) if x>0 else 1.
         fae = lambda x: -(16*(x-0.5)**5+0.5) if x<1. else 4.-5.*x
         fperc = lambda x: -0.1*x**7 if x>0 else 0.
@@ -161,21 +161,6 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
         dfperc = lambda x: -0.7*x**6 if x>0 else 0.
         dfgw = lambda x: -0.05/(1+10*x)**2 if x>0 else -0.05
         dfluxes = [dfpr, dfae, dfperc, dfgw]
-
-    elif model_name == "GRPM2":
-        clip = lambda x: max(0., min(1., x))
-        fpr = lambda x: (1+math.tanh(10*(0.5-clip(x))))/2
-        fae = lambda x: (math.tanh(10*(0.2-clip(x)))-math.tanh(2.))/2
-        fperc = lambda x: -0.1*x**7 if x>0 else 0.
-        fgw = lambda x: -0.05*x/(1+10*x) if x>0 else -2*x
-        fluxes = [fpr, fae, fperc, fgw]
-
-        dfpr = lambda x: -5./math.cosh(10*(0.5-clip(x)))**2
-        dfae = lambda x: -5./math.cosh(10*(0.2-clip(x)))**2
-        dfperc = lambda x: -0.7*x**6 if x>0 else 0.
-        dfgw = lambda x: -0.05/(1+10*x)**2 if x>0 else -0.05
-        dfluxes = [dfpr, dfae, dfperc, dfgw]
-
 
     # Run model for each parameter
     for iparam, param in enumerate(params):
@@ -189,7 +174,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             nval = len(inflows)
             scalings = np.column_stack([inflows/theta, \
                                     q0/theta*np.ones(nval)])
-        elif model_name in ["GRP", "GRPM", "GRPM2"]:
+        elif model_name in ["GR", "GRM"]:
             X1 = param
             time_index = daily.index
             ones = np.ones(len(climate))

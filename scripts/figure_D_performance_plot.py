@@ -50,7 +50,7 @@ parser.add_argument("-e", "--extension", help="Image file extension", \
 args = parser.parse_args()
 
 siteids = data_utils.SITEIDS
-model_names = ["CR", "BCR", "GRP", "GRPM"] #data_utils.MODEL_NAMES
+model_names = ["CR", "BCR", "GR", "GRM"]
 ode_methods = data_utils.ODE_METHODS
 
 metrics = {
