@@ -25,7 +25,7 @@ import tables
 
 from hydrodiy.io import csv, iutils
 
-from pyrezeq import approx, steady, benchmarks, models, slow
+from pyquasoare import approx, steady, benchmarks, models, slow
 
 import hdf5_utils
 import data_utils
@@ -83,7 +83,7 @@ fout.mkdir(exist_ok=True, parents=True)
 #----------------------------------------------------------------------
 basename = source_file.stem
 if flogs == "":
-    flogs = froot / "logs" / "rezeqrun"
+    flogs = froot / "logs" / "quasrun"
     flogs.mkdir(exist_ok=True, parents=True)
 else:
     flogs = Path(flogs)
@@ -93,7 +93,7 @@ if debug:
     fout = flogs / "simulations"
     fout.mkdir(exist_ok=True)
 
-flog = flogs / f"rezeqrun_TASK{taskid}.log"
+flog = flogs / f"quasrun_TASK{taskid}.log"
 LOGGER = iutils.get_logger(basename, contextual=True, flog=flog)
 LOGGER.log_dict(vars(args), "Command line arguments")
 LOGGER.info(f"nconfig: {len(data_utils.CONFIGS)}")
