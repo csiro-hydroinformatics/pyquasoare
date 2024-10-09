@@ -27,6 +27,7 @@ mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.colors import TABLEAU_COLORS as colors
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
@@ -55,6 +56,7 @@ aheight = 3.5
 ftransparent = False
 
 linestyles = ["-", "--", "-.", ":"]
+colors = [c for n, c in colors.items()]
 
 # Set matplotlib options
 #mpl.rcdefaults() # to reset
@@ -96,7 +98,9 @@ axs = fig.subplot_mosaic(mosaic, sharey=True, gridspec_kw=kw)
 
 
 for iax, (model_name, ax) in enumerate(axs.items()):
+    routing = False
     if model_name in ["CR", "BCR"]:
+        routing = True
         nu = 3. if model_name == "CR" else 6.
         fluxes, _ = benchmarks.nonlinrouting_fluxes_noscaling(nu)
         names = ["Inflow", "Outflow"]
@@ -114,12 +118,21 @@ for iax, (model_name, ax) in enumerate(axs.items()):
         names = ["Infilt. Rain", "Actual ET", "Percolation", "Recharge"]
 
     x = np.linspace(0, 1, 100)
+    tax = ax.twinx()
     for ifx, f in enumerate(fluxes):
         y = [f(xx) for xx in x]
         lab = f"$f_{ifx+1}$ ({names[ifx]})"
-        ax.plot(x, y, linestyle=linestyles[ifx], lw=2, label=lab)
 
-    ax.legend()
+        axx, addleg = (tax, True) if not routing and ifx>1 else (ax, False)
+        axx.plot(x, y, linestyle=linestyles[ifx], lw=2, label=lab,\
+                                    color=colors[ifx])
+        if addleg:
+            ax.plot([], [], linestyle=linestyles[ifx], lw=2, label=lab, \
+                                    color=colors[ifx])
+            axx.yaxis.set_major_locator(ticker.MaxNLocator(5))
+
+    loc = 3 if routing else 10
+    ax.legend(loc=loc)
     title = f"({letters[iax]}) Model {model_name}"
     ax.set(xlabel=r"Storage level $S$", ylabel="Fluxes", title=title)
     ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
