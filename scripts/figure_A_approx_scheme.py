@@ -134,7 +134,10 @@ for nalphas in nnalphas:
         if aname.startswith("dsdt"):
             title = f"Piecewise interpolation - {nalphas} nodes"
             xlab = r"$\frac{dS}{dt}$" if nalphas==nnalphas[-1] else ""
-            ylab = r"$S(t)$"
+            xlab_fontsize = 22
+
+            ylab = r"$S$"
+            ylab_fontsize = 20
 
             x = res.analytical_diff
             y = res.analytical
@@ -155,21 +158,26 @@ for nalphas in nnalphas:
 
             axi = ax.inset_axes([0.62, 0.78, 0.38, 0.22])
             axi.plot(res.quasoare_diff-x, y, "-", color=col_qua)
-            axi.text(0.97, 0.03, "Interpolation error", fontsize=7, \
+            axi.text(0.97, 0.03, "Interpolation error", fontsize=8, \
                     transform=axi.transAxes, va="bottom", ha="right")
 
             xlim = axi.get_xlim()
             xm = np.abs(xlim).max()*1.1
             axi.set(ylim=(0., 1.), xlim=(-xm, xm), ylabel=ylab, yticks=[])
             for tk in axi.xaxis.get_major_ticks():
-                tk.label1.set_fontsize(7)
+                tk.label1.set_fontsize(9)
+                tk.label1.set_rotation(-18)
+
             putils.line(axi, 0, 1, 0, 0, "k-", lw=0.5)
 
 
         else:
             title = f"Solution of reservoir equation - {nalphas} nodes"
             xlab = r"$t$" if nalphas==nnalphas[-1] else ""
+            xlab_fontsize = 20
+
             ylab = ""
+            ylab_fontsize = 20
 
             x = res.time
             y = res.quasoare
@@ -181,16 +189,17 @@ for nalphas in nnalphas:
             ax.plot(x, res.analytical, label=lab, lw=lw_ana, linestyle=ls_ana, \
                     color="0.5", zorder=100)
 
-            axi = ax.inset_axes([0.76, 0.78, 0.24, 0.22])
+            axi = ax.inset_axes([0.66, 0.78, 0.34, 0.22])
             axi.plot(x, y-res.analytical, "-", color=col_qua)
-            axi.text(0.03, 0.97, "Simulation error", fontsize=7, \
+            axi.text(0.03, 0.97, "Simulation error", fontsize=8, \
                     transform=axi.transAxes, va="top", ha="left")
 
             ylim = axi.get_ylim()
-            ym = np.abs(ylim).max()*1.3
+            ym = np.abs(ylim).max()*1.4
             axi.set(ylim=(-ym, ym), xlabel=r"$t$", xticks=[])
             for tk in axi.yaxis.get_major_ticks():
-                tk.label1.set_fontsize(7)
+                tk.label1.set_fontsize(9)
+                tk.label1.set_verticalalignment("top")
 
             putils.line(axi, 1, 0, 0, 0, "k-", lw=0.5)
 
@@ -202,8 +211,8 @@ for nalphas in nnalphas:
 
         title = f"({letters[iax]}) {title}"
         ax.set(title=title)
-        ax.set_xlabel(xlab, fontsize=18)
-        ax.set_ylabel(ylab, fontsize=18)
+        ax.set_xlabel(xlab, fontsize=xlab_fontsize)
+        ax.set_ylabel(ylab, fontsize=ylab_fontsize)
 
         if nalphas==nnalphas[0]:
             leg = ax.legend(loc=3, fontsize="small", \
@@ -216,11 +225,13 @@ for nalphas in nnalphas:
             putils.line(ax, 1, 0, 0, a, ":", color="0.5", lw=0.9)
             if nalphas==nnalphas[0] and ia==0 and aname.startswith("dsdt"):
                 continue
-            props = dict(boxstyle="round", fc="w", ec="none", alpha=0.9)
-            xtxt = -0.35 if aname.startswith("dsdt") else 5.
-            ax.text(xtxt, a, f"$\\alpha_{ia+1} = {a:0.2f}$".format(ia=ia, a=a), \
-                        va="center", ha="center", color="0.5", bbox=props, \
-                        zorder=200)
+
+            if aname.startswith("dsdt"):
+                props = dict(boxstyle="round", fc="w", ec="none", alpha=0.9)
+                xtxt = -0.35 if aname.startswith("dsdt") else 5.
+                ax.text(xtxt, a, f"$\\alpha_{ia+1} = {a:0.2f}$".format(ia=ia, a=a), \
+                            va="center", ha="center", color="0.5", bbox=props, \
+                            zorder=200)
 
         iax += 1
 
