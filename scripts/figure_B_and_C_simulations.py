@@ -31,6 +31,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
@@ -72,16 +73,33 @@ end = "2022"
 imgext = args.extension
 
 # Plot dimensions
-fdpi = 120
+fdpi = 300
 
 awidth1 = 15
 aheight1 = 6
 
-awidth2 = 8
-aheight2 = 6
+awidth2 = 9
+aheight2 = 7
 
 # Figure transparency
 ftransparent = False
+
+col_nodes = "tab:red"
+
+col_ana = "grey"
+ls_ana = "--"
+lw_ana = 5
+
+col_qua = "tab:blue"
+ls_qua = "-"
+lw_qua = 3
+
+col_rad = "tab:orange"
+ls_rad = "-"
+lw_rad = 6
+
+col_err = "k"
+lw_err = 1
 
 # Set matplotlib options
 #mpl.rcdefaults() # to reset
@@ -89,7 +107,7 @@ putils.set_mpl()
 
 varnames = {
     "QR": {"flux1": "Outflow"}, \
-    "CR": {"flux1": "Ooutflow"}, \
+    "CR": {"flux1": "Outflow"}, \
     "BCR": {"flux1": "Outflow"}, \
     "GR": {\
         "flux1": "Infiltrated rain", \
@@ -139,6 +157,7 @@ def format_errorax(ax):
     ax.set_ylim((-ym, ym))
     putils.line(ax, 1, 0, 0, 0, color="grey", linestyle=":", lw=0.8)
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(4))
 
 lf = list(fdata.glob("*.hdf5"))
 for f in lf:
@@ -160,6 +179,7 @@ for f in lf:
             m = re.sub("_", "", ode_method)
             tname = f"S{siteid}_{m}_sim{iparam_selected:03d}"
             tb = gr[tname]
+            theta = tb.attrs["param"]
             sims[ode_method] = hdf5_utils.convert(tb[:])
 
             cc = ["s1_min", "s1_max", "alpha1_min", "alpha1_max", \
@@ -169,12 +189,13 @@ for f in lf:
             tname = f"S{siteid}_{m}_fluxes{iparam_selected:03d}"
             try:
                 tb = gr[tname]
+                alphas = tb.attrs["alphas"]
+                mean_scalings = tb.attrs["mean_scalings"]
                 fluxes[ode_method] = hdf5_utils.convert(tb[:])
             except:
                 pass
 
     info = pd.DataFrame(info)
-
 
     plt.close("all")
     vns = np.sort([vn for vn in varnames[model_name]\
@@ -187,7 +208,7 @@ for f in lf:
 
     fig2 = plt.figure(figsize=(awidth2*ncols, aheight2*(nrows-1)), \
                                         layout="tight")
-    axs2 = fig2.subplot_mosaic(mosaic[1:])
+    axs2 = fig2.subplot_mosaic(mosaic[1:], sharex=True)
 
     for iax, (aname, ax1) in enumerate(axs1.items()):
         if aname in axs2:
@@ -199,8 +220,13 @@ for f in lf:
             lab = re.sub("_", " ", re.sub("^(c|py)_", "", ode_method)).title()
             if re.search("Quaso", lab):
                 lab = re.sub("Quasoare", "QuaSoARe", lab)
-            lw = 5 if ode_method == "radau" else 3
-            se.plot(ax=ax1, label=lab, lw=lw)
+
+            if ode_method == "radau":
+                ls, lw, col = ls_rad, lw_rad, col_rad
+            else:
+                ls, lw, col = ls_qua, lw_qua, col_qua
+
+            se.plot(ax=ax1, label=lab, ls=ls, lw=lw, color=col)
 
             tax1, tax2 = None, None
 
@@ -208,7 +234,7 @@ for f in lf:
                 ser = sims["radau"].loc[se.index, aname]
                 err = se-ser
                 tax1 = ax1.twinx()
-                err.plot(ax=tax1, lw=1.0, color="grey")
+                err.plot(ax=tax1, lw=lw_err, color=col_err)
                 format_errorax(tax1)
 
             if ode_method == ode_method_selected and aname.startswith("flux")\
@@ -217,37 +243,48 @@ for f in lf:
                 s = fx["s"]
                 fx_true = fx[f"{aname}_true"]
                 fx_approx = fx[f"{aname}_approx"]
-                ax2.plot(s, fx_true, lw=5, label="True flux")
-                m = " ".join(re.split("_", ode_method)[1:])
-                ax2.plot(s, fx_approx, lw=3, label=f"{m} flux")
-                if aname=="flux1":
-                    ax2.legend(loc=3, fontsize="large")
 
-                unit = "day$^{-1}$" if model_name.startswith("GR") \
-                                else "sec^{-1}"
-                ax2.set_ylabel(f"Instantanous flux [{unit}]")
-                ax2.set_xlabel(r"Store filling level $S/\theta$ [-]")
+                ax2.plot(s, fx_true, "--", color=col_ana, lw=lw_ana, \
+                                    label="True flux function")
+
+                falphas = np.interp(alphas, s, fx_true)
+                ax2.plot(alphas, falphas, "o", ms=12, color=col_nodes, \
+                                    label="Interpolation nodes", zorder=100)
+
+                m = " ".join(re.split("_", ode_method)[1:]).title()
+                m = re.sub("Quasaore", "QuaSoARe", m)
+                ax2.plot(s, fx_approx, lw=lw_qua, color=col_qua, label=f"{m} flux")
+                if aname=="flux1":
+                    ax2.legend(loc=8, fontsize="large", \
+                                    framealpha=0.)
+
+                unit = "mm day$^{-1}$" if model_name.startswith("GR") \
+                                else "m$^3$ s^{-1}"
+                ax2.set_ylabel(f"Instantaneous flux [{unit}]")
+                if iax==len(axs1)-1:
+                    ax2.set_xlabel(r"Store filling level $S/\theta$ [-]")
 
                 tax2 = ax2.twinx()
-                tax2.plot(s, fx_approx-fx_true, lw=1.0, color="grey")
+                tax2.plot(s, fx_approx-fx_true, lw=lw_err, color=col_err)
                 format_errorax(tax2)
 
         if aname == "s1":
-            ax1.legend(loc=2, fontsize="large")
+            ax1.legend(loc=3, fontsize="large", framealpha=0.)
 
         title = f"({letters[iax]}) {varnames[model_name][aname]}"
         ax1.set(title=title, xlabel="")
 
-        unit = r"mm day$^{-1}$" if model_name.startswith("GR") \
-                            else "m$^3$ s$^{-1}$"
+        unit = r"mm" if model_name.startswith("GR") \
+                            else "m$^3$"
         unit = "-" if aname == "s1" else unit
-        nm = "Store filling level $S/\\theta$" if aname=="s1" else "Flux"
+        nm = "Store filling level $S/\\theta$" if aname=="s1" else "Total flux"
         ax1.set_ylabel(f"{nm} [{unit}]")
+        ax1.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
         if not tax1 is None:
             tax1.set_ylabel(f"Error [{unit}]")
         if not tax2 is None:
-            unit = "day$^{-1}$" if model_name.startswith("GR") else "s$^{-1}$"
+            unit = "mm day$^{-1}$" if model_name.startswith("GR") else "m$^3$ s$^{-1}$"
             tax2.set_ylabel(f"Error [{unit}]")
             title = f"({letters[iax-1]}) {varnames[model_name][aname]}"
             ax2.set(title=title)
@@ -256,6 +293,15 @@ for f in lf:
     # Save file
     theta = info.loc["param", "radau"]
     base = f"{f.stem}_{model_name}_{theta:0.0f}"
+
+    meta = {\
+            "alphas": alphas.tolist(), \
+            "mean_scalings": mean_scalings.tolist()
+            }
+    fm = fimg / f"figure_C_{base}_meta.json"
+    with fm.open("w") as fo:
+        json.dump(meta, fo, indent=4)
+
     fp = fimg / f"figure_C_{base}_sim.{imgext}"
     fig1.savefig(fp, dpi=fdpi, transparent=ftransparent)
     fp = fimg / f"figure_B_{base}_fluxes.{imgext}"

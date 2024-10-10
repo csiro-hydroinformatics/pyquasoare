@@ -148,7 +148,7 @@ for nalphas in nnalphas:
             yy = np.linspace(amin, amax, 500)
             xx = flux_fun(yy)
 
-            lab = "True reservoir equation"
+            lab = "True flux function"
             ax.plot(xx, yy, color=col_ana, label=lab, \
                                     linestyle=ls_ana, lw=lw_ana)
 

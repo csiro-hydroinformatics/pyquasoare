@@ -246,12 +246,17 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                 # Store flux approximation
                 xx = np.linspace(alpha_min, alpha_max, 500)
                 fx = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, xx)
+                # .. multiply by average scaling times store capacity
+                #    to obtain sensible values
+                mean_scalings = scalings.mean(axis=0)*param
+                fx *= mean_scalings[None, :]
+
                 nfluxes = amat.shape[1]
                 dfx = np.empty(fx.shape[0], dtype=hdf5_utils.FLUXES_DTYPE)
                 dfx["s"] = xx
                 for iflux in range(4):
                     if iflux<nfluxes:
-                        f = np.array([fluxes[iflux](x) for x in xx])
+                        f = np.array([fluxes[iflux](x)*mean_scalings[iflux] for x in xx])
                         dfx[f"flux{iflux+1}_true"] = f
                         dfx[f"flux{iflux+1}_approx"] = fx[:, iflux]
                     else:
@@ -273,7 +278,9 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
                         alpha_min=alpha_min, \
                         alpha_max=alpha_max, \
                         s1_min=s1_min, \
-                        s1_max=s1_max)
+                        s1_max=s1_max, \
+                        mean_scalings=mean_scalings, \
+                        alphas=alphas)
 
                 # Run model
                 quad_model = models.quad_model if ode_method.startswith("c")\
