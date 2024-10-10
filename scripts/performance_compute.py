@@ -25,7 +25,7 @@ import tables
 
 from hydrodiy.io import csv, iutils
 
-from pyrezeq import approx, steady, benchmarks, models, slow
+from pyquasoare import approx, steady, benchmarks, models, slow
 import hdf5_utils
 
 # Tool to read data from tests

@@ -180,7 +180,7 @@ with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
             ones = np.ones(len(climate))
             scalings = [np.maximum(rain-evap, 0)/X1, \
                                     np.maximum(evap-rain, 0)/X1, ones]
-            scalings = scalings+[ones] if model_name.startswith("GRPM") else scalings
+            scalings = scalings+[ones] if model_name.startswith("GRM") else scalings
             scalings = np.column_stack(scalings)
 
         # Loop over ODE ode_method

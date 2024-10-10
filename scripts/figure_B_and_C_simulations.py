@@ -196,7 +196,9 @@ for f in lf:
         for ode_method, sim in sims.items():
             se = sim.loc[:, aname].loc[start:end]
 
-            lab = re.sub("_", " ", re.sub("^(c|py)_", "", ode_method))
+            lab = re.sub("_", " ", re.sub("^(c|py)_", "", ode_method)).title()
+            if re.search("Quaso", lab):
+                lab = re.sub("Quasoare", "QuaSoARe", lab)
             lw = 5 if ode_method == "radau" else 3
             se.plot(ax=ax1, label=lab, lw=lw)
 
@@ -224,7 +226,7 @@ for f in lf:
                 unit = "day$^{-1}$" if model_name.startswith("GR") \
                                 else "sec^{-1}"
                 ax2.set_ylabel(f"Instantanous flux [{unit}]")
-                ax2.set_xlabel(r"Normalised store level $u$ [-]")
+                ax2.set_xlabel(r"Store filling level $S/\theta$ [-]")
 
                 tax2 = ax2.twinx()
                 tax2.plot(s, fx_approx-fx_true, lw=1.0, color="grey")
@@ -236,15 +238,16 @@ for f in lf:
         title = f"({letters[iax]}) {varnames[model_name][aname]}"
         ax1.set(title=title, xlabel="")
 
-        unit = "mm/day" if model_name.startswith("GR") else "m3/sec"
+        unit = r"mm day$^{-1}$" if model_name.startswith("GR") \
+                            else "m$^3$ s$^{-1}$"
         unit = "-" if aname == "s1" else unit
-        nm = "Dimensionless store level" if aname=="s1" else "Flux"
+        nm = "Store filling level $S/\\theta$" if aname=="s1" else "Flux"
         ax1.set_ylabel(f"{nm} [{unit}]")
 
         if not tax1 is None:
             tax1.set_ylabel(f"Error [{unit}]")
         if not tax2 is None:
-            unit = "day$^{-1}$" if model_name.startswith("GR") else "sec$^{-1}"
+            unit = "day$^{-1}$" if model_name.startswith("GR") else "s$^{-1}$"
             tax2.set_ylabel(f"Error [{unit}]")
             title = f"({letters[iax-1]}) {varnames[model_name][aname]}"
             ax2.set(title=title)

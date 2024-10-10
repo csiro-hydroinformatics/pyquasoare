@@ -60,20 +60,17 @@ metrics = {
     #"NITER_RATIO[%]": "Iteration ratio"
 }
 
-# Include error for each flux
-#for fx in range(4):
-#    metrics[f"ERRABSMAX_SIM_FLUX{fx+1}"] = f"Max abs error flux {fx+1}"
-
-ode_method_selected = ["rk45", "quasoare\n10", "quasoare\n50", "quasoare\n500"]
-ode_method_worst = "quasoare\n10"
+# Select ode method to include in plot
+ode_method_selected = ["RK45", "QuaSoARe\n10", "QuaSoARe\n50", "QuaSoARe\n500"]
+ode_method_worst = "QuaSoARe\n10"
 
 
 # Image file extension
 imgext = args.extension
 
 # Plot dimensions
-fdpi = 100 #300
-awidth = 6
+fdpi = 200 #300
+awidth = 15 if ode_method_selected is None else 6
 aheight = 4
 
 # Figure transparency
@@ -169,14 +166,20 @@ for iax, (aname, ax) in enumerate(axs.items()):
     df = pd.pivot_table(results.loc[idx], \
                     index=["siteid", "iparam"], columns="ode_method", \
                     values=metric)
-    df.columns = [re.sub("_", "\n", re.sub("py_", "", cn)) \
+    df.columns = [re.sub("_", "\n", re.sub("py_", "", cn)).upper() \
                             for cn in df.columns]
+    df.columns = [re.sub("QUASOARE", "QuaSoARe", cn) for cn in df.columns]
+
     if ylog:
         df = np.log10(1e-100+df)
 
-    selected = ode_method_selected
-    if model_name == "QR":
-        selected = ["radau"]+selected
+    if not ode_method_selected is None:
+        selected = ode_method_selected
+        if model_name == "QR":
+            selected = ["RADAU"]+selected
+    else:
+        selected = df.columns
+
     df = df.loc[:, selected]
 
     worst = df.loc[:, ode_method_worst].idxmax()
@@ -215,8 +218,8 @@ for iax, (aname, ax) in enumerate(axs.items()):
         ax.set_yticklabels(ytxt)
 
     if re.search("^ERRABS", metric):
-        ylab = "Error [mm/day]" if model_name.startswith("GR") \
-                        else "Error [m3/s]"
+        ylab = r"Error [mm day$^{-1}$]" if model_name.startswith("GR") \
+                        else r"Error [m3 s$^{-1}$]"
     elif re.search("^ERRBAL", metric):
         ylab = "Error [%]"
     else:
