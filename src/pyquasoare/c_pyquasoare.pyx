@@ -24,7 +24,7 @@ cdef extern from 'c_quasoare_utils.h':
     int c_get_error_message(int err_code, char message[100])
 
 
-cdef extern from 'c_quasoare_quad.h':
+cdef extern from 'c_quasoare_core.h':
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
 

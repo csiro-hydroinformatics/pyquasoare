@@ -10,6 +10,9 @@ else:
 
 
 def quad_steady(a, b, c):
+    """ Compute steady state solution of QuaSoARe equation
+        for coefficients a, b, c.
+    """
     if approx.all_scalar(a, b, c):
         stdy = np.zeros(2)
         ierr = c_pyquasoare.quad_steady(a, b, c, stdy)

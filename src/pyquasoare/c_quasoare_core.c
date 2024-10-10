@@ -1,4 +1,4 @@
-#include "c_quasoare_quad.h"
+#include "c_quasoare_core.h"
 
 /* Approximation functions */
 double c_quad_fun(double a, double b, double c, double s){
@@ -11,8 +11,8 @@ double c_quad_grad(double a, double b, double c, double s){
 
 int c_quad_steady(double a, double b, double c, double steady[2]){
     double q, x1, x2;
-    double sign = b<0 ? -1. : 1.;
-    double constants[2], Delta;
+    double signb = b<0 ? -1. : 1.;
+    double constants[3], Delta;
 
     c_quad_constants(a, b, c, constants);
     Delta = constants[0];
@@ -25,7 +25,7 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
             steady[0] = -b/2./a;
         }
         else if(Delta>=0){
-            q = -0.5*(b+sign*sqrt(Delta));
+            q = -0.5*(b+signb*sqrt(Delta));
             x1 = q/a;
             x2 = c/q;
             steady[0] = x1<x2 ? x1 : x2;

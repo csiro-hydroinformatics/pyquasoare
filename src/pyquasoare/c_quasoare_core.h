@@ -1,5 +1,5 @@
-#ifndef __QUASOARE_QUAD__
-#define __QUASOARE_QUAD__
+#ifndef __QUASOARE_CORE__
+#define __QUASOARE_CORE__
 
 #include <math.h>
 #include <stdlib.h>

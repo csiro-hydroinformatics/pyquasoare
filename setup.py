@@ -20,13 +20,11 @@ ext_quasoare=Extension(name="c_pyquasoare",
     sources=[
         "src/pyquasoare/c_pyquasoare.pyx",
         "src/pyquasoare/c_quasoare_utils.c",
-        "src/pyquasoare/c_quasoare_steady.c",
-        "src/pyquasoare/c_quasoare_quad.c",
+        "src/pyquasoare/c_quasoare_core.c",
         "src/pyquasoare/c_nonlinrouting.c",
         "src/pyquasoare/c_gr4jprod.c"
     ],
     extra_cflags=["-O3"],
-    extra_compile_args=["-ffast-math"],
     include_dirs=[numpy.get_include()])
 
 cmdclass = versioneer.get_cmdclass()
