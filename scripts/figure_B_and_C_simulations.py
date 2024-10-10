@@ -106,9 +106,9 @@ lw_err = 1
 putils.set_mpl()
 
 varnames = {
-    "QR": {"flux1": "Outflow"}, \
-    "CR": {"flux1": "Outflow"}, \
-    "BCR": {"flux1": "Outflow"}, \
+    "QR": {"flux2": "Outflow"}, \
+    "CR": {"flux2": "Outflow"}, \
+    "BCR": {"flux2": "Outflow"}, \
     "GR": {\
         "flux1": "Infiltrated rain", \
         "flux2": "Actual ET", \
@@ -118,8 +118,25 @@ varnames = {
         "flux1": "Infiltrated rain", \
         "flux2": "Actual ET", \
         "flux3": "Percolation", \
-        "flux4": "Recharge"
+        "flux4": "none"
     },
+}
+
+scaling_names = {
+    "QR": {"flux2": "Qref"}, \
+    "CR": {"flux2": "Qref"}, \
+    "BCR": {"flux2": "Qref"}, \
+    "GR": {\
+        "flux1": "P", \
+        "flux2": "E", \
+        "flux3": r"$\theta$"
+    }, \
+    "GRM": {\
+        "flux1": "P", \
+        "flux2": "E", \
+        "flux3": r"$\theta$",\
+        "flux4": "(no scaling)"
+    }
 }
 
 for m, vn in varnames.items():
@@ -168,6 +185,8 @@ for f in lf:
             siteid != siteid_selected:
         continue
 
+    routing = not model_name.startswith("GR")
+
     LOGGER.info(f"Plotting {model_name:4s}/{siteid} (TASK {taskid})")
 
     sims = {}
@@ -211,6 +230,7 @@ for f in lf:
     axs2 = fig2.subplot_mosaic(mosaic[1:], sharex=True)
 
     for iax, (aname, ax1) in enumerate(axs1.items()):
+        ax2 = None
         if aname in axs2:
             ax2 = axs2[aname]
 
@@ -255,14 +275,25 @@ for f in lf:
                 m = re.sub("Quasaore", "QuaSoARe", m)
                 ax2.plot(s, fx_approx, lw=lw_qua, color=col_qua, label=f"{m} flux")
                 if aname=="flux1":
-                    ax2.legend(loc=8, fontsize="large", \
+                    ax2.legend(loc=1, fontsize="medium", \
                                     framealpha=0.)
 
-                unit = "mm day$^{-1}$" if model_name.startswith("GR") \
-                                else "m$^3$ s^{-1}"
+                unit = r"m$^3$ s$^{-1}$" if routing else r"mm day$^{-1}$"
                 ax2.set_ylabel(f"Instantaneous flux [{unit}]")
                 if iax==len(axs1)-1:
                     ax2.set_xlabel(r"Store filling level $S/\theta$ [-]")
+
+                ifx = int(aname[-1])-1
+                scaling = mean_scalings[ifx]
+                sname = scaling_names[model_name][aname]
+                sunit = "mm" if re.search("theta", sname) else unit
+                if sname != "none":
+                    txt = f"{sname} = {scaling:0.1f} {sunit}"
+                else:
+                    sname = "(no scaling)"
+
+                ax2.text(0.02, 0.02, txt, transform=ax2.transAxes, \
+                                            fontweight="bold")
 
                 tax2 = ax2.twinx()
                 tax2.plot(s, fx_approx-fx_true, lw=lw_err, color=col_err)
@@ -281,8 +312,12 @@ for f in lf:
         ax1.set_ylabel(f"{nm} [{unit}]")
         ax1.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
+        if not ax2 is None:
+            ax2.yaxis.set_major_locator(ticker.MaxNLocator(5))
+
         if not tax1 is None:
             tax1.set_ylabel(f"Error [{unit}]")
+
         if not tax2 is None:
             unit = "mm day$^{-1}$" if model_name.startswith("GR") else "m$^3$ s$^{-1}$"
             tax2.set_ylabel(f"Error [{unit}]")
