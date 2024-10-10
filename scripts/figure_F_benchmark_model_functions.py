@@ -105,9 +105,19 @@ for iax, (model_name, ax) in enumerate(axs.items()):
         fluxes, _ = benchmarks.nonlinrouting_fluxes_noscaling(nu)
         names = ["Inflow", "Outflow"]
 
+        # using data from 203024
+        scalings = []
+
+        unit = r"m$^3$ s$^{-1}$"
+
     elif model_name == "GR":
         fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
         names = ["Infilt. Rain", "Actual ET", "Percolation"]
+
+        # using data from 203024
+        scalings = []
+
+        unit = r"mm day$^{-1}$"
 
     elif model_name == "GRM":
         fpr = lambda x: (1.-x**3*(10-15*x+6*x**2)) if x>0 else 1.
@@ -117,10 +127,15 @@ for iax, (model_name, ax) in enumerate(axs.items()):
         fluxes = [fpr, fae, fperc, fgw]
         names = ["Infilt. Rain", "Actual ET", "Percolation", "Recharge"]
 
+        # Using data from
+        scalings = []
+
+        unit = r"mm day$^{-1}$"
+
     x = np.linspace(0, 1, 100)
     tax = ax.twinx()
     for ifx, f in enumerate(fluxes):
-        y = [f(xx) for xx in x]
+        y = [f(xx)*scalings[ifx] for xx in x]
         lab = f"$f_{ifx+1}$ ({names[ifx]})"
 
         axx, addleg = (tax, True) if not routing and ifx>1 else (ax, False)
@@ -134,7 +149,7 @@ for iax, (model_name, ax) in enumerate(axs.items()):
     loc = 3 if routing else 10
     ax.legend(loc=loc)
     title = f"({letters[iax]}) Model {model_name}"
-    ax.set(xlabel=r"Storage level $S$", ylabel="Fluxes", title=title)
+    ax.set(xlabel=r"Storage level $S/\theta$", ylabel=f"Fluxes [{unit}]", title=title)
     ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
     ax.grid(axis="y")
 

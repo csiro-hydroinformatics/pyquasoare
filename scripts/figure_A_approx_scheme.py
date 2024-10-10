@@ -26,6 +26,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
@@ -213,18 +214,17 @@ for nalphas in nnalphas:
         ax.set(title=title)
         ax.set_xlabel(xlab, fontsize=xlab_fontsize)
         ax.set_ylabel(ylab, fontsize=ylab_fontsize)
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
         if nalphas==nnalphas[0]:
             leg = ax.legend(loc=3, fontsize="small", \
                         framealpha=1.0, \
-                        bbox_to_anchor=(0.02, 0.07, 0.98, 0.93))
+                        bbox_to_anchor=(0.04, 0.1, 0.96, 0.9))
             if len(nnalphas)>1:
                 ax.set(xticks=[])
 
         for ia, a in enumerate(alphas):
             putils.line(ax, 1, 0, 0, a, ":", color="0.5", lw=0.9)
-            if nalphas==nnalphas[0] and ia==0 and aname.startswith("dsdt"):
-                continue
 
             if aname.startswith("dsdt"):
                 props = dict(boxstyle="round", fc="w", ec="none", alpha=0.9)
