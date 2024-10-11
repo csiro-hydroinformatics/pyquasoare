@@ -51,7 +51,7 @@ cdef extern from 'c_quasoare_core.h':
                             double *aj_vector,
                             double *bj_vector,
                             double *cj_vector,
-                            double aoj, double boj, double coj,
+                            double Aj, double Bj, double Cj,
                             double Delta, double qD, double ssr,
                             double t0, double t1, double s0, double s1,
                             double * fluxes)
@@ -248,7 +248,7 @@ def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
 def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
                     np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
-                    double aoj, double boj, double coj, \
+                    double Aj, double Bj, double Cj, \
                     double Delta, double qD, double ssr,
                     double t0, double t1, \
                     double s0, double s1, \
@@ -270,7 +270,7 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
                             <double*> np.PyArray_DATA(aj_vector),
                             <double*> np.PyArray_DATA(bj_vector),
                             <double*> np.PyArray_DATA(cj_vector),
-                            aoj, boj, coj, Delta, qD, ssr, \
+                            Aj, Bj, Cj, Delta, qD, ssr, \
                             t0, t1, s0, s1, \
                             <double*> np.PyArray_DATA(fluxes))
 

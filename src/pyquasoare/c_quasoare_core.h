@@ -33,7 +33,7 @@ int c_quad_fluxes(int nfluxes,
                         double *aj_vector,
                         double *bj_vector,
                         double *cj_vector,
-                        double aoj, double boj, double coj,
+                        double Aj, double Bj, double Cj,
                         double Delta, double qD, double sbar,
                         double t0, double t1, double s0, double s1,
                         double * fluxes);

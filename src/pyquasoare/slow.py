@@ -180,15 +180,15 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
 
 
 def quad_fluxes(aj_vector, bj_vector, cj_vector, \
-                        aoj, boj, coj, Delta, qD, sbar, \
+                        Aj, Bj, Cj, Delta, qD, sbar, \
                         t0, t1, s0, s1, fluxes):
     nfluxes = len(fluxes)
     tau = t1-t0
     tau2 = tau*tau
     tau3 = tau2*tau
-    a = aoj
-    b = boj
-    c = coj
+    a = Aj
+    b = Bj
+    c = Cj
 
     if isnull(tau):
         return
@@ -199,8 +199,8 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector, \
         integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.
 
     elif isnull(a) and notnull(b):
-        integS = (s1-s0-coj*tau)/boj;
-        integS2 = ((s1**2-s0**2)/2-coj*integS)/boj;
+        integS = (s1-s0-Cj*tau)/Bj;
+        integS2 = ((s1**2-s0**2)/2-Cj*integS)/Bj;
 
     elif notnull(a):
         if isnull(Delta):
@@ -209,7 +209,7 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector, \
             omega = omega_fun(qD*tau, Delta)
             signD = -1 if Delta<0 else 1
             if qD*tau>10 and Delta>0:
-                term1 = (math.log(2)-qD*tau)/aoj
+                term1 = (math.log(2)-qD*tau)/Aj
             else:
                 term1 = math.log(1-signD*omega*omega)/2./a
             term2 = -math.log(1-a*(s0-sbar)/qD*omega)/a
@@ -250,9 +250,9 @@ def quad_integrate(alphas, scalings, \
 
     # Initialise iteration
     nfluxes = a_matrix_noscaling.shape[1]
-    aoj, aoj_prev, a_vect = 0., 0., np.zeros(nfluxes)
-    boj, boj_prev, b_vect = 0., 0., np.zeros(nfluxes)
-    coj, coj_prev, c_vect = 0., 0., np.zeros(nfluxes)
+    Aj, a_vect = 0., np.zeros(nfluxes)
+    Bj, b_vect = 0., np.zeros(nfluxes)
+    Cj, c_vect = 0., np.zeros(nfluxes)
 
     nit = 0
     niter_max = 2*nalphas
@@ -279,7 +279,7 @@ def quad_integrate(alphas, scalings, \
         alpha1 = np.inf if extrapolating_high else alphas[jalpha+1]
 
         # Sum coefficients accross fluxes
-        aoj = 0; boj = 0; coj = 0
+        Aj = 0; Bj = 0; Cj = 0
 
         for i in range(nfluxes):
             if extrapolating_low:
@@ -314,19 +314,19 @@ def quad_integrate(alphas, scalings, \
             b_vect[i] = b
             c_vect[i] = c
 
-            aoj += a
-            boj += b
-            coj += c
+            Aj += a
+            Bj += b
+            Cj += c
 
         # Round up coefficients
-        aoj = 0. if abs(aoj)<QUASOARE_EPS else aoj
-        boj = 0. if abs(boj)<QUASOARE_EPS else boj
+        Aj = 0. if abs(Aj)<QUASOARE_EPS else Aj
+        Bj = 0. if abs(Bj)<QUASOARE_EPS else Bj
 
         # Discriminant
-        Delta, qD, sbar = quad_constants(aoj, boj, coj)
+        Delta, qD, sbar = quad_constants(Aj, Bj, Cj)
 
         # Get derivative at beginning of time step
-        funval = quad_fun(aoj, boj, coj, s_start)
+        funval = quad_fun(Aj, Bj, Cj, s_start)
 
         # Check continuity
         if nit>1:
@@ -339,7 +339,7 @@ def quad_integrate(alphas, scalings, \
         if isnull(funval):
             s_end = s_start
         else:
-            s_end = quad_forward(aoj, boj, coj, Delta, qD, sbar, \
+            s_end = quad_forward(Aj, Bj, Cj, Delta, qD, sbar, \
                                     t_start, s_start, t_final)
 
         # complete or move band if needed
@@ -369,7 +369,7 @@ def quad_integrate(alphas, scalings, \
                     jalpha_next = min(nalphas-1, jalpha+1)
 
             # Increment time
-            t_end = t_start+quad_inverse(aoj, boj, coj, Delta, qD, sbar, \
+            t_end = t_start+quad_inverse(Aj, Bj, Cj, Delta, qD, sbar, \
                                                             s_start, s_end)
             t_end = t_final if t_end>t_final or abs(funval)<QUASOARE_EPS else t_end
 
@@ -383,19 +383,22 @@ def quad_integrate(alphas, scalings, \
 
         # Increment fluxes during the last interval
         quad_fluxes(a_vect, b_vect, c_vect, \
-                    aoj, boj, coj, Delta, qD, sbar, \
+                    Aj, Bj, Cj, Delta, qD, sbar, \
                     t_start, t_end, s_start, s_end, fluxes)
 
         # Loop for next band
-        funval_prev = quad_fun(aoj, boj, coj, s_end)
-        t_start_prev = t_start
-        s_start_prev = s_start
-        t_start = t_end
-        s_start = s_end
-        jalpha = jalpha_next
+        funval_prev = quad_fun(Aj, Bj, Cj, s_end)
 
         if isnull(funval_prev):
-            break
+            # f is null => we have reached steady state => complete
+            t_end = t_final
+            jalpha_next = jalpha
+        else:
+            t_start_prev = t_start
+            s_start_prev = s_start
+            t_start = t_end
+            s_start = s_end
+            jalpha = jalpha_next
 
     # Convergence problem
     if notequal(t_end, t_final, QUASOARE_ATOL, QUASOARE_RTOL) and abs(funval)>QUASOARE_EPS:

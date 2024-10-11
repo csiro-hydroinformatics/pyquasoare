@@ -180,7 +180,7 @@ int c_quad_fluxes(int nfluxes,
                         double * aj_vector,
                         double * bj_vector,
                         double * cj_vector,
-                        double aoj, double boj, double coj,
+                        double Aj, double Bj, double Cj,
                         double Delta, double qD, double sbar,
                         double t0, double t1, double s0, double s1,
                         double * fluxes){
@@ -189,9 +189,9 @@ int c_quad_fluxes(int nfluxes,
     double tau2=tau*tau;
     double tau3=tau2*tau;
     double aij, bij, cij;
-    double a = aoj, a_check=0.;
-    double b = boj, b_check=0.;
-    double c = coj, c_check=0.;
+    double a = Aj, a_check=0.;
+    double b = Bj, b_check=0.;
+    double c = Cj, c_check=0.;
     double integS=0., integS2=0.;
     double omega=0., signD=0., term1=0., term2=0.;
 
@@ -207,8 +207,8 @@ int c_quad_fluxes(int nfluxes,
         integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.;
     }
     else if((isnull(a) && notnull(b))){
-        integS = (s1-s0-coj*tau)/boj;
-        integS2 = ((s1*s1-s0*s0)/2.-coj*integS)/boj;
+        integS = (s1-s0-Cj*tau)/Bj;
+        integS2 = ((s1*s1-s0*s0)/2.-Cj*integS)/Bj;
     }
     else if (notnull(a)){
         /* Integrate S only because S2 can be deducted from S */
@@ -268,7 +268,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int QUASOARE_DEBUG=0;
 
     int i, nit=0, jalpha_next=0, err_flux;
-    double aoj=0., boj=0., coj=0.;
+    double Aj=0., Bj=0., Cj=0.;
     double a=0., b=0., c=0.;
     double constants[3], Delta, qD, sbar;
     double funval=0., funval_prev=0., grad=0.;
@@ -330,7 +330,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         alpha1 = extrapolating_high ? c_get_inf() : alphas[jalpha+1];
 
         /* Sum coefficients accross fluxes */
-        aoj=0.; boj=0.; coj=0.;
+        Aj=0.; Bj=0.; Cj=0.;
 
         for(i=0;i<nfluxes;i++){
             /* Compute flux coefficients
@@ -372,26 +372,26 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
             /* Add coefficients to obtain approximation of reservoir equation
              * function */
-            aoj += a;
-            boj += b;
-            coj += c;
+            Aj += a;
+            Bj += b;
+            Cj += c;
         }
 
         /* Check coefficients */
-        if(isnan(aoj) || isnan(boj) || isnan(coj))
+        if(isnan(Aj) || isnan(Bj) || isnan(Cj))
             return QUASOARE_QUAD_NAN_COEFF;
 
-        aoj = fabs(aoj)<QUASOARE_EPS ? 0. : aoj;
-        boj = fabs(boj)<QUASOARE_EPS ? 0. : boj;
+        Aj = fabs(Aj)<QUASOARE_EPS ? 0. : Aj;
+        Bj = fabs(Bj)<QUASOARE_EPS ? 0. : Bj;
 
         /* Compute discriminant variables */
-        c_quad_constants(aoj, boj, coj, constants);
+        c_quad_constants(Aj, Bj, Cj, constants);
         Delta = constants[0];
         qD = constants[1];
         sbar = constants[2];
 
         /* Get derivative at beginning of time step */
-        funval = c_quad_fun(aoj, boj, coj, s_start);
+        funval = c_quad_fun(Aj, Bj, Cj, s_start);
 
         /* Check continuity except for first iteration */
         if(nit>1){
@@ -404,7 +404,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         if(fabs(funval)<QUASOARE_EPS)
             s_end = s_start;
         else
-            s_end = c_quad_forward(aoj, boj, coj, Delta, qD, sbar,
+            s_end = c_quad_forward(Aj, Bj, Cj, Delta, qD, sbar,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
@@ -443,7 +443,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
             }
 
             /* Increment time */
-            t_end = t_start+c_quad_inverse(aoj, boj, coj,
+            t_end = t_start+c_quad_inverse(Aj, Bj, Cj,
                                             Delta, qD, sbar,
                                             s_start, s_end);
             t_end = t_end<t_final && fabs(funval)>QUASOARE_EPS ? t_end : t_final;
@@ -459,19 +459,23 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Increment fluxes during the last interval */
         err_flux = c_quad_fluxes(nfluxes,
                     a_vect, b_vect, c_vect,
-                    aoj, boj, coj, Delta, qD, sbar,
+                    Aj, Bj, Cj, Delta, qD, sbar,
                     t_start, t_end, s_start, s_end, fluxes);
         if(err_flux>0)
             return err_flux;
 
         /* Loop for next band */
-        funval_prev = c_quad_fun(aoj, boj, coj, s_end);
-        t_start = t_end;
-        s_start = s_end;
-        jalpha = jalpha_next;
-
-        if(isnull(funval_prev))
-            break;
+        funval_prev = c_quad_fun(Aj, Bj, Cj, s_end);
+        if(isnull(funval_prev)){
+            /* .. f is null => we have reached steady state => complete */
+            t_end = t_final;
+            jalpha_next = jalpha;
+        }
+        else {
+            t_start = t_end;
+            s_start = s_end;
+            jalpha = jalpha_next;
+        }
     }
 
     /* Store results */
