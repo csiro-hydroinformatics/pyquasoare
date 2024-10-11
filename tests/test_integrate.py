@@ -695,8 +695,6 @@ def test_reservoir_equation_gr4j(allclose):
 
 
 def test_reservoir_interception(allclose):
-    pytest.skip("Test failing")
-
     siteid = "203900"
     df = data_reader.get_data(siteid, "daily")
     P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
@@ -713,10 +711,10 @@ def test_reservoir_interception(allclose):
 
     s_start = 0.
     niters = []
-    intfun = slow.quad_integrate
+    intfun = integrate.quad_integrate
     for t in range(len(scalings)):
         niter, s_end, sim = intfun(alphas, scalings[t],\
-                                    amat, bmat, cmat, 0., s_start, 1.,\
-                                    debug=True)
+                                    amat, bmat, cmat, 0., s_start, 1.)
         s_start = s_end
+
 

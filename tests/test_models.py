@@ -162,3 +162,24 @@ def test_routing_convergence(allclose):
                             amat, bmat, cmat, s0, timestep)
 
 
+
+def test_reservoir_interception(allclose):
+    siteid = "203900"
+    df = data_reader.get_data(siteid, "daily")
+    P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
+
+    theta = 0.1
+    scalings = np.column_stack([P/theta, E/theta])
+
+    nuP, nuE = 8., 8.
+    fP = lambda x: 1-x**nuP
+    fE = lambda x: -1+(1-x)**nuE
+
+    alphas = np.linspace(0, 1.05, 10)
+    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+
+    s0 = 0.
+    timestep = 1.
+    niter, s1, sim = models.quad_model(alphas, scalings, \
+                            amat, bmat, cmat, s0, timestep)
+
