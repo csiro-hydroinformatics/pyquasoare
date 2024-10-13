@@ -103,49 +103,52 @@ int c_get_error_message(int err_code, char message[100]){
     int ierr=0;
     int len=100;
 
-    if(err_code == QUASOARE_ERROR_INTEGRATE_WRONG_NU)
+    if(err_code == QUASOARE_INTEGRATE_WRONG_NU)
         strncpy(message, "Invalid nu", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_OUT_OF_BOUNDS)
+    else if(err_code == QUASOARE_INTEGRATE_OUT_OF_BOUNDS)
         strncpy(message, "j index out of bounds", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_NAN_COEFF)
+    else if(err_code == QUASOARE_INTEGRATE_NAN_COEFF)
         strncpy(message, "NaN values in coefficients", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_NOT_CONTINUOUS)
+    else if(err_code == QUASOARE_INTEGRATE_NOT_CONTINUOUS)
         strncpy(message, "Approx function not continuous, please check coefficients", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_NAN_SIM)
+    else if(err_code == QUASOARE_INTEGRATE_NAN_SIM)
         strncpy(message, "Simulation produces nan", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_NO_CONVERGENCE)
+    else if(err_code == QUASOARE_INTEGRATE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
-    else if(err_code == QUASOARE_ERROR_NFLUXES_TOO_LARGE)
+    else if(err_code == QUASOARE_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes too large", len);
 
-    else if(err_code == QUASOARE_ERROR_INTEGRATE_TSTART_EQUAL_TEND)
+    else if(err_code == QUASOARE_INTEGRATE_TSTART_EQUAL_TEND)
         strncpy(message, "end time identical to start time", len);
 
-    else if(err_code == QUASOARE_QUAD_APPROX_SAMEALPHA)
+    else if(err_code == QUASOARE_APPROX_SAMEALPHA)
         strncpy(message, "Collapsed approximation band", len);
 
-    else if(err_code == QUASOARE_QUAD_TIME_TOOLOW)
+    else if(err_code == QUASOARE_TIME_TOOLOW)
         strncpy(message, "Integration time is too low", len);
 
-    else if(err_code == QUASOARE_QUAD_FAILEDSUMCHECK)
+    else if(err_code == QUASOARE_FAILEDSUMCHECK)
         strncpy(message, "Coefficients sum is not consistent", len);
 
-    else if(err_code == QUASOARE_QUAD_NFLUXES_TOO_LARGE)
+    else if(err_code == QUASOARE_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes is too large", len);
 
-    else if(err_code == QUASOARE_QUAD_NAN_COEFF)
+    else if(err_code == QUASOARE_NAN_COEFF)
         strncpy(message, "Coefficient is nan", len);
 
-    else if(err_code == QUASOARE_QUAD_NOT_CONTINUOUS)
+    else if(err_code == QUASOARE_NONINCREASING_NODES)
+        strncpy(message, "Interpolation nodes are not increasing", len);
+
+    else if(err_code == QUASOARE_NOT_CONTINUOUS)
         strncpy(message, "Function is not continuous", len);
 
-    else if(err_code == QUASOARE_QUAD_NO_CONVERGENCE)
+    else if(err_code == QUASOARE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)

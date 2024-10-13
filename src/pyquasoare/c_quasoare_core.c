@@ -57,6 +57,13 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
      double A=0, B=0;
      double a=0, b=0, c=0;
 
+     if(a1<=a0){
+        coefs[0] = c_get_nan();
+        coefs[1] = c_get_nan();
+        coefs[2] = c_get_nan();
+        return QUASOARE_NONINCREASING_NODES;
+     }
+
      /* Ensures quadratic function remains monotone if fm */
      double f25=0., f75=0., bnd1=0., bnd2=0.;
      if(approx_opt==1){
@@ -67,27 +74,19 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
         fm = fm<bnd1 ? bnd1 : fm>bnd2 ? bnd2 : fm;
      }
 
-     if(isnull(da)){
-        /* a0=a1, cannot interpolate */
-        a = c_get_nan();
-        b = c_get_nan();
-        c = c_get_nan();
-     }
-     else {
-        /* Linear function */
-        if(approx_opt==0) {
-            a = 0.;
-            b = (f1-f0)/da;
-            c = f0-a0*b;
-        } else {
-            /* Quadratic function */
-            A = 2*f0+2*f1-4*fm;
-            B = 4*fm-f1-3*f0;
+     /* Linear function */
+     if(approx_opt==0) {
+         a = 0.;
+         b = (f1-f0)/da;
+         c = f0-a0*b;
+     } else {
+         /* Quadratic function */
+         A = 2*f0+2*f1-4*fm;
+         B = 4*fm-f1-3*f0;
 
-            a = A/da2;
-            b = -2*a0*a+B/da;
-            c = a0*a0*a-B*a0/da+f0;
-        }
+         a = A/da2;
+         b = -2*a0*a+B/da;
+         c = a0*a0*a-B*a0/da+f0;
      }
 
      coefs[0] = a;
@@ -196,7 +195,7 @@ int c_quad_fluxes(int nfluxes,
     double omega=0., signD=0., term1=0., term2=0.;
 
     if(t1<t0)
-        return QUASOARE_QUAD_TIME_TOOLOW;
+        return QUASOARE_TIME_TOOLOW;
 
     if(isnull(tau))
         return 0;
@@ -249,7 +248,7 @@ int c_quad_fluxes(int nfluxes,
     if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
             notequal(b, b_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
             notequal(c, c_check, QUASOARE_ATOL, QUASOARE_RTOL)){
-        return QUASOARE_QUAD_FAILEDSUMCHECK;
+        return QUASOARE_FAILEDSUMCHECK;
     }
     return 0;
 }
@@ -265,8 +264,6 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int QUASOARE_DEBUG=0;
-
     int i, nit=0, jalpha_next=0, err_flux;
     double Aj=0., Bj=0., Cj=0.;
     double a=0., b=0., c=0.;
@@ -299,20 +296,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double s_start=s0, s_end=s0;
 
     if(nfluxes>=QUASOARE_NFLUXES_MAX)
-        return QUASOARE_QUAD_NFLUXES_TOO_LARGE;
+        return QUASOARE_NFLUXES_TOO_LARGE;
 
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0.;
-
-    if(QUASOARE_DEBUG==1){
-        fprintf(stdout, "\n\nNALPHAS=%d  NFLUXES=%d\n", nalphas, nfluxes);
-        fprintf(stdout, "Start t0=%5.5e s0=%5.5e j=%d t_final=%5.5e\n", t0, s0, jalpha, t_final);
-        fprintf(stdout, "scalings:");
-        for(i=0; i<nfluxes; i++)
-            fprintf(stdout, " scl[%d]=%3.3e", i, scalings[i]);
-
-        fprintf(stdout, "\nStart integrate s0=%5.5e j=%d\n", s0, jalpha);
-    }
 
     /* Time loop */
     while (t_end<t_final*(1-QUASOARE_EPS) && nit<niter_max) {
@@ -379,7 +366,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
         /* Check coefficients */
         if(isnan(Aj) || isnan(Bj) || isnan(Cj))
-            return QUASOARE_QUAD_NAN_COEFF;
+            return QUASOARE_NAN_COEFF;
 
         Aj = fabs(Aj)<QUASOARE_EPS ? 0. : Aj;
         Bj = fabs(Bj)<QUASOARE_EPS ? 0. : Bj;
@@ -396,7 +383,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Check continuity except for first iteration */
         if(nit>1){
             if(notequal(funval_prev, funval, QUASOARE_ATOL, QUASOARE_RTOL)) {
-                return QUASOARE_QUAD_NOT_CONTINUOUS;
+                return QUASOARE_NOT_CONTINUOUS;
             }
         }
 
@@ -449,13 +436,6 @@ int c_quad_integrate(int nalphas, int nfluxes,
             t_end = t_end<t_final && fabs(funval)>QUASOARE_EPS ? t_end : t_final;
         }
 
-        if(QUASOARE_DEBUG==1){
-            fprintf(stdout, "\n{%d} low=%d high=%d / fun=%3.3e>%3.3e"
-                    "/ t=%3.3e>%3.3e / j=%d>%d / s=%3.3e>%3.3e\n",
-                    nit, extrapolating_low, extrapolating_high,
-                    funval_prev, funval, t_start, t_end, jalpha, jalpha_next,
-                    s_start, s_end);
-        }
         /* Increment fluxes during the last interval */
         err_flux = c_quad_fluxes(nfluxes,
                     a_vect, b_vect, c_vect,
@@ -482,12 +462,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
     *s1 = s_end;
     *niter = nit;
 
-    if(QUASOARE_DEBUG==1)
-        fprintf(stdout, "\nEnd integrate s1=%5.5e j=%d\n", s_end, jalpha);
-
     /* Convergence problem */
     if(notequal(t_final, t_end, QUASOARE_ATOL, QUASOARE_RTOL) && fabs(funval)>QUASOARE_EPS)
-        return QUASOARE_QUAD_NO_CONVERGENCE;
+        return QUASOARE_NO_CONVERGENCE;
 
     return 0;
 }
