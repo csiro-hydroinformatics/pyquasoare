@@ -5,15 +5,20 @@ import matplotlib.pyplot as plt
 from pyquasoare import benchmarks, approx, models
 from hydrodiy.io import csv
 
-froot = Path(__file__).parent.parent
+source_file = Path(__file__).resolve()
+froot = source_file.parent.parent
+basename = source_file.stem
+fimg = froot / "examples" / "images"
+fimg.mkdir(exist_ok=True, parents=True)
 
 # Get production store flux functions.
 # The store capacity is X1 (mm) and its filling level is S.
+# The equation is solved using normalised fluxes u = S/X1
 #
 # P is the daily rainfall, E is the daily evapotranspiration.
-# infiltrated rainfall : fp(S/X1) = P(1-[S/X1]^2)
-# actual evapotranspiration : fe(S/X1) = E S/X1 (2-S/X1)
-# percolation : fr = -2.25^4/4 (S/X1)^5
+# infiltrated rainfall : fp(u) = P/X1.(1-u^2)
+# actual evapotranspiration : fe(u) = E/X1.u(2-u)
+# percolation : fr = -2.25^4/4 u^5
 #
 fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
 
@@ -33,7 +38,8 @@ time = df.index
 rain = df.loc[:, "RAINFALL[mm/day]"]
 evap = df.loc[:, "PET[mm/day]"]
 
-# input accounting for interception
+# Remove interception from inputs similarly to what is
+# done in GR4J
 rain_intercept = np.maximum(rain-evap, 0.)
 evap_intercept = np.maximum(evap-rain, 0.)
 
@@ -55,7 +61,11 @@ sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
 
 plt.close("all")
 fig, axs = plt.subplots(nrows=4, figsize=(15, 10), layout="constrained")
+names = ["Store level", "Intercepted Rain", "Actual Evapotranspiration", \
+                "Percolation"]
 for iax, ax in enumerate(axs):
     ax.plot(time, sims[:, iax])
+    ax.set(title=names[iax])
 
-plt.show()
+fp = fimg / f"{basename}.png"
+fig.savefig(fp)
