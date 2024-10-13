@@ -28,40 +28,40 @@ LOGGER = iutils.get_logger("integrate", flog=FTEST / "test_integrate.log")
 def test_find_alpha(allclose):
     alphas = np.linspace(0, 1, 4)
     for ia, a in enumerate(alphas):
-        ialpha = integrate.find_alpha(alphas, a)
+        ialpha = integrate.__find_alpha(alphas, a)
         assert ialpha == min(ia, 2)
 
     u0 = -1.
-    ialpha = integrate.find_alpha(alphas, u0)
+    ialpha = integrate.__find_alpha(alphas, u0)
     assert ialpha == -1
 
     u0 = 1.1
-    ialpha = integrate.find_alpha(alphas, u0)
+    ialpha = integrate.__find_alpha(alphas, u0)
     assert ialpha == 3
 
     u0 = 0.2
-    ialpha = integrate.find_alpha(alphas, u0)
+    ialpha = integrate.__find_alpha(alphas, u0)
     assert ialpha == 0
 
     u0 = 0.4
-    ialpha = integrate.find_alpha(alphas, u0)
+    ialpha = integrate.__find_alpha(alphas, u0)
     assert ialpha == 1
 
     u0 = 0.7
-    ialpha = integrate.find_alpha(alphas, u0)
+    ialpha = integrate.__find_alpha(alphas, u0)
     assert ialpha == 2
 
 
 def test_eta_fun(allclose):
     xx = -2+0.1*np.arange(20)
     for x in xx:
-        c1 = integrate.eta_fun(x, 1.)
+        c1 = integrate.__eta_fun(x, 1.)
         s1 = slow.eta_fun(x, 1.)
         assert allclose(c1, s1)
         if x in [-1, 1]:
             assert not np.isfinite(c1)
 
-        c2 = integrate.eta_fun(x, -1.)
+        c2 = integrate.__eta_fun(x, -1.)
         s2 = slow.eta_fun(x, -1.)
         assert allclose(c2, s2)
 
