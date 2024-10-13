@@ -94,6 +94,11 @@ steps:
   displayName: test
   timeoutInMinutes: 90
 
+- script: |
+    source activate $(CONDA_ENV)
+    python examples/run_all_examples.py
+  displayName: run_examples
+
 - task: CopyFiles@2
   inputs:
     sourceFolder: '$(BUILD_DIR)/pyquasoare/tests'
