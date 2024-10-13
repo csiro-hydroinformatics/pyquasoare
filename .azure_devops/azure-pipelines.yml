@@ -89,6 +89,7 @@ steps:
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/pyquasoare
+    pytest --doctest-modules src
     pytest --ntry=200 --junitxml=junit/test-results.xml --cov=pyquasoare --cov-config=.coveragerc --cov-report=xml tests
   displayName: test
   timeoutInMinutes: 90
