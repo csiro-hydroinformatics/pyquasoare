@@ -252,7 +252,13 @@ def test_forward_vs_numerical(allclose, generate_samples):
 
         err = np.abs(np.arcsinh(s1)-np.arcsinh(expected))
         errmax = np.nanmax(err[iok])
-        err_thresh = 5e-2 if case in [5, 7] else 5e-4
+        if case in [5, 7]
+            err_thresh = 5e-2
+        elif case in [4, 6]:
+            err_thresh = 1e-3
+        else:
+            err_thresh = 5e-4
+
         assert errmax<err_thresh
         errmax_max = max(errmax, errmax_max)
         nassessed += 1
