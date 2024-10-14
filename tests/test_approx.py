@@ -374,8 +374,8 @@ def test_quad_coefficients_edge_cases(allclose):
     # Identical band limits
     alpha0, alpha1 = 1., 1.
     f0, fm, f1 = 1., 1., 1.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
-    assert np.all(np.isnan([a, b, c]))
+    with pytest.raises(ValueError, match="not increasing"):
+        a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
 
     # high value within interval [f0, f1] -> monotonous
     alpha0, alpha1 = 0., 1.

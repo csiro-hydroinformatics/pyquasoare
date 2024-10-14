@@ -9,7 +9,7 @@ else:
     raise ImportError("Cannot run quasoare without C code. Please compile C code.")
 
 
-def ___find_alpha(alphas, u0):
+def __find_alpha(alphas, u0):
     """ -- Function defined for test purposes --
     Finds location of u0 within interpolation bands defined by
     the interpolation nodes alphas.

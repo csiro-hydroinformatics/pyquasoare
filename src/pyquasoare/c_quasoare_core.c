@@ -43,10 +43,10 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
 /*
  * Quadratic interpolation coefficients to match a function such that
  * f(a0) = f0 , f(a1) = f1 , f((a0+a1)/2) = fm
- * fapprox(s) = as^2+bs+c
- * approx opt characterise the fit:
+ * f(s) = as^2+bs+c
+ * approx opt characterises the fit:
  * 0 = linear fit (i.e. force a = 0)
- * 1 = mononotonous function (i.e. prevent zero of derivative in [a0, a1])
+ * 1 = mononotonic function (i.e. prevent zero of derivative in [a0, a1])
  * 2 = free
  * */
 int c_quad_coefficients(int approx_opt, double a0, double a1,

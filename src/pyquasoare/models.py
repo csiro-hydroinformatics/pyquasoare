@@ -85,9 +85,6 @@ def quad_model(alphas, scalings, \
     >>> s0 = 0.
     >>> timestep = 1.
     >>> niter, s1, fx = quad_model(alphas, sc, amat, bmat, cmat, s0, timestep)
-    >>> # Number of iterations. Note that the number 10 is reached on the 3rd timestep
-    >>> niter
-    array([ 1,  1, 10,  4,  2,  1,  2,  1,  1,  1])
     >>> # ODE solution
     >>> s1
     array([ 0.        ,  0.        , 14.63001824,  0.92614791,  0.75904346,
