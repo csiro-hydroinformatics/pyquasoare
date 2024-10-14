@@ -1,4 +1,4 @@
-name: Build pygme
+name: Build pyquasoare
 
 on: [push]
 
@@ -59,7 +59,7 @@ jobs:
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_mini_v2
           cd $GITHUB_WORKSPACE
-          echo "--- pygme install : located in $PWD ---"
+          echo "--- pyquasoare install : located in $PWD ---"
           pip install -e .
 
       - name: Run tests
