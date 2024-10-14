@@ -38,13 +38,15 @@ setup(
     url= "https://github.com/csiro-hydroinformatics/pyquasoare",
     download_url= "hhttps://github.com/csiro-hydroinformatics/pyquasoare/tags",
     version=versioneer.get_version(),
-    description= "Solve the reservoir equation",
+    description= "Solve the approximate reservoir equation using the QuaSoARe method",
     long_description= read("README.md"),
     packages=find_packages(),
     package_dir={"": "src"},
     package_data={
         "pyquasoare": [
-            "tests/*.zip"
+            "data/*.csv",
+            "data/daily/*.zip",
+            "data/hourly/*.zip"
         ],
     },
     install_requires= [
