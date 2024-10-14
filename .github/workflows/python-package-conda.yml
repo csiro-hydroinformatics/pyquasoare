@@ -68,8 +68,8 @@ jobs:
           conda activate env_mini_v2
           cd $GITHUB_WORKSPACE
           echo "--- pyquasoare test : located in $PWD ---"
-          pytest --ignore=src/pygme/tests --doctest-modules src
-          pytest --ignore=src/pygme/tests --ntry=100 --cov=pyquasoare --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
+          pytest --ignore=src/pygme --ignore=src/hydrodiy --doctest-modules src
+          pytest --ignore=src/pygme --ignore=src/hydrodiy --ntry=100 --cov=pyquasoare --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
       
       - name: Upload pytest test results
         uses: actions/upload-artifact@v3
