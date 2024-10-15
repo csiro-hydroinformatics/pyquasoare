@@ -17,7 +17,7 @@ Lerat, J. (2024),
 - Git clone this repository and run `pip install .`
 
 # Basic use
-Solution of the production store from the [![GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257)] daily rainfall-runoff model using QuaSoAre:
+Solution of the production store from the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre:
 
 ```python
 from pathlib import Path
