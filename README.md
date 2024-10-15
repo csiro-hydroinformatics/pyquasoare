@@ -86,5 +86,5 @@ plt.show()
 
 # License
 The source code and documentation of the pyquasoare package is licensed under the
-[BSD license](LICENSE.txt).
+[MIT license](LICENSE.txt).
 
