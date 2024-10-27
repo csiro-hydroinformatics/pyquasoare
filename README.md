@@ -1,7 +1,7 @@
 ![QuaSoaRe](icon.png)
 
 # pyquasoare
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10065353.svg)](https://doi.org/10.5281/zenodo.10065353) [![Build pyquasoare](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml) [![codecov](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare/graph/badge.svg?token=ARBFW69TI3)](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare)
+ [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13928254.svg)](https://doi.org/10.5281/zenodo.13928254) [![Build pyquasoare](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml) [![codecov](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare/graph/badge.svg?token=ARBFW69TI3)](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare)
 
 Python and C package to solve the reservoir differential equation using a
 piecewise quadratic interpolation following the QuaSoARe method.
@@ -17,7 +17,7 @@ Lerat, J. (2024),
 - Git clone this repository and run `pip install .`
 
 # Basic use
-Solution of the production store from the [![GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257)] daily rainfall-runoff model using QuaSoAre:
+Solution of the production store from the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre:
 
 ```python
 from pathlib import Path
@@ -85,6 +85,6 @@ plt.show()
 ```
 
 # License
-The source code and documentation of the pydaisi package is licensed under the
-[BSD license](LICENSE.txt).
+The source code and documentation of the pyquasoare package is licensed under the
+[MIT license](LICENSE.txt).
 
