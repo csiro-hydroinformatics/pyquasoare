@@ -14,7 +14,8 @@ def quad_model(alphas, scalings, \
                 a_matrix_noscaling, \
                 b_matrix_noscaling, \
                 c_matrix_noscaling, s0, timestep, \
-                errors="ignore"):
+                errors="ignore", \
+                fluxes=None, niter=None, s1=None):
     """ Integrate the approximate reservoir equation with initial initial
     condition s0 over a series of P timesteps.
 
@@ -46,13 +47,19 @@ def quad_model(alphas, scalings, \
         - if 'ignore', then skip over error during time step integration
         - if 'raise', throw a ValueError.
         - if 'warn', throw a warning.
+    niter, s1, fluxes : np.ndarray
+        Arrays used by for computation "in place", i.e.
+        when output arrays are not allocated within the
+        function. This is useful if the function is used repeatedly.
+
+        If None, the arrays are allocated during every function run.
 
     Returns
     -------
-    niter : int
+    niter : np.ndarray
         Number of iterations (i.e. number of interpolation bands crossed).
         Vector of length P (one number for each timestep).
-    s1 : float
+    s1 : np.ndarray
         Final value of S at the end of each timestep.
         Vector of length P.
     fluxes : np.ndarray
@@ -107,9 +114,14 @@ def quad_model(alphas, scalings, \
     """
     assert errors in ERRORS
     nval = scalings.shape[0]
-    fluxes = np.zeros(scalings.shape, dtype=np.float64)
-    niter = np.zeros(nval, dtype=np.int32)
-    s1 = np.zeros(nval, dtype=np.float64)
+
+    if fluxes is None:
+        fluxes = np.zeros(scalings.shape, dtype=np.float64)
+    if niter is None:
+        niter = np.zeros(nval, dtype=np.int32)
+    if s1 is None:
+        s1 = np.zeros(nval, dtype=np.float64)
+
     ierrors = np.int32(ERRORS.index(errors))
 
     ierr = c_pyquasoare.quad_model(ierrors, alphas, scalings, \
