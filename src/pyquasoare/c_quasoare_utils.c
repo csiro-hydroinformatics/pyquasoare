@@ -103,29 +103,8 @@ int c_get_error_message(int err_code, char message[100]){
     int ierr=0;
     int len=100;
 
-    if(err_code == QUASOARE_INTEGRATE_WRONG_NU)
-        strncpy(message, "Invalid nu", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_OUT_OF_BOUNDS)
-        strncpy(message, "j index out of bounds", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_NAN_COEFF)
-        strncpy(message, "NaN values in coefficients", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_NOT_CONTINUOUS)
-        strncpy(message, "Approx function not continuous, please check coefficients", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_NAN_SIM)
-        strncpy(message, "Simulation produces nan", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_NO_CONVERGENCE)
-        strncpy(message, "Algorithm did not converge", len);
-
-    else if(err_code == QUASOARE_NFLUXES_TOO_LARGE)
+    if(err_code == QUASOARE_NFLUXES_TOO_LARGE)
         strncpy(message, "Number of fluxes too large", len);
-
-    else if(err_code == QUASOARE_INTEGRATE_TSTART_EQUAL_TEND)
-        strncpy(message, "end time identical to start time", len);
 
     else if(err_code == QUASOARE_APPROX_SAMEALPHA)
         strncpy(message, "Collapsed approximation band", len);
@@ -141,6 +120,9 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == QUASOARE_NAN_COEFF)
         strncpy(message, "Coefficient is nan", len);
+
+    else if(err_code == QUASOARE_NAN_SCALING)
+        strncpy(message, "Scaling factor is nan", len);
 
     else if(err_code == QUASOARE_NONINCREASING_NODES)
         strncpy(message, "Interpolation nodes are not increasing", len);
