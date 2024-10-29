@@ -183,3 +183,48 @@ def test_reservoir_interception(allclose):
     niter, s1, sim = models.quad_model(alphas, scalings, \
                             amat, bmat, cmat, s0, timestep)
 
+
+def test_in_place_computing(allclose):
+    siteid = "203005"
+    start_hourly = "2022-02-01"
+    end_hourly = "2022-03-31"
+    hourly = data_reader.get_data(siteid, "hourly").loc[start_hourly:end_hourly]
+    inflows = hourly.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+
+    q0 = inflows.quantile(0.9)
+    timestep = 3600.
+    nval = len(inflows)
+
+    # Bi-Cubic reservoir
+    nu = 6.
+    fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
+    nalphas = 5
+    alphas = np.linspace(0, 3., nalphas)
+    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+
+    # Intialise two scalings
+    scalings = np.column_stack([inflows, q0*np.ones(nval)])
+
+    # Initialise outputs
+    niter = np.zeros(nval, dtype=np.int32)
+    s1 = np.zeros(nval)
+    fx = np.zeros((nval, 2))
+
+    nsims = 5
+    sims = np.zeros((nval, nsims))
+    s0 = 0.
+
+    for ith, theta in enumerate(np.linspace(5e6, 5e7, nsims)):
+        # Adjust scalings depending on paramter values
+        scalings /= theta
+
+        # Run model in place (i.e. no new array allocation)
+        models.quad_model(alphas, scalings, \
+                            amat, bmat, cmat, s0, timestep, \
+                            niter=niter, fluxes=fx, s1=s1)
+        sims[:, ith] = -fx[:, 1]*theta/timestep
+
+        scalings *= theta
+
+    # Check that simulations are different
+    assert (sims.std(axis=1)>10).sum()>100
