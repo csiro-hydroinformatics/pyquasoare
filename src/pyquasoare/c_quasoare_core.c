@@ -269,7 +269,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double a=0., b=0., c=0.;
     double constants[3], Delta, qD, sbar;
     double funval=0., funval_prev=0., grad=0.;
-    double alpha0, alpha1;
+    double alpha0, alpha1, scl;
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
 
@@ -320,6 +320,11 @@ int c_quad_integrate(int nalphas, int nfluxes,
         Aj=0.; Bj=0.; Cj=0.;
 
         for(i=0;i<nfluxes;i++){
+            /* Scaling factor to be applied to each flux coefficient */
+            scl = scalings[i];
+            if(isnan(scl))
+                return QUASOARE_NAN_SCALING;
+
             /* Compute flux coefficients
              * Multiply approximation coefficients by scaling.
              * if s is lower than alpha1 or higher than alpham
@@ -327,9 +332,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
              * matching gradient at boundary.
              */
             if(extrapolating_low){
-                a = a_matrix_noscaling[i]*scalings[i];
-                b = b_matrix_noscaling[i]*scalings[i];
-                c = c_matrix_noscaling[i]*scalings[i];
+                a = a_matrix_noscaling[i]*scl;
+                b = b_matrix_noscaling[i]*scl;
+                c = c_matrix_noscaling[i]*scl;
 
                 grad = c_quad_grad(a, b, c, alpha_min);
                 c = c_quad_fun(a, b, c, alpha_min)-grad*alpha_min;
@@ -337,9 +342,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 a = 0.;
             }
             else if(extrapolating_high){
-                a = a_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
-                b = b_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
-                c = c_matrix_noscaling[nfluxes*(nalphas-2)+i]*scalings[i];
+                a = a_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
+                b = b_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
+                c = c_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
 
                 grad = c_quad_grad(a, b, c, alpha_max);
                 c = c_quad_fun(a, b, c, alpha_max)-grad*alpha_max;
@@ -347,9 +352,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 a = 0.;
             }
             else {
-                a = a_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-                b = b_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
-                c = c_matrix_noscaling[nfluxes*jalpha+i]*scalings[i];
+                a = a_matrix_noscaling[nfluxes*jalpha+i]*scl;
+                b = b_matrix_noscaling[nfluxes*jalpha+i]*scl;
+                c = c_matrix_noscaling[nfluxes*jalpha+i]*scl;
             }
 
             /* Store flux coefficents */
