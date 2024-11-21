@@ -106,6 +106,6 @@ jobs:
           cd examples/quadroute
           ./compile_unix.sh
 
-          cd ../examples/vicmod
+          cd ../vicmod
           ./compile_unix.sh
         
