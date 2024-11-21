@@ -35,6 +35,8 @@
 * W03408, doi:10.1029/2005WR004376.
 */
 
+/* Basic random number generation to simulate
+ * climate inputs */
 double rnd(){
     return (double)rand()/(double)RAND_MAX;
 }
@@ -51,7 +53,7 @@ int main(){
     /* Coefficient matrices : 10 alphas x 4 fluxes
         -> 10x4 matrices*/
     int nfluxes = 4;
-    double amat[40], bmat[40], cmat[40];
+    double amat[48], bmat[48], cmat[48];
 
     /* Model parameters */
     double Smax = 100;
@@ -153,6 +155,6 @@ int main(){
         s0 = s1[0];
     }
     fclose(fp);
-
+    fprintf(stdout, ".. process completed\n");
     return 0;
 }

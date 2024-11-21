@@ -28,6 +28,7 @@ int main(){
 
     /* Interpolation coefficients */
     /* .. quadratic terms (only for f2) */
+    fprintf(stdout, ".. Initialise coefficients\n");
     amat[0] = 0; amat[1] = -1.;
     amat[2] = 0; amat[3] = -1.;
     amat[4] = 0; amat[5] = -1.;
@@ -59,6 +60,7 @@ int main(){
     fprintf(fp, "time,store,inflow,outflow,store_analytical\n");
 
     /* integrate */
+    fprintf(stdout, ".. Run model\n");
     for(i=0; i<nval; i++){
         t1 = t0+timestep*i;
         omega = tanh(t1);
@@ -71,6 +73,6 @@ int main(){
                     t1, s1[0], fluxes[0], fluxes[1], anl);
     }
     fclose(fp);
-
+    fprintf(stdout, ".. process completed\n");
     return 0;
 }
