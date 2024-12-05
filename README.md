@@ -85,7 +85,7 @@ plt.show()
 ```
 
 ## Attribution
-This project is licensed under the [MIT License](LICENSE.txt), which allows for free use, modification, and distribution of the code under the terms of the license.
+This project is licensed under the [MIT License](LICENSE), which allows for free use, modification, and distribution of the code under the terms of the license.
 
 For proper citation of this project, please refer to the [CITATION.cff](CITATION.cff) file, which provides guidance on 
 how to cite the software and relevant publications.

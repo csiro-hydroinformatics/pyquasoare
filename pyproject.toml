@@ -12,7 +12,7 @@ version = "1.0"
 authors = [{name = "Julien Lerat, CSIRO Environment", email="julien.lerat@csiro.au"}]
 description = "Solve the approximate reservoir equation using the QuaSoARe method"
 readme = "README.md"
-license = {file = "LICENSE.txt"}
+license = "LICENSE"
 keywords = ["differential equation", "reservoir", "dynamic system", "store", "routing", "rainfall-runoff", "hydrology"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
