@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools",
+    "setuptools >= 64",
     "cython >= 3.0.10",
     "numpy >= 1.20.0"
 ]
@@ -8,11 +8,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyquasoare"
-version = "1.0"
+version = "1.1"
 authors = [{name = "Julien Lerat, CSIRO Environment", email="julien.lerat@csiro.au"}]
 description = "Solve the approximate reservoir equation using the QuaSoARe method"
 readme = "README.md"
-license = "LICENSE"
+license = {file = "LICENSE"}
 keywords = ["differential equation", "reservoir", "dynamic system", "store", "routing", "rainfall-runoff", "hydrology"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -40,4 +40,4 @@ testpaths = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["data/*.csv", "data/daily/*.zip", "data/hourly/*.zip"]
+where = ["src"]
