@@ -2,5 +2,4 @@
 show_missing = True
 omit =
     src/pyquasoare/__init__.py
-    src/pyquasoare/__version__.py
   
