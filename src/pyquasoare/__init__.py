@@ -1,5 +1,7 @@
 import importlib
 
+__version__ = "1.2"
+
 def has_c_module(raise_error=True):
     name = f"c_pyquasoare"
     out = importlib.util.find_spec(name)

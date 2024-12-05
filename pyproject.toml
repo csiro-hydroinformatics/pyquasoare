@@ -8,7 +8,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyquasoare"
-version = "1.1"
 authors = [{name = "Julien Lerat, CSIRO Environment", email="julien.lerat@csiro.au"}]
 description = "Solve the approximate reservoir equation using the QuaSoARe method"
 readme = "README.md"
@@ -29,6 +28,7 @@ dependencies = [
     "scipy >= 1.0.0",
     "pandas >= 2.0.0"
 ]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/csiro-hydroinformatics/pyquasoare"
@@ -41,3 +41,6 @@ testpaths = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyquasoare.__version__"}
