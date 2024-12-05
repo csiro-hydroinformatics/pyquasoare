@@ -41,9 +41,6 @@ testpaths = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-<<<<<<< HEAD
 
 [tool.setuptools.dynamic]
 version = {attr = "pyquasoare.__version__"}
-=======
->>>>>>> 3725c093179434d053c70bc92bf91017ec12be75
