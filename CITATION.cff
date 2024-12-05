@@ -1,0 +1,44 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: pyquasoare
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Julien
+    family-names: Lerat
+    email: julien.lerat@csiro.au
+    affiliation: CSIRO
+    orcid: '0000-0003-4521-8874'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.13928254
+repository-code: 'https://github.com/csiro-hydroinformatics/pyquasoare'
+url: 'https://github.com/csiro-hydroinformatics/pyquasoare'
+abstract: >-
+  This package implements the Quadratic Solution of the
+  Approximate Reservoir Equation (QuaSoARe) method.
+
+  "Quadratic solution of the approximate reservoir equation
+  (QUASOARE)", HESS, Submitted.
+keywords:
+  - Differential equation
+  - Reservoir
+  - Hydrology
+  - Rainfall-runoff
+license: MIT
+
+references:
+  - type: article
+    title: Technical note: Quadratic solution of the approximate reservoir equation (QuaSoARe)
+    authors:
+      - family-names: "Lerat"
+        given-names: "Julien"
+        orcid: "0000-0003-4521-8874"
+    year: 2024
+    journal: "Hydrology and Earth System Sciences"
+    volume: "in review"
+    url: "https://egusphere.copernicus.org/preprints/2024/egusphere-2024-3184"

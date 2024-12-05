@@ -1,4 +1,4 @@
-name: env_mini_v2
+name: env_pyquasoare
 channels:
   - conda-forge
   - defaults

@@ -10,10 +10,10 @@ piecewise quadratic interpolation following the QuaSoARe method.
 This package implements the Quadratic Solution of the Approximate Reservoir 
 Equation (QuaSoARe) method described in the following paper:
 Lerat, J. (2024),  
-"Quadratic solution of the approximate reservoir equation (QUASOARE)", HESS, Submitted.
+"Technical note: Quadratic solution of the approximate reservoir equation (QuaASOARE)", HESS, Submitted.
 
 # Installation
-- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_mini2.yml] (env_mini2.yml) file in this repository.
+- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env_pyquasoare.yml] (env_pyquasoare.yml) file in this repository.
 - Git clone this repository and run `pip install .`
 
 # Basic use
@@ -84,7 +84,9 @@ for iax, ax in enumerate(axs):
 plt.show()
 ```
 
-# License
-The source code and documentation of the pyquasoare package is licensed under the
-[MIT license](LICENSE.txt).
+## Attribution
+This project is licensed under the [MIT License](LICENSE.txt), which allows for free use, modification, and distribution of the code under the terms of the license.
+
+For proper citation of this project, please refer to the [CITATION.cff](CITATION.cff) file, which provides guidance on 
+how to cite the software and relevant publications.
 
