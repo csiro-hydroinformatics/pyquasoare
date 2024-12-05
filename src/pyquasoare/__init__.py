@@ -1,5 +1,7 @@
 import importlib
 
+__version__ = "1.2"
+
 def has_c_module(raise_error=True):
     name = f"c_pyquasoare"
     out = importlib.util.find_spec(name)
@@ -13,9 +15,4 @@ def has_c_module(raise_error=True):
         else:
             return False
 
-#from ._version import get_versions
-#__version__ = get_versions()['version']
-#del get_versions
 
-from . import _version
-__version__ = _version.get_versions()['version']
