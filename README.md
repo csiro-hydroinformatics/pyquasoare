@@ -13,7 +13,7 @@ Lerat, J. (2024),
 "Technical note: Quadratic solution of the approximate reservoir equation (QuaASOARE)", HESS, Submitted.
 
 # Installation
-- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env_pyquasoare.yml] (env_pyquasoare.yml) file in this repository.
+- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_pyquasoare.yml](env_pyquasoare.yml) file in this repository.
 - Git clone this repository and run `pip install .`
 
 # Basic use
