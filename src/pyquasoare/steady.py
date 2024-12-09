@@ -1,12 +1,12 @@
-import math
 import numpy as np
 
-from pyquasoare import has_c_module, approx, models
+from pyquasoare import has_c_module, approx
 
 if has_c_module():
     import c_pyquasoare
 else:
-    raise ImportError("Cannot run quasoare without C code. Please compile C code.")
+    raise ImportError("Cannot run quasoare without C code."
+                      + " Please compile C code.")
 
 
 def quad_steady(a, b, c):
@@ -15,22 +15,22 @@ def quad_steady(a, b, c):
     """
     if approx.all_scalar(a, b, c):
         stdy = np.zeros(2)
-        ierr = c_pyquasoare.quad_steady(a, b, c, stdy)
+        c_pyquasoare.quad_steady(a, b, c, stdy)
     else:
         a, b, c = approx.get_vectors(a, b, c)
         stdy = np.zeros((len(a), 2))
-        ierr = c_pyquasoare.quad_steady_vect(a, b, c, stdy)
+        c_pyquasoare.quad_steady_vect(a, b, c, stdy)
     return stdy
 
 
-def quad_steady_scalings(alphas, scalings, \
-                a_matrix_noscaling, \
-                b_matrix_noscaling, \
-                c_matrix_noscaling):
+def quad_steady_scalings(alphas, scalings,
+                         a_matrix_noscaling,
+                         b_matrix_noscaling,
+                         c_matrix_noscaling):
     """ Compute steady states using scalings """
     # Check inputs
     nalphas = len(alphas)
-    assert nalphas>2
+    assert nalphas > 2
     nval, nfluxes = scalings.shape
     for m in [a_matrix_noscaling, b_matrix_noscaling, c_matrix_noscaling]:
         assert len(m) == nalphas-1
@@ -43,14 +43,14 @@ def quad_steady_scalings(alphas, scalings, \
     steady = np.zeros((nval, 2*(nalphas+1)))
 
     for j in range(-1, nalphas):
-        if j>=0 and j<nalphas-1:
+        if j >= 0 and j < nalphas-1:
             # General case
             a = scalings@a_matrix_noscaling[j]
             b = scalings@b_matrix_noscaling[j]
             c = scalings@c_matrix_noscaling[j]
             a0, a1 = alphas[[j, j+1]]
 
-        elif j==-1:
+        elif j == -1:
             # Low extrapolation - Linear
             a = scalings@a_matrix_noscaling[0]
             b = scalings@b_matrix_noscaling[0]
@@ -63,13 +63,13 @@ def quad_steady_scalings(alphas, scalings, \
             a = 0.*grad
             a0, a1 = -np.inf, alpha_min
 
-        elif j==nalphas-1:
+        elif j == nalphas-1:
             # high extrapolation - Linear
             a = scalings@a_matrix_noscaling[-1]
             b = scalings@b_matrix_noscaling[-1]
             c = scalings@c_matrix_noscaling[-1]
             alpha_max = alphas[-1]
-            grad = approx.quad_grad(a, b, c, alpha_max);
+            grad = approx.quad_grad(a, b, c, alpha_max)
 
             c = approx.quad_fun(a, b, c, alpha_max)-grad*alpha_max
             b = grad
@@ -81,7 +81,7 @@ def quad_steady_scalings(alphas, scalings, \
         # Keep steady solution within band
         # .. ignore nan
         with np.errstate(invalid="ignore"):
-            out_of_range = (stdy-a0)*(a1-stdy)<0
+            out_of_range = (stdy-a0)*(a1-stdy) < 0
         stdy[out_of_range] = np.nan
         jc = j+1
         steady[:, 2*jc:(2*jc+2)] = stdy
@@ -89,8 +89,7 @@ def quad_steady_scalings(alphas, scalings, \
     # Reorder and remove nan columns
     steady = np.sort(steady, axis=1)
     hasvalid = np.any(~np.isnan(steady), axis=0)
-    hasvalid = [0] if hasvalid.sum()==0 else hasvalid
+    hasvalid = [0] if hasvalid.sum() == 0 else hasvalid
     steady = steady[:, hasvalid]
 
     return steady
-

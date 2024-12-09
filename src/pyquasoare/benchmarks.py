@@ -1,10 +1,13 @@
 import numpy as np
 
 from pyquasoare import has_c_module
+
 if has_c_module():
     import c_pyquasoare
 else:
-    raise ImportError("Cannot run rezeq without C module. Please compile C code")
+    raise ImportError("Cannot run rezeq without C module."
+                      + " Please compile C code")
+
 
 # --- Non linear routing model ---
 def nonlinrouting_fluxes_noscaling(nu):
@@ -15,13 +18,22 @@ def nonlinrouting_fluxes_noscaling(nu):
         f1 = 1. (inflow to be multiplied by inflow/theta)
         f2 = -x^nu (outflow to be multiplied by q0/theta)
     """
-    assert nu>1
-    fin = lambda x: 1.
-    fout = lambda x: -x**nu if x>=0 else 0.
+    assert nu > 1
+
+    def fin(x):
+        return 1.
+
+    def fout(x):
+        return -x**nu if x >= 0 else 0.
+
     fluxes = [fin, fout]
 
-    dfin = lambda x: 0.
-    dfout = lambda x: -nu*x**(nu-1.) if x>=0 else 0.
+    def dfin(x):
+        return 0.
+
+    def dfout(x):
+        return -nu*x**(nu-1.) if x >= 0 else 0.
+
     dfluxes = [dfin, dfout]
 
     return fluxes, dfluxes
@@ -30,9 +42,9 @@ def nonlinrouting_fluxes_noscaling(nu):
 def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyquasoare.nonlinrouting(nsubdiv, timestep, theta, nu, \
-                                    q0, s0, inflows, outflows)
-    if ierr>0:
+    ierr = c_pyquasoare.nonlinrouting(nsubdiv, timestep, theta, nu,
+                                      q0, s0, inflows, outflows)
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
 
@@ -42,9 +54,9 @@ def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
 def quadrouting(timestep, theta, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyquasoare.quadrouting(timestep, theta, \
+    ierr = c_pyquasoare.quadrouting(timestep, theta,
                                     q0, s0, inflows, outflows)
-    if ierr>0:
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
 
@@ -53,15 +65,29 @@ def quadrouting(timestep, theta, q0, s0, inflows):
 
 # --- GR4J model ---
 def gr4jprod_fluxes_noscaling(eta=1./2.25):
-    """ GR4J production store fluxes: Ps, Es, Perc without climate input scaling """
-    fpr = lambda x: (1.-x**2) if x>0 else 1.
-    fae = lambda x: -x*(2.-x) if x<1. else -1.
-    fperc = lambda x: -(eta*x)**5/4./eta if x>0 else 0.
+    """ GR4J production store fluxes: Ps, Es, Perc
+    without climate input scaling.
+    """
+    def fpr(x):
+        return (1.-x**2) if x > 0 else 1.
+
+    def fae(x):
+        return -x*(2.-x) if x < 1. else -1.
+
+    def fperc(x):
+        return -(eta*x)**5/4./eta if x > 0. else 0.
+
     fluxes = [fpr, fae, fperc]
 
-    dfpr = lambda x: -2.*x
-    dfae = lambda x: -2.*(1.-x)
-    dfperc = lambda x: -5./4.*(eta*x)**4
+    def dfpr(x):
+        return -2.*x if x > 0. else 0.
+
+    def dfae(x):
+        return -2.*(1.-x) if x < 1. else 0.
+
+    def dfperc(x):
+        return -5./4.*(eta*x)**4 if x > 0. else 0.
+
     dfluxes = [dfpr, dfae, dfperc]
 
     return fluxes, dfluxes
@@ -79,18 +105,29 @@ def gr4jprod_fluxes_scaled(P, E, X1, eta=1./2.25):
     # normalised fluxes
     normf, dnormf = gr4jprod_fluxes_noscaling(eta)
 
-    fpr = lambda x: pi*normf[0](x)
-    fae = lambda x: ei*normf[1](x)
-    fperc = lambda x: normf[2](x)
+    def fpr(x):
+        return pi*normf[0](x)
+
+    def fae(x):
+        return ei*normf[1](x)
+
+    def fperc(x):
+        return normf[2](x)
+
     fluxes = [fpr, fae, fperc]
 
-    dfpr = lambda x: pi*dnormf[0](x)
-    dfae = lambda x: ei*dnormf[1](x)
-    dfperc = lambda x: dnormf[2](x)
+    def dfpr(x):
+        return pi*dnormf[0](x)
+
+    def dfae(x):
+        return ei*dnormf[1](x)
+
+    def dfperc(x):
+        return dnormf[2](x)
+
     dfluxes = [dfpr, dfae, dfperc]
 
     return fluxes, dfluxes
-
 
 
 def gr4jprod(nsubdiv, X1, s0, inputs):
@@ -100,12 +137,8 @@ def gr4jprod(nsubdiv, X1, s0, inputs):
 
     ierr = c_pyquasoare.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
 
-    if ierr>0:
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.gr4jprod returns {ierr} ({mess})")
 
     return outputs
-
-
-
-
