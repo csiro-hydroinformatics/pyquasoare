@@ -67,7 +67,7 @@ jobs:
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_pyquasoare
           cd $GITHUB_WORKSPACE
-          flake8 src
+          flake8 src/pyquasoare
 
       - name: Run tests
         run: |
