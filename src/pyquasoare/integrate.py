@@ -1,12 +1,12 @@
 import numpy as np
 
-from pyquasoare import has_c_module, approx
-from pyquasoare.approx import QUASOARE_NFLUXES_MAX
+from pyquasoare import has_c_module
 
 if has_c_module():
     import c_pyquasoare
 else:
-    raise ImportError("Cannot run quasoare without C code. Please compile C code.")
+    raise ImportError("Cannot run quasoare without C code."
+                      + " Please compile C code.")
 
 
 def __find_alpha(alphas, u0):
@@ -28,7 +28,7 @@ def __eta_fun(x, Delta):
 def quad_constants(a, b, c):
     constants = np.zeros(3)
     ierr = c_pyquasoare.quad_constants(a, b, c, constants)
-    if ierr>0:
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.constants returns {ierr} ({mess})")
     return constants
@@ -78,11 +78,13 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
            1.04643346, 1.06129603, 1.07108369, 1.07747071, 1.0816138 ])
     """
     if np.isscalar(t):
-        return c_pyquasoare.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t)
+        return c_pyquasoare.quad_forward(a, b, c, Delta, qD, sbar,
+                                         t0, s0, t)
     else:
         s = np.nan*np.ones_like(t)
-        ierr = c_pyquasoare.quad_forward_vect(a, b, c, Delta, qD, sbar, t0, s0, t, s)
-        if ierr>0:
+        ierr = c_pyquasoare.quad_forward_vect(a, b, c, Delta, qD, sbar,
+                                              t0, s0, t, s)
+        if ierr > 0:
             raise ValueError(f"c_pyquasoare.quad_forward_vect returns {ierr}")
         return s
 
@@ -172,19 +174,21 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     0.3584916286499921
     """
     if np.isscalar(s1):
-        return c_pyquasoare.quad_inverse(a, b, c, Delta, qD, sbar, s0, s1)
+        return c_pyquasoare.quad_inverse(a, b, c, Delta, qD, sbar,
+                                         s0, s1)
     else:
         t = np.nan*np.ones_like(s1)
-        ierr = c_pyquasoare.quad_inverse_vect(a, b, c, Delta, qD, sbar, s0, s1, t)
-        if ierr>0:
+        ierr = c_pyquasoare.quad_inverse_vect(a, b, c, Delta, qD, sbar,
+                                              s0, s1, t)
+        if ierr > 0:
             raise ValueError(f"c_pyquasoare.quad_inverse_vect returns {ierr}")
         return t
 
 
-def quad_fluxes(a_vector, b_vector, c_vector, \
-                        Aj, Bj, Cj, \
-                        Delta, qD, sbar, \
-                        t0, t1, s0, s1, fluxes):
+def quad_fluxes(a_vector, b_vector, c_vector,
+                Aj, Bj, Cj,
+                Delta, qD, sbar,
+                t0, t1, s0, s1, fluxes):
     """ Increment flux totals during integration of the approximate reservoir
     equation
     dS/dt = Aj.S^2+Bj.S+Cj
@@ -227,19 +231,19 @@ def quad_fluxes(a_vector, b_vector, c_vector, \
     quad_forward : Integrate ODE forward.
     """
 
-    ierr = c_pyquasoare.quad_fluxes(a_vector, b_vector, c_vector, \
-                            Aj, Bj, Cj, Delta, qD, sbar, \
-                            t0, t1, s0, s1, fluxes)
-    if ierr>0:
+    ierr = c_pyquasoare.quad_fluxes(a_vector, b_vector, c_vector,
+                                    Aj, Bj, Cj, Delta, qD, sbar,
+                                    t0, t1, s0, s1, fluxes)
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.quad_fluxes returns {ierr} ({mess})")
 
 
-def quad_integrate(alphas, scalings, \
-                a_matrix_noscaling, \
-                b_matrix_noscaling, \
-                c_matrix_noscaling, \
-                t0, s0, timestep):
+def quad_integrate(alphas, scalings,
+                   a_matrix_noscaling,
+                   b_matrix_noscaling,
+                   c_matrix_noscaling,
+                   t0, s0, timestep):
     """ Integrate the approximate reservoir equation with initial time t0
     and initial condition s(t0)=s0 over a single timestep.
 
@@ -290,12 +294,14 @@ def quad_integrate(alphas, scalings, \
     >>> from pyquasoare import approx, integrate
     >>> fun = lambda x: 1-x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.2])
-    >>> amat, bmat, cmat, cst = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> amat, bmat, cmat, cst = \
+               approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> sc = np.ones(1)
     >>> t0 = 0
     >>> s0 = 0.8
     >>> timestep = 1.
-    >>> niter, s1, fx = quad_integrate(alphas, sc, amat, bmat, cmat, t0, s0, timestep)
+    >>> niter, s1, fx = \
+               quad_integrate(alphas, sc, amat, bmat, cmat, t0, s0, timestep)
     >>> niter
     1
     >>> s1
@@ -309,13 +315,14 @@ def quad_integrate(alphas, scalings, \
     s1 = np.zeros(1, dtype=np.float64)
 
     # run
-    ierr = c_pyquasoare.quad_integrate(alphas, scalings, \
-                    a_matrix_noscaling, b_matrix_noscaling, \
-                    c_matrix_noscaling, t0, s0, timestep, niter, s1, fluxes)
-    if ierr>0:
+    ierr = c_pyquasoare.quad_integrate(alphas, scalings,
+                                       a_matrix_noscaling,
+                                       b_matrix_noscaling,
+                                       c_matrix_noscaling,
+                                       t0, s0, timestep, niter, s1, fluxes)
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.quad_integrate returns {ierr} ({mess})")
+        raise ValueError("c_pyquasoare.quad_integrate"
+                         + f" returns {ierr} ({mess}).")
 
     return niter[0], s1[0], fluxes
-
-

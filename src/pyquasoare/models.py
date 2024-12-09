@@ -5,17 +5,18 @@ from pyquasoare import has_c_module
 if has_c_module():
     import c_pyquasoare
 else:
-    raise ImportError("Cannot run quasoare without C module. Please compile C code")
+    raise ImportError("Cannot run quasoare without C module."
+                      + " Please compile C code")
 
 ERRORS = ["ignore", "raise", "warn"]
 
 
-def quad_model(alphas, scalings, \
-                a_matrix_noscaling, \
-                b_matrix_noscaling, \
-                c_matrix_noscaling, s0, timestep, \
-                errors="ignore", \
-                fluxes=None, niter=None, s1=None):
+def quad_model(alphas, scalings,
+               a_matrix_noscaling,
+               b_matrix_noscaling,
+               c_matrix_noscaling, s0, timestep,
+               errors="ignore",
+               fluxes=None, niter=None, s1=None):
     """ Integrate the approximate reservoir equation with initial initial
     condition s0 over a series of P timesteps.
 
@@ -81,7 +82,8 @@ def quad_model(alphas, scalings, \
     >>> # 10 interpolation nodes
     >>> alphas = np.linspace(0., 1.2, 10)
     >>> # Get interpolation coefficients for each band and each flux
-    >>> amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
+    >>> amat, bmat, cmat, cst = \
+             approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
     >>> # Define a simulation with 10 time steps
     >>> P = 10
     >>> # The inflow is a step response equal to 0 excel for the 3rd time step
@@ -124,22 +126,20 @@ def quad_model(alphas, scalings, \
 
     ierrors = np.int32(ERRORS.index(errors))
 
-    ierr = c_pyquasoare.quad_model(ierrors, alphas, scalings, \
-                    a_matrix_noscaling, \
-                    b_matrix_noscaling, \
-                    c_matrix_noscaling, \
-                    s0, timestep, niter, s1, fluxes)
+    ierr = c_pyquasoare.quad_model(ierrors, alphas, scalings,
+                                   a_matrix_noscaling,
+                                   b_matrix_noscaling,
+                                   c_matrix_noscaling,
+                                   s0, timestep, niter, s1, fluxes)
 
-    if errors=="raise" and ierr>0:
+    if errors == "raise" and ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.quad_model returns {ierr} ({mess})")
 
-    if errors=="warn":
-        if np.any(niter<0):
-            nerr = (niter<0).sum()
+    if errors == "warn":
+        if np.any(niter < 0):
+            nerr = (niter < 0).sum()
             mess = f"{nerr} errors when running c_pyquasoare.quad_model"
             warnings.warn(mess)
 
     return niter, s1, fluxes
-
-

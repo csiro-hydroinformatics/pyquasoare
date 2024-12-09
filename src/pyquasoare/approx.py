@@ -1,8 +1,7 @@
-from itertools import product as prod
-import math
 import numpy as np
 
 from pyquasoare import has_c_module
+
 if has_c_module():
     import c_pyquasoare
     QUASOARE_EPS = c_pyquasoare.C_QUASOARE_EPS
@@ -12,26 +11,28 @@ if has_c_module():
     QUASOARE_NFLUXES_MAX = c_pyquasoare.C_QUASOARE_NFLUXES_MAX
     QUASOARE_ACCURACY = c_pyquasoare.compiler_accuracy_kahan()
 else:
-    raise ImportError("Cannot run rezeq without C code. Please compile C code.")
+    raise ImportError("Cannot run rezeq without C code."
+                      + " Please compile C code.")
 
 
-
-def isequal(f1, f2, atol=QUASOARE_ATOL, \
-                    rtol=QUASOARE_RTOL):
-    """ Check if two values are equal given absolute and relative tolerance. """
+def isequal(f1, f2, atol=QUASOARE_ATOL, rtol=QUASOARE_RTOL):
+    """ Check if two values are equal given absolute
+    and relative tolerance.
+    """
     errmax = atol+rtol*np.abs(f1)
-    return np.abs(f1-f2)<errmax
+    return np.abs(f1-f2) < errmax
 
 
-def notequal(f1, f2, atol=QUASOARE_ATOL, \
-                    rtol=QUASOARE_RTOL):
-    """ Check if two values are not equal given absolute and relative tolerance. """
+def notequal(f1, f2, atol=QUASOARE_ATOL, rtol=QUASOARE_RTOL):
+    """ Check if two values are not equal given absolute
+    and relative tolerance.
+    """
     return 1-isequal(f1, f2, atol, rtol)
 
 
 def notnull(x):
     """ Check if value is not null. """
-    return 1 if x<0 or x>0 else 0
+    return 1 if x < 0 or x > 0 else 0
 
 
 def isnull(x):
@@ -65,7 +66,7 @@ def get_vectors(*args, dtype=np.float64):
     errmess = f"Expected vectors of length 1 or {nval}."
     assert np.all(np.isin(lengths, [1, nval])), errmess
     ones = np.ones(nval)
-    return [x[0]*ones if len(x)==1 else x for x in v]
+    return [x[0]*ones if len(x) == 1 else x for x in v]
 
 
 def quad_fun(a, b, c, s):
@@ -84,7 +85,7 @@ def quad_fun(a, b, c, s):
         return c_pyquasoare.quad_fun(a, b, c, s)
     else:
         a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        ierr = c_pyquasoare.quad_fun_vect(a, b, c, s, o)
+        c_pyquasoare.quad_fun_vect(a, b, c, s, o)
         return o
 
 
@@ -104,12 +105,11 @@ def quad_grad(a, b, c, s):
         return c_pyquasoare.quad_grad(a, b, c, s)
     else:
         a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        ierr = c_pyquasoare.quad_grad_vect(a, b, c, s, o)
+        c_pyquasoare.quad_grad_vect(a, b, c, s, o)
         return o
 
 
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
-                             approx_opt=1):
+def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
     """ Compute the interpolation coefficients for a function over
     the interval [alphaj, alpjajp1].
 
@@ -160,11 +160,12 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
     array([-3.2648,  4.032 , -0.2672])
     """
     coefs = np.zeros(3)
-    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj, alphajp1, \
-                                            f0, f1, fm, coefs)
-    if ierr>0:
+    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj, alphajp1,
+                                          f0, f1, fm, coefs)
+    if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.quad_coefficients returns {ierr} ({mess})")
+        raise ValueError("c_pyquasoare.quad_coefficients"
+                         + f" returns {ierr} ({mess})")
 
     return coefs
 
@@ -208,7 +209,8 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     >>> from pyquasoare import approx
     >>> fun = lambda x: 1-x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.])
-    >>> amat, bmat, cmat, cst = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> amat, bmat, cmat, cst = \
+               approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> amat
     array([[-1.83755],
            [-4.98155]])
@@ -221,9 +223,9 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     """
     nalphas = len(alphas)
     nfluxes = len(funs)
-    if nfluxes>QUASOARE_NFLUXES_MAX:
-        raise ValueError(f"Expected nfluxes<{QUASOARE_NFLUXES_MAX}, "\
-                            +f"got {nfluxes}.")
+    if nfluxes > QUASOARE_NFLUXES_MAX:
+        raise ValueError(f"Expected nfluxes<{QUASOARE_NFLUXES_MAX}, "
+                         + f"got {nfluxes}.")
 
     # we add one row at the top end bottom for continuity extension
     a_matrix = np.zeros((nalphas-1, nfluxes))
@@ -238,7 +240,7 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
             f0 = f(alphaj)
             f1 = f(alphajp1)
             fm = f((alphaj+alphajp1)/2)
-            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm, \
+            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm,
                                         approx_opt)
             a_matrix[j, ifun] = a
             b_matrix[j, ifun] = b
@@ -246,12 +248,14 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
 
             # Discriminant
             cst = np.zeros(3)
-            ierr = c_pyquasoare.quad_constants(a, b, c, cst)
+            c_pyquasoare.quad_constants(a, b, c, cst)
             Delta, qD, sbar = cst
 
             # Tmax
-            t1 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphaj)
-            t2 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD, sbar, alphajp1)
+            t1 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD,
+                                               sbar, alphaj)
+            t2 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD,
+                                               sbar, alphajp1)
             tmax = min(t1, t2)
             constants[j, ifun, :] = [Delta, tmax]
 
@@ -290,7 +294,8 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     >>> from pyquasoare import approx
     >>> fun = lambda x: 1-x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.])
-    >>> amat, bmat, cmat, cst = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> amat, bmat, cmat, cst = \
+            approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> x = np.linspace(alphas[0], alphas[1], 10)
     >>> quad_fun_from_matrix(alphas, amat, bmat, cmat, x)
     array([[0.976672  ],
@@ -306,7 +311,7 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     """
     nalphas = len(alphas)
     nfluxes = a_matrix.shape[1]
-    assert np.all(np.diff(alphas)>0)
+    assert np.all(np.diff(alphas) > 0)
     assert a_matrix.shape[0] == nalphas-1
     assert b_matrix.shape == a_matrix.shape
     assert c_matrix.shape == a_matrix.shape
@@ -320,7 +325,7 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     idx_high = x > alpha_max
 
     for i in range(nfluxes):
-        if idx_low.sum()>0:
+        if idx_low.sum() > 0:
             # Linear trend in low extrapolation
             al, bl, cl = a_matrix[0, i], b_matrix[0, i], c_matrix[0, i]
             g = quad_grad(al, bl, cl, alpha_min)
@@ -330,7 +335,7 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
             o = quad_fun(al, bl, cl, x[idx_low])
             outputs[idx_low, i] = o
 
-        if idx_high.sum()>0:
+        if idx_high.sum() > 0:
             # Linear trend in high extrapolation
             ah, bh, ch = a_matrix[-1, i], b_matrix[-1, i], c_matrix[-1, i]
             g = quad_grad(ah, bh, ch, alpha_max)
@@ -343,8 +348,8 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     # Inside alpha bounds
     for j in range(nalphas-1):
         alphaj, alphajp1 = alphas[[j, j+1]]
-        idx = (x>=alphaj-1e-10) & (x<=alphajp1+1e-10)
-        if idx.sum()==0:
+        idx = (x >= alphaj-1e-10) & (x <= alphajp1+1e-10)
+        if idx.sum() == 0:
             continue
 
         for i in range(nfluxes):
@@ -354,4 +359,3 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
             outputs[idx, i] = quad_fun(a, b, c, x[idx])
 
     return outputs
-

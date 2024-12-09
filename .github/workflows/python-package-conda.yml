@@ -62,6 +62,13 @@ jobs:
           echo "--- pyquasoare install : located in $PWD ---"
           pip install -e .
 
+      - name: Lint with flake8
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_pyquasoare
+          cd $GITHUB_WORKSPACE
+          flake8 src
+
       - name: Run tests
         run: |
           source $CONDA/etc/profile.d/conda.sh
