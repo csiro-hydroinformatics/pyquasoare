@@ -263,6 +263,7 @@ def quad_integrate(alphas, scalings,
     t_start, t_end = t0, t0
     s_start, s_end = s0, s0
     fluxes = np.zeros(nfluxes)
+    funval_prev = 0.
 
     if debug:
         print(f"\nNALPHAS = {nalphas} NFLUXES={a_matrix_noscaling.shape[1]}")
@@ -286,11 +287,10 @@ def quad_integrate(alphas, scalings,
         Aj = 0
         Bj = 0
         Cj = 0
-        funval_prev = 0.
 
         for i in range(nfluxes):
             if extrapolating_low:
-                # Extrapolate approx as fixed value equal to f(alpha_min)
+                # Extrapolate approx as linear value
                 a = a_matrix_noscaling[0, i]*scalings[i]
                 b = b_matrix_noscaling[0, i]*scalings[i]
                 c = c_matrix_noscaling[0, i]*scalings[i]
@@ -301,7 +301,7 @@ def quad_integrate(alphas, scalings,
                 a = 0
 
             elif extrapolating_high:
-                # Extrapolate approx as fixed value equal to f(alpha_max)
+                # Extrapolate approx as linear value
                 a = a_matrix_noscaling[nalphas-2, i]*scalings[i]
                 b = b_matrix_noscaling[nalphas-2, i]*scalings[i]
                 c = c_matrix_noscaling[nalphas-2, i]*scalings[i]
