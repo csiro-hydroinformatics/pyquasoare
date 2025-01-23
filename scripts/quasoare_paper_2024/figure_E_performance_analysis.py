@@ -76,7 +76,7 @@ putils.set_mpl()
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
 
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 fdata = froot / "outputs"
 
 fimg = froot / "images" / "figures"
@@ -86,11 +86,7 @@ fimg.mkdir(exist_ok=True, parents=True)
 # @Logging
 #------------------------------------------------------------
 basename = source_file.stem
-flogs = froot / "logs"
-flogs.mkdir(exist_ok=True)
-flog = flogs / f"{source_file.stem}.log"
-LOGGER = iutils.get_logger(basename, flog=flog)
-LOGGER.log_dict(vars(args), "Command line arguments")
+LOGGER = iutils.get_logger(basename)
 
 #------------------------------------------------------------
 # @Get data

@@ -74,7 +74,7 @@ lw_qua = 2
 # @Folders
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
 fimg = froot / "images" / "figures"
 fimg.mkdir(exist_ok=True, parents=True)

@@ -5,9 +5,10 @@
 ## Author  : ler015
 ## Created : 2024-08-26 11:08:09.382739
 ## Comment : Run the 4 models using different ODE resolution ode_methods
+##           To run all models, run this script with argument -t varying
+##           from 0 to 29.
 ##
 ## ------------------------------
-
 
 import sys, os, re, json, math
 import argparse
@@ -30,15 +31,11 @@ from pyquasoare import approx, steady, benchmarks, models, slow
 import hdf5_utils
 import data_utils
 
-import importlib
-importlib.reload(hdf5_utils)
-importlib.reload(data_utils)
-
 #----------------------------------------------------------------------
 # @Config
 #----------------------------------------------------------------------
 parser = argparse.ArgumentParser(\
-    description="Run the 4 models using different ODE resolution methods", \
+    description="Run each one of the 4 models using different ODE resolution methods", \
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument("-t", "--taskid", help="Configuration ID (model/siteid)", \
@@ -73,7 +70,7 @@ nparams = 10
 # @Folders
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
 fout = froot / "outputs" / "simulations"
 fout.mkdir(exist_ok=True, parents=True)
@@ -107,7 +104,6 @@ fres = fout / f"simulations_TASK{taskid}.hdf5"
 cfilt = hdf5_utils.COMPRESSION_FILTER
 
 with tables.open_file(fres, "w", title="ODE simulations", filters=cfilt) as h5:
-
     # Create h5 groups
     h5_groups = {ode_method: h5.create_group("/", ode_method) \
                                         for ode_method in ode_methods}

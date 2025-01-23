@@ -6,7 +6,7 @@ import pandas as pd
 
 from hydrodiy.io import csv
 
-FROOT = Path(__file__).resolve().parent.parent
+FROOT = Path(__file__).resolve().parent.parent.parent
 FREADER = FROOT / "tests" / "data_reader.py"
 spec = importlib.util.spec_from_file_location("data_reader", FREADER)
 data_reader = importlib.util.module_from_spec(spec)
