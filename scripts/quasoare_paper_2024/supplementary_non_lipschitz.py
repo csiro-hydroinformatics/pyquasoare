@@ -27,6 +27,7 @@ from matplotlib import ticker
 import matplotlib.dates as mdates
 
 from hydrodiy.io import csv, iutils
+from hydrodiy.plot import putils
 
 from pyquasoare import approx, steady, benchmarks, models, slow
 
@@ -64,6 +65,7 @@ col_rad = "tab:orange"
 ls_rad = "-"
 lw_rad = 6
 
+putils.set_mpl(font_size=13)
 
 #----------------------------------------------------------------------
 # @Folders
@@ -241,7 +243,7 @@ for iom, (om, dfx) in enumerate(flux_approx.items()):
            title=f"Outflow - QuaSoARe {n}")
     ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
-fp = fout / f"flux_approximation.png"
+fp = fout / f"nonlipschitz_flux_approximation.png"
 fig.savefig(fp)
 
 # .. time series
@@ -290,7 +292,7 @@ for varn in ["s", "qout"]:
 
         ax.yaxis.set_major_formatter(fmt)
 
-fp = fout / f"simuilations.png"
+fp = fout / f"nonlipschitz_simuilations.png"
 fig.savefig(fp)
 
 LOGGER.completed()

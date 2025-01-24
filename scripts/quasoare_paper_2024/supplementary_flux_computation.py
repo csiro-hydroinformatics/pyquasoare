@@ -24,6 +24,7 @@ from matplotlib import ticker
 import matplotlib.dates as mdates
 
 from hydrodiy.io import csv, iutils
+from hydrodiy.plot import putils
 
 from pyquasoare import approx, steady, benchmarks, models, slow
 
@@ -61,6 +62,8 @@ colors = {
     }
 
 fdpi = 300
+
+putils.set_mpl(font_size=13)
 
 #----------------------------------------------------------------------
 # @Folders
@@ -184,7 +187,7 @@ for iax, (aname, ax) in enumerate(axs.items()):
     if ptype == "ts":
         ax.legend(loc=1)
 
-fp = fout / f"flux_approximation.png"
+fp = fout / f"approximate_flux_approximation.png"
 fig.savefig(fp, dpi=fdpi)
 
 LOGGER.completed()
