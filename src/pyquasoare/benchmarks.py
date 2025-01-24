@@ -21,7 +21,7 @@ def nonlinrouting_fluxes_noscaling(nu):
         f2 = -x^nu (outflow to be multiplied by q0/theta)
     """
     if nu < 1:
-        warnmess = f"nu is lower than 1, flux functions "\
+        warnmess = "nu is lower than 1, flux functions "\
             + "are not Lipschitz continuous"
         warnings.warn(warnmess)
 
