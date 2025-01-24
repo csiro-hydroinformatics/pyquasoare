@@ -171,7 +171,6 @@ for nalphas in nnalphas:
 
             putils.line(axi, 0, 1, 0, 0, "k-", lw=0.5)
 
-
         else:
             title = f"Solution of reservoir equation - {nalphas} nodes"
             xlab = r"$t$" if nalphas==nnalphas[-1] else ""
