@@ -74,7 +74,7 @@ lw_qua = 2
 # @Folders
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
 fimg = froot / "images" / "figures"
 fimg.mkdir(exist_ok=True, parents=True)
@@ -170,7 +170,6 @@ for nalphas in nnalphas:
                 tk.label1.set_rotation(-18)
 
             putils.line(axi, 0, 1, 0, 0, "k-", lw=0.5)
-
 
         else:
             title = f"Solution of reservoir equation - {nalphas} nodes"

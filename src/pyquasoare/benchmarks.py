@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 
 from pyquasoare import has_c_module
@@ -18,7 +20,10 @@ def nonlinrouting_fluxes_noscaling(nu):
         f1 = 1. (inflow to be multiplied by inflow/theta)
         f2 = -x^nu (outflow to be multiplied by q0/theta)
     """
-    assert nu > 1
+    if nu < 1:
+        warnmess = "nu is lower than 1, flux functions "\
+            + "are not Lipschitz continuous"
+        warnings.warn(warnmess)
 
     def fin(x):
         return 1.

@@ -85,7 +85,7 @@ putils.set_mpl()
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
 
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 fdata = froot / "outputs"
 
 fimg = froot / "images" / "figures"
@@ -95,11 +95,7 @@ fimg.mkdir(exist_ok=True, parents=True)
 # @Logging
 #------------------------------------------------------------
 basename = source_file.stem
-flogs = froot / "logs"
-flogs.mkdir(exist_ok=True)
-flog = flogs / f"{source_file.stem}.log"
-LOGGER = iutils.get_logger(basename, flog=flog)
-LOGGER.log_dict(vars(args), "Command line arguments")
+LOGGER = iutils.get_logger(basename)
 
 #------------------------------------------------------------
 # @Get data
@@ -200,12 +196,12 @@ for iax, (aname, ax) in enumerate(axs.items()):
     for xx, vv in zip(x, v1.values):
         v10 = 10**vv if ylog else vv
         fmt = "0.1e" if ylog else "0.1f"
-        ax.plot([xx-width/2, xx+width/2], [vv]*2, "k-")
-        ax.text(xx, vv, "{v10:{fmt}}".format(v10=v10,fmt=fmt), \
-                        va="bottom", fontsize=17, \
-                        ha="center", color="w", fontweight="bold", \
-                        path_effects=[pe.withStroke(linewidth=4, \
-                                                    foreground="k")])
+        ax.plot([xx-width/2, xx+width/2], [vv]*2, "k-", lw=2)
+        ax.text(xx, vv, "{v10:{fmt}}".format(v10=v10,fmt=fmt),
+                va="bottom", fontsize=21,
+                ha="center", color="k", fontweight="bold",
+                path_effects=[pe.withStroke(linewidth=4,
+                                            foreground="w")])
 
     title = f"({letters[iplot]})"
     ax.text(0.02, 0.98, title, fontweight="bold", fontsize=18, \

@@ -146,8 +146,7 @@ for m, vn in varnames.items():
 # @Folders
 #----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 fdata = froot / "outputs" / "simulations"
 
 fimg = froot / "images" / "figures"
@@ -176,7 +175,20 @@ def format_errorax(ax):
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(4))
 
+    def fmt(x, pos):
+        base, expon = re.split("e", f"{x:1.1e}")
+        if set(expon[1:]) == {"0"}:
+            lab = base
+        else:
+            expon = expon[0] + re.sub("^0+", "", expon[1:])
+            expon = f"$10^{{{expon}}}$"
+            lab = base + "\n" + r"$\times$" + expon
+        return lab
+
+    ax.yaxis.set_major_formatter(fmt)
+
 lf = list(fdata.glob("*.hdf5"))
+
 for f in lf:
     # Get model name and siteid
     taskid = int(re.sub(".*TASK", "", f.stem))

@@ -82,7 +82,7 @@ def addmeta(tb, **kwargs):
 def convert(tb):
     tb = pd.DataFrame(tb)
     if hasattr(tb, "time"):
-        tb.loc[:, "time"] = pd.to_datetime(tb.time.astype(np.float64), unit="s")
+        tb["time"] = pd.to_datetime(tb.time.astype(np.float64), unit="s")
         tb = tb.set_index("time")
     return tb
 
