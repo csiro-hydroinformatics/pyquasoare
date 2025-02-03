@@ -42,14 +42,18 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Package files
+.coverage/
 logs/
 images/
 data/
 outputs/
 src/pyquasoare/c_pyquasoare.c
 .gitattributes
+*.json
+*.txt
 *.png
 *.swp
 *.csv
 *.log
+*.xml
 
