@@ -1,7 +1,9 @@
 ![QuaSoaRe](icon.png)
 
 # pyquasoare
- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13928253.svg)](https://doi.org/10.5281/zenodo.13928253) [![Build pyquasoare](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml) [![codecov](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare/graph/badge.svg?token=ARBFW69TI3)](https://codecov.io/gh/csiro-hydroinformatics/pyquasoare)
+ [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13928253.svg)](https://doi.org/10.5281/zenodo.13928253) 
+ [![Build pyquasoare](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/csiro-hydroinformatics/pyquasoare/actions/workflows/python-package-conda.yml) 
+![Coverage](https://gist.githubusercontent.com/jlerat/cfffdda1ba3456d850a0d75eca8dab89/raw/coverage_badge.svg)
 
 Python and C package to solve the reservoir differential equation using a
 piecewise quadratic interpolation following the QuaSoARe method.

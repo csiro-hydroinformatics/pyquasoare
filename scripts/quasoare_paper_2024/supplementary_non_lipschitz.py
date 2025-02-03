@@ -53,7 +53,7 @@ start_hourly = "2022-02-01"
 end_hourly = "2022-04-10"
 
 # Storage exponent
-nus = [0.5, 0.4, 0.3]
+nus = [0.5]
 
 # Plot config
 fdpi = 300
@@ -85,8 +85,8 @@ putils.set_mpl(font_size=13)
 source_file = Path(__file__).resolve()
 froot = source_file.parent.parent.parent
 
-fout = froot / "outputs" / "supplementary_non_lipschitz"
-fout.mkdir(exist_ok=True, parents=True)
+fimg = froot / "images" / "supplementary_non_lipschitz"
+fimg.mkdir(exist_ok=True, parents=True)
 
 #----------------------------------------------------------------------
 # @Logging
@@ -108,7 +108,7 @@ q0 = inflows.quantile(0.9)
 # .. model setup
 timestep = 3600. # time step in seconds
 # store q0 for 6 hours
-param = q0*timestep*6
+param = q0*timestep*12
 
 # Initial condition
 s0 = 1e-1
@@ -297,7 +297,7 @@ for nu in nus:
         ax.xaxis.set_major_formatter(power_formatter_return)
         ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
-    fp = fout / f"nonlipschitz_flux_approximation_nu{nu:0.1f}.png"
+    fp = fimg / f"nonlipschitz_flux_approximation_nu{nu:0.1f}.png"
     fig.savefig(fp, dpi=fdpi)
 
     # .. time series
@@ -350,8 +350,7 @@ for nu in nus:
         if varn == "s":
             ax.yaxis.set_major_formatter(power_formatter)
 
-    fp = fout / f"nonlipschitz_simulations_nu{nu:0.1f}.png"
+    fp = fimg / f"nonlipschitz_simulations_nu{nu:0.1f}.png"
     fig.savefig(fp, dpi=fdpi)
 
 LOGGER.completed()
-

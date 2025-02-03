@@ -57,9 +57,9 @@ approx_long_names = {
 
 # Plot config
 colors = {
-    "radau": "tab:blue",
+    "radau": "tab:orange",
     "approx_midpt": "tab:green",
-    "approx_midptfun": "tab:orange"
+    "approx_midptfun": "tab:purple"
     }
 
 fdpi = 300
@@ -72,8 +72,8 @@ putils.set_mpl(font_size=13)
 source_file = Path(__file__).resolve()
 froot = source_file.parent.parent.parent
 
-fout = froot / "outputs" / "supplementary_flux_computation"
-fout.mkdir(exist_ok=True, parents=True)
+fimg = froot / "images" / "supplementary_flux_computation"
+fimg.mkdir(exist_ok=True, parents=True)
 
 #----------------------------------------------------------------------
 # @Logging
@@ -124,14 +124,14 @@ sim.loc[:, "s_radau"] = s1
 LOGGER.info("Run model - radau - zoom")
 zdate = "2022-02-24"
 idx = np.where(time_index == zdate)[0][0]
-znsubsteps = 20
+znsubsteps = 48
 zscalings = np.repeat(scalings[[idx]], znsubsteps, axis=0)
 zscalings[:, -1] = 1.
 zs0 = s1[idx-1]
 zniter, zs1, zsim = slow.numerical_model(fluxes, dfluxes,
                                       zscalings, zs0,
                                       timestep/znsubsteps, method="Radau")
-zsim = param*np.abs(zsim) * timestep / znsubsteps
+zsim = param*np.abs(zsim) * timestep
 ztimes = pd.date_range("2022-02-24", "2022-02-25", periods=znsubsteps+1)[1:]
 zsim = pd.DataFrame(zsim, columns=cns, index=ztimes)
 zsim.loc[:, "s_radau"] = zs1
@@ -140,6 +140,7 @@ zsim.loc[:, "s_radau"] = zs1
 LOGGER.info("Compute fluxes approx")
 s_end = sim.s_radau
 s_start = sim.s_radau.shift(1)
+s_mid = (s_start+s_end)/2
 
 # Compute approximations of fluxes
 for ifx, fn in enumerate(flux_names):
@@ -154,7 +155,7 @@ for ifx, fn in enumerate(flux_names):
 
     # mid-point store
     cbase = f"{flux_names[ifx]}"
-    sim.loc[:, f"{cbase}_approx_midpt"] = X1*sgn*timestep*sc*fx((s_end+s_start)/2)
+    sim.loc[:, f"{cbase}_approx_midpt"] = X1*sgn*timestep*sc*fx(s_mid)
 
     # mid-point function
     sim.loc[:, f"{cbase}_approx_midptfun"] = X1*sgn*timestep*sc*(fx(s_end)+fx(s_start))/2
@@ -205,36 +206,53 @@ for iax, (aname, ax) in enumerate(axs.items()):
     title = f"({letters[iax]}) {flux_long_names[fxn]} - {title}"
     ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
     if ptype == "ts":
-        loc = 1
+        loc = 7 if fxn == "s" else 1
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b\n%y"))
     else:
         loc = 2
     ax.legend(loc=loc, framealpha=0.)
 
-fp = fout / f"approximate_flux_approximation.png"
+fp = fimg / f"approximate_flux_approximation.png"
 fig.savefig(fp, dpi=fdpi)
 
 
 # Plot zoom simulation
 fig = plt.figure(figsize=(10, 8), layout="constrained")
 mosaic = [[f"{fn}/ts"] for fn in ["s_radau", "eff_rain_radau"]]
-axs = fig.subplot_mosaic(mosaic)
+kw = dict(hspace=0.08)
+axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 for iax, (aname, ax) in enumerate(axs.items()):
     varname, ptype = re.split("/", aname)
     ax.plot(zsim.loc[:, varname], "-o",
             color=colors["radau"], lw=3,
             label="Radau")
 
+    # Decorate
     fxn = re.sub("_radau", "", varname)
     title = f"({letters[iax]}) {flux_long_names[fxn]}"
     ylabel = "Store filling level [-]" if fxn == "s"\
         else "Flux [mm]"
     ax.set(title=title, ylabel=ylabel)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b %y\n%H:%M"))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
+
+    # Cumsum
+    if varname == "eff_rain_radau":
+        tax = ax.twinx()
+        tax.plot(zsim.loc[:, varname].cumsum(), "-",
+                 color=colors["radau"], lw=2,
+                 linestyle="-.")
+        ax.plot([], "-",
+                 color=colors["radau"], lw=2,
+                 linestyle="-.",
+                 label="Radau - cumulative")
+
+        ylabel = "Cumulative flux [mm]"
+        tax.set(ylabel=ylabel)
 
     ax.legend(loc=7, framealpha=0.)
 
-fp = fout / f"approximate_flux_approximation_zoom.png"
+fp = fimg / f"approximate_flux_approximation_zoom.png"
 fig.savefig(fp, dpi=fdpi)
 
 LOGGER.completed()

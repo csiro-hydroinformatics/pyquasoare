@@ -91,7 +91,7 @@ if debug:
     fout.mkdir(exist_ok=True)
 
 flog = flogs / f"quasrun_TASK{taskid}.log"
-LOGGER = iutils.get_logger(basename, contextual=True, flog=flog)
+LOGGER = iutils.get_logger(basename, contextual=debug, flog=flog)
 LOGGER.log_dict(vars(args), "Command line arguments")
 LOGGER.info(f"nconfig: {len(data_utils.CONFIGS)}")
 LOGGER.info(f"Model  : {model_name}")
