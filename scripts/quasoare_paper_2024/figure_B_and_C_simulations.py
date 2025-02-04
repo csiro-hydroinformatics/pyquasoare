@@ -268,6 +268,8 @@ for f in lf:
                 tax1 = ax1.twinx()
                 err.plot(ax=tax1, lw=lw_err, color=col_err)
                 format_errorax(tax1)
+                ax1.plot([], lw=lw_err, color=col_err,
+                         label="Error QuaSoARe-Radau")
 
             if ode_method == ode_method_selected and aname.startswith("flux")\
                                                 and ode_method in fluxes:
@@ -286,9 +288,6 @@ for f in lf:
                 m = " ".join(re.split("_", ode_method)[1:]).title()
                 m = re.sub("Quasaore", "QuaSoARe", m)
                 ax2.plot(s, fx_approx, lw=lw_qua, color=col_qua, label=f"{m} flux")
-                if aname=="flux1":
-                    ax2.legend(loc=1, fontsize="medium", \
-                                    framealpha=0.)
 
                 unit = r"m$^3$ s$^{-1}$" if routing else r"mm day$^{-1}$"
                 ax2.set_ylabel(f"Instantaneous flux [{unit}]")
@@ -310,9 +309,15 @@ for f in lf:
                 tax2 = ax2.twinx()
                 tax2.plot(s, fx_approx-fx_true, lw=lw_err, color=col_err)
                 format_errorax(tax2)
+                ax2.plot([], lw=lw_err, color=col_err,
+                         label="Interpolation error")
 
         if aname == "s1":
-            ax1.legend(loc=3, fontsize="large", framealpha=0.)
+            ax1.legend(loc=3, fontsize="medium", framealpha=0.)
+
+        if aname=="flux1":
+            ax2.legend(loc=1, fontsize="small",
+                       framealpha=0.)
 
         title = f"({letters[iax]}) {varnames[model_name][aname]}"
         ax1.set(title=title, xlabel="")
