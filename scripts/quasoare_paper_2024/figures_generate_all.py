@@ -31,7 +31,7 @@ LOGGER = iutils.get_logger(basename)
 #------------------------------------------------------------
 lf = source_file.parent.glob("*.py")
 for f in lf:
-    if not re.search("^figure_(A|B|D)", f.stem):
+    if not re.search("^(figure|supplementary)_", f.stem):
         continue
 
     LOGGER.info(f"\n\n%%%%%%%%%%%%%%% Running [{f.stem}] %%%%%%%%%%%%%%%\n")
