@@ -354,4 +354,3 @@ for nu in nus:
     fig.savefig(fp, dpi=fdpi)
 
 LOGGER.completed()
-
