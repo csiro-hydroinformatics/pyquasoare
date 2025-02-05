@@ -175,16 +175,18 @@ def format_errorax(ax):
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(4))
 
+    # Format axis number as 2.3 x 10^5
     def fmt(x, pos):
-        base, expon = re.split("e", f"{x:1.1e}")
-        if set(expon[1:]) == {"0"}:
-            lab = base
+        if abs(x) <= 1e-100:
+            return "0"
         else:
-            expon = expon[0] + re.sub("^0+", "", expon[1:])
-            expon = f"$10^{{{expon}}}$"
-            lab = base + "\n" + r"$\times$" + expon
-        return lab
-
+            power = int(math.log(abs(x), 10))
+            if power == 0:
+                return f"{x:0.1f}"
+            else:
+                base = x / 10 ** power
+                return f"${base:+0.1f}$\n  "\
+                    + f"$\\times 10^{{{power}}}$"
     ax.yaxis.set_major_formatter(fmt)
 
 lf = list(fdata.glob("*.hdf5"))
