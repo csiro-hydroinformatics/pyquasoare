@@ -160,12 +160,7 @@ LOGGER = iutils.get_logger(basename)
 LOGGER.log_dict(vars(args), "Command line arguments")
 
 #------------------------------------------------------------
-# @Get data
-#------------------------------------------------------------
-
-
-#------------------------------------------------------------
-# @Plot
+# @Utils
 #------------------------------------------------------------
 def format_errorax(ax):
     ylim = ax.get_ylim()
@@ -184,10 +179,15 @@ def format_errorax(ax):
             if power == 0:
                 return f"{x:0.1f}"
             else:
+                power = power - 1 if power < 0 else power
                 base = x / 10 ** power
                 return f"${base:+0.1f}$\n  "\
                     + f"$\\times 10^{{{power}}}$"
     ax.yaxis.set_major_formatter(fmt)
+
+#------------------------------------------------------------
+# @Plot
+#------------------------------------------------------------
 
 lf = list(fdata.glob("*.hdf5"))
 
