@@ -33,7 +33,7 @@ license: MIT
 
 references:
   - type: article
-    title: Technical note: Quadratic solution of the approximate reservoir equation (QuaSoARe)
+    title: Technical note, Quadratic solution of the approximate reservoir equation (QuaSoARe)
     authors:
       - family-names: "Lerat"
         given-names: "Julien"
