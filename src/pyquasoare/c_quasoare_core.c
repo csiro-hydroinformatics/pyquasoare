@@ -507,10 +507,10 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
             if(errors==1){
                 return ierr;
             }
-            else if (errors==0 || errors==2){
+            else if (errors == 0 || errors == 2){
                 niter[t] = -1;
                 s1[t] = s0;
-                for(j=0;j<nfluxes;j++)
+                for(j = 0; j < nfluxes; j++)
                     fluxes[nfluxes*t+j] = c_get_nan();
             }
         }
@@ -519,5 +519,32 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
         s0 = s1[t];
     }
 
+    return 0;
+}
+
+/**
+ * Run QuaSoARe over multiple paralelle models
+ * */
+int c_quad_model_parallel(int nalphas, int nfluxes, int nval, int nparallel,
+                          int errors, double timestep,
+                            double * alphas, double * scalings,
+                            double * a_matrix_noscaling,
+                            double * b_matrix_noscaling,
+                            double * c_matrix_noscaling,
+                            double * s0, int * niter,
+                            double * s1, double * fluxes) {
+    int ierr, iparallel;
+
+    for(iparallel = 0; iparallel < nparallel; iparallel) {
+        ierr = c_quad_model(nalphas, nfluxes, nval, errors, timestep,
+                            alphas, scalings[ TODO ],
+                            a_matrix_noscaling[ TODO ],
+                            b_matrix_noscaling[ TODO ],
+                            c_matrix_noscaling[ TODO ],
+                            s0[iparallel],
+                            niter[ TODO ],
+                            s1[ TODO ],
+                            fluxes[ TODO ]);
+    }
     return 0;
 }
