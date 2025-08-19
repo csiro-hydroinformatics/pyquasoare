@@ -484,39 +484,49 @@ int c_quad_integrate(int nalphas, int nfluxes,
 **/
 int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep,
                             double * alphas, double * scalings,
+                            int * reset,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
                             double s0, int * niter,
                             double * s1, double * fluxes) {
     int ierr, t, j;
+    double store=s0;
     double t0=0.;
 
     for(t=0; t<nval; t++){
+        /* Reset store */
+        if(reset[t] == 1)
+            store = s0;
+
+        /* Integrate ode */
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
                             &(scalings[nfluxes*t]),
                             a_matrix_noscaling,
                             b_matrix_noscaling,
                             c_matrix_noscaling,
-                            t0, s0, timestep,
+                            t0, store, timestep,
                             &(niter[t]),
                             &(s1[t]),
                             &(fluxes[nfluxes*t]));
 
+        /* Manage errors */
         if(ierr>0){
             if(errors==1){
                 return ierr;
             }
             else if (errors==0 || errors==2){
                 niter[t] = -1;
-                s1[t] = s0;
+
+                s1[t] = store;
+
                 for(j=0;j<nfluxes;j++)
                     fluxes[nfluxes*t+j] = c_get_nan();
             }
         }
 
         /* Loop initial state */
-        s0 = s1[t];
+        store = s1[t];
     }
 
     return 0;
