@@ -10,6 +10,7 @@ else:
 
 ERRORS = ["ignore", "raise", "warn"]
 
+
 def quad_model(alphas, scalings,
                a_matrix_noscaling,
                b_matrix_noscaling,
