@@ -128,6 +128,8 @@ def quad_model(alphas, scalings,
         s1 = np.zeros(nval, dtype=np.float64)
     if reset is None:
         reset = np.zeros(nval, dtype=np.int32)
+    else:
+        reset = reset.astype(np.int32)
 
     ierrors = np.int32(ERRORS.index(errors))
 
