@@ -1,6 +1,3 @@
-# This CITATION.cff file was generated with cffinit.
-# Visit https://bit.ly/cffinit to generate yours today!
-
 cff-version: 1.2.0
 title: pyquasoare
 message: >-
@@ -12,33 +9,32 @@ authors:
     family-names: Lerat
     email: julien.lerat@csiro.au
     affiliation: CSIRO
-    orcid: '0000-0003-4521-8874'
+    orcid: 'https://orcid.org/0000-0003-4521-8874'
 identifiers:
-  - type: doi
-    value: 10.5281/zenodo.13928254
+  - type: url
+    value: 'https://doi.org/10.5281/zenodo.13928253'
 repository-code: 'https://github.com/csiro-hydroinformatics/pyquasoare'
 url: 'https://github.com/csiro-hydroinformatics/pyquasoare'
 abstract: >-
   This package implements the Quadratic Solution of the
-  Approximate Reservoir Equation (QuaSoARe) method.
-
-  "Quadratic solution of the approximate reservoir equation
-  (QUASOARE)", HESS, Submitted.
+  Approximate Reservoir Equation (QuaSoARe) method described in the 
+  paper by Lerat, J (2024).
 keywords:
   - Differential equation
   - Reservoir
   - Hydrology
   - Rainfall-runoff
 license: MIT
-
 references:
   - type: article
-    title: Technical note, Quadratic solution of the approximate reservoir equation (QuaSoARe)
+    title: >-
+      Technical note, Quadratic solution of the approximate reservoir equation
+      (QuaSoARe)
     authors:
-      - family-names: "Lerat"
-        given-names: "Julien"
-        orcid: "0000-0003-4521-8874"
+      - family-names: Lerat
+        given-names: Julien
+        orcid: https://orcid.org/0000-0003-4521-8874
     year: 2024
-    journal: "Hydrology and Earth System Sciences"
-    volume: "in review"
-    url: "https://egusphere.copernicus.org/preprints/2024/egusphere-2024-3184"
+    journal: Hydrology and Earth System Sciences
+    volume: 29, 2003–2021
+    url: 'https://doi.org/10.5194/hess-29-2003-2025'
