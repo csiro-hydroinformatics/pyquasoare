@@ -109,7 +109,8 @@ def quad_grad(a, b, c, s):
         return o
 
 
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
+def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1,
+                      out=None):
     """ Compute the interpolation coefficients for a function over
     the interval [alphaj, alpjajp1].
 
@@ -136,7 +137,8 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
         0 = linear (i.e. no quadratic term, i.e. ignore fm)
         1 = monotonic (i.e. no zero of the approximation functions)
         2 = free (no restriction)
-
+    out : numpy.ndarray
+        In place output result.
     Returns
     -----------
     coefs : np.ndarray
@@ -159,16 +161,31 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
     >>> approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=2)
     array([-3.2648,  4.032 , -0.2672])
     """
-    coefs = np.zeros(3)
-    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj, alphajp1,
-                                          f0, f1, fm, coefs)
+    alphaj = np.atleast_1d(alphaj)
+    nval = len(alphaj)
+    if nval == 1:
+        # No need for vectorisation. Use simple function
+        coefs = np.zeros(3) if out is None else out
+        ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj[0], alphajp1,
+                                              f0, f1, fm, coefs)
+        if ierr > 0:
+            mess = c_pyquasoare.get_error_message(ierr).decode()
+            raise ValueError("c_pyquasoare.quad_coefficients"
+                             + f" returns {ierr} ({mess})")
+        return coefs
+
+    alphajp1 = np.atleast_1d(alphajp1)
+    f0 = np.atleast_1d(f0)
+    f1 = np.atleast_1d(f1)
+    fm = np.atleast_1d(fm)
+    coefs = np.zeros((nval, 3)) if out is None else out
+    ierr = c_pyquasoare.quad_coefficients_vect(approx_opt, alphaj, alphajp1,
+                                               f0, f1, fm, coefs)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError("c_pyquasoare.quad_coefficients"
+        raise ValueError("c_pyquasoare.quad_coefficients_vect"
                          + f" returns {ierr} ({mess})")
-
     return coefs
-
 
 def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     """ Compute interpolation coefficients for a set of flux functions and
