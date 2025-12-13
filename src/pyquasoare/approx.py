@@ -187,6 +187,7 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1,
                          + f" returns {ierr} ({mess})")
     return coefs
 
+
 def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     """ Compute interpolation coefficients for a set of flux functions and
     multiple interpolation bands.
