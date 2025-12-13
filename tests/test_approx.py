@@ -368,6 +368,13 @@ def test_quad_coefficients(allclose, reservoir_function):
     expected = (f1+f0)/2
     assert allclose(fa, expected, atol=1e-10)
 
+    # Vectorisation
+    aa = np.linspace(alpha0, alpha1, 10)
+    al0, al1 = aa[:-1], aa[1:]
+    f0 = fun(al0)
+    f1 = fun(al1)
+    fm = fun((al0 + al1) / 2)
+    coefs = approx.quad_coefficients(al0, al1, f0, f1, fm, 1)
 
 
 def test_quad_coefficients_edge_cases(allclose):

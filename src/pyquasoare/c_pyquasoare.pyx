@@ -175,6 +175,32 @@ def quad_coefficients(int approx_opt, double a0, double a1,
                                 <double*> np.PyArray_DATA(coefs))
 
 
+def quad_coefficients_vect(int approx_opt,
+                           np.ndarray[double, ndim=1, mode='c'] a0,
+                           np.ndarray[double, ndim=1, mode='c'] a1,
+                           np.ndarray[double, ndim=1, mode='c'] f0,
+                           np.ndarray[double, ndim=1, mode='c'] f1,
+                           np.ndarray[double, ndim=1, mode='c'] fm,
+                           np.ndarray[double, ndim=2, mode='c'] coefs):
+    cdef int k
+    cdef int ierr
+    cdef int nval = a0.shape[0]
+    assert a1.shape[0] == nval
+    assert f0.shape[0] == nval
+    assert f1.shape[0] == nval
+    assert fm.shape[0] == nval
+    assert coefs.shape[0] == nval
+    assert coefs.shape[1] == 3
+
+    for k in range(nval):
+        ierr = c_quad_coefficients(approx_opt, a0[k], a1[k],
+                                   f0[k], f1[k], fm[k],
+                                   <double*> np.PyArray_DATA(coefs[k]))
+        if ierr > 0:
+            return ierr
+    return 0
+
+
 def quad_steady(double a, double b, double c, \
                         np.ndarray[double, ndim=1, mode='c'] steady not None):
     assert steady.shape[0] == 2
