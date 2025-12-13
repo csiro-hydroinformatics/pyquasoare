@@ -704,23 +704,31 @@ def test_reservoir_interception(allclose):
     siteid = "203900"
     df = data_reader.get_data(siteid, "daily")
     P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
+    Pclip = np.maximum(P - E, 0.)
+    Eclip = np.maximum(E - P, 0.)
 
-    theta = 0.1
+    theta = 0.01
     scalings = np.column_stack([P/theta, E/theta])
 
-    nuP, nuE = 8., 8.
-    fP = lambda x: 1-x**nuP
-    fE = lambda x: -1+(1-x)**nuE
+    fP = lambda x: (1.0 - x) / math.sqrt((1. - x)**2 + 1e-6)
+    fE = lambda x: -fP(1.0 - x)
 
-    alphas = np.linspace(0, 1.05, 10)
+    alphas = np.linspace(0, 1., 100)
     amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
 
-    s_start = 0.
+    s_start = 0.5
     niters = []
     intfun = integrate.quad_integrate
     for t in range(len(scalings)):
-        niter, s_end, sim = intfun(alphas, scalings[t],\
-                                    amat, bmat, cmat, 0., s_start, 1.)
+        niter, s_end, sim = intfun(alphas, scalings[t],
+                                   amat, bmat, cmat, 0.,
+                                   s_start, 1.)
         s_start = s_end
 
+        pc = (scalings[t][0] - sim[0]) * theta
+        errp = abs(math.asinh(pc) - math.asinh(Pclip[t]))
+        assert errp < 1e-2
 
+        ec = (scalings[t][1] + sim[1]) * theta
+        erre = abs(math.asinh(ec) - math.asinh(Eclip[t]))
+        assert erre < 1e-2
