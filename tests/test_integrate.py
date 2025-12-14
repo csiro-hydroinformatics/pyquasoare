@@ -201,7 +201,8 @@ def test_forward_vs_finite_difference(allclose, generate_samples):
         ds1 = (-s1[4:]+8*s1[3:-1]-8*s1[1:-3]+s1[:-4])/h/12
         td = t_eval[2:-2]
         # .. compares with expected from ode
-        expected = approx.quad_fun(a, b, c, s1[2:-2])
+        coefs = np.array([a, b, c])
+        expected = approx.quad_fun(coefs, s1[2:-2])
         err = np.abs(np.arcsinh(ds1)-np.arcsinh(expected))
 
         # Select place where derivative is not too high
@@ -230,6 +231,7 @@ def test_forward_vs_numerical(allclose, generate_samples):
     nassessed = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
+        coefs = np.array([a, b, c]).astype(float)
 
         # Set integration time
         Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.99)
@@ -237,8 +239,8 @@ def test_forward_vs_numerical(allclose, generate_samples):
             continue
         t_eval = np.linspace(0, Tmax, 1000)
 
-        f = lambda x: approx.quad_fun(a, b, c, x)
-        df = lambda x: approx.quad_grad(a, b, c, x)
+        f = lambda x: approx.quad_fun(coefs, x)
+        df = lambda x: approx.quad_grad(coefs, x)
         te, expected, nev, njac = slow.integrate_numerical([f], [df], t0, s0, t_eval)
         if len(te)<3:
             continue
@@ -279,6 +281,7 @@ def test_inverse(allclose, generate_samples):
     errmax_max = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
+        coefs = np.array([a, b, c]).astype(float)
 
         # Set integration time
         Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.9)
@@ -286,10 +289,10 @@ def test_inverse(allclose, generate_samples):
 
         # Simulate
         s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
-        dsdt = approx.quad_fun(a, b, c, s1)
+        dsdt = approx.quad_fun(coefs, s1)
 
         # Takes into account distance with steady state
-        stdy = steady.quad_steady(a, b, c)
+        stdy = steady.quad_steady(coefs)
         stdy[np.isnan(stdy)] = np.inf
         dst1 = np.abs(s1-stdy[0])
         dst2 = np.abs(s1-stdy[1])
@@ -710,11 +713,14 @@ def test_reservoir_interception(allclose):
     theta = 0.01
     scalings = np.column_stack([P/theta, E/theta])
 
-    fP = lambda x: (1.0 - x) / math.sqrt((1. - x)**2 + 1e-6)
+    fP = lambda x: (1.0 - x) / np.sqrt((1. - x)**2 + 1e-6)
     fE = lambda x: -fP(1.0 - x)
 
     alphas = np.linspace(0, 1., 100)
-    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+    coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     s_start = 0.5
     niters = []

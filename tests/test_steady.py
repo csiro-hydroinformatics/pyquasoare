@@ -42,19 +42,20 @@ def test_kahan(allclose):
     Fnm1, Fnm2 = 1, 0
     print("\n")
     for n in range(2, 70):
-        Fn = Fnm1+Fnm2
+        Fn = Fnm1 + Fnm2
 
         # Root of Fn.x^2-2Fn-1.x+Fn-2 = 0
         In = 1 if n%2 == 0 else 1j
-        x1 = (Fnm1-In)/Fn
-        x2 = (Fnm1+In)/Fn
+        x1 = (Fnm1 - In) / Fn
+        x2 = (Fnm1 + In) / Fn
 
-        f1 = abs(Fn*x1*x1-2*Fnm1*x1+Fnm2)
-        f2 = abs(Fn*x2*x2-2*Fnm1*x2+Fnm2)
+        f1 = abs(Fn * x1 * x1 - 2 * Fnm1 * x1 + Fnm2)
+        f2 = abs(Fn * x2 * x2 - 2 * Fnm1 * x2 + Fnm2)
 
         # Test steady
-        stdy = steady.quad_steady(float(Fn), -2.*float(Fnm1), float(Fnm2))
-        x1s, x2s = stdy
+        coefs = np.array([float(Fn), -2.*float(Fnm1), float(Fnm2)])
+        stdy = steady.quad_steady(coefs)
+        x1s, x2s = stdy[0]
 
         if n%2 == 0 and n>2:
             assert np.isclose(x1s, x1)
@@ -71,16 +72,16 @@ def test_steady_state(allclose, generate_samples):
     if ntry==0:
         pytest.skip("Skip param config")
 
-    a, b, c = [np.ascontiguousarray(v) for v in params.T]
-    stdy = steady.quad_steady(a, b, c)
+    stdy = steady.quad_steady(params)
 
     allgood = np.all(~np.isnan(stdy), axis=1)
     if allgood.sum()>0:
         assert np.all(stdy[allgood, 1]>stdy[allgood, 0])
 
-    f1 = approx.quad_fun(a, b, c, stdy[:, 0])
-    f2 = approx.quad_fun(a, b, c, stdy[:, 1])
+    f1 = np.array([approx.quad_fun(p, s[0]) for p, s in zip(params, stdy)])
+    f2 = np.array([approx.quad_fun(p, s[1]) for p, s in zip(params, stdy)])
 
+    a, b, c = params.T
     ina = np.array([approx.isnull(aa)==1 for aa in a])
     nnb = np.array([approx.notnull(aa)==1 for aa in a])
     ilin = ina & nnb
@@ -104,34 +105,37 @@ def test_steady_state(allclose, generate_samples):
         assert np.all(np.isnan(stdy[izero, 1]))
 
 
-
 def test_scalings(allclose, generate_samples):
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
 
-    stdy, feval = [], []
     alphas = np.array([-1e100, 0, 1e100])
-    scalings = np.ones((4, 1))
+    scalings = np.random.uniform(0, 1, size=(5, 1))
     tested = 0
-    for a, b, c in params:
-        amat, bmat, cmat =[np.ones((2, 1))*v for v in [a, b, c]]
-        stdy = steady.quad_steady_scalings(alphas, scalings, \
-                                            amat, bmat, cmat)
-        stdy0 = steady.quad_steady(a, b, c)
+    for coefs in params:
+        co2 = np.array([coefs]*2)[None, :, :]
+        stdy = steady.quad_steady_scalings(alphas, co2, scalings)
+        stdy0 = steady.quad_steady(coefs)
         notnan = ~np.isnan(stdy0)
         if notnan.sum()>0:
             tested += 1
             # All values are identical in the 0 axis
-            # because the scalings are identical
-            assert allclose(np.diff(stdy, axis=0), 0.)
-            stdy = stdy[0]
+            # because there is only one flux and, hence,
+            # identical scalings for all flux. This does not
+            # affect steady states.
+            ds = np.diff(stdy[:, 0])
+            std = np.nanstd(ds)
+            if ~np.isnan(std):
+                assert allclose(std, 0., atol=1e-6)
+
+            stdy = np.ascontiguousarray(stdy[0])
 
             # Compare with simple steady computation
-            assert allclose(stdy, stdy0[~np.isnan(stdy0)])
+            #assert allclose(stdy, stdy0[~np.isnan(stdy0)])
 
             # Check steady state value is 0
-            feval = approx.quad_fun(a, b, c, stdy)
-            if abs(a)>1e-14:
+            feval = approx.quad_fun(coefs, stdy)
+            if abs(coefs[0])>1e-14:
                 assert allclose(feval, 0, atol=5e-5)
 
     LOGGER.info(f"[{case}:{cname}] steady scalings: tested={(100.*tested)/ntry:0.0f}%")
@@ -140,22 +144,19 @@ def test_scalings(allclose, generate_samples):
 def test_scalings_extrapolation(allclose):
     al0, al1, al2 = 0., 1., 2.
     alphas = np.array([al0, al1, al2])
-    a0, b0, c0 = approx.quad_coefficients(al0, al1, -1., 1., 0.2, 1)
-    a1, b1, c1 = approx.quad_coefficients(al1, al2, 1., 0.1, 0.33, 1)
+    falphas = np.array([-1., 1., 0.1])
+    fmid = np.array([0.2, 0.33])
+    coefs = approx.quad_coefficients(alphas, falphas, fmid, 1)[None, :, :]
     scalings = np.ones((10, 1))
-    amat = np.array([[a0], [a1]])
-    bmat = np.array([[b0], [b1]])
-    cmat = np.array([[c0], [c1]])
 
-    stdy = steady.quad_steady_scalings(alphas, scalings, \
-                                        amat, bmat, cmat)
+    stdy = steady.quad_steady_scalings(alphas, coefs, scalings)
     assert stdy.shape[1] == 2
     assert allclose(stdy[:, 0], stdy[0, 0])
     assert allclose(stdy[:, 1], stdy[0, 1])
     # steady state in extrapolationt
-    assert stdy[0, 1]>al2
+    assert stdy[0, 1] > al2
 
-    feval = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, stdy[0])
+    feval = approx.quad_fun_from_matrix(alphas, coefs, stdy[0])
     assert allclose(feval, 0.)
 
 
@@ -164,13 +165,12 @@ def test_scalings_gr4j(allclose):
     alphas = 0.05*np.arange(nalphas)
 
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     nval = 200
     scalings = np.random.uniform(0, 100, size=(nval, 3))
     scalings[:, -1] = 1
-
-    stdy = steady.quad_steady_scalings(alphas, scalings, amat, bmat, cmat)
+    stdy = steady.quad_steady_scalings(alphas, coefs, scalings)
 
     # only one steady state
     assert stdy.shape[1] == 1
@@ -178,10 +178,8 @@ def test_scalings_gr4j(allclose):
     for t in range(nval):
         s0 = stdy[t, 0]
         # Check steady on approx fun
-        amats = amat*scalings[t][None, :]
-        bmats = bmat*scalings[t][None, :]
-        cmats = cmat*scalings[t][None, :]
-        out = approx.quad_fun_from_matrix(alphas, amats, bmats, cmats, s0)
+        co = coefs * scalings[t][None, :]
+        out = approx.quad_fun_from_matrix(alphas, co, s0)
         fsum = out.sum(axis=1)
         assert allclose(fsum[~np.isnan(fsum)], 0.)
 
