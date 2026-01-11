@@ -73,7 +73,10 @@ cdef extern from 'c_quasoare_core.h':
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
-                            double s0, int * niter,
+                            double s0,
+                            double smin,
+                            double smax,
+                            int * niter,
                             double * s1, double * fluxes);
 
 
@@ -335,7 +338,7 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
-        double s0, double timestep, \
+        double s0, double smin, double smax, double timestep, \
         np.ndarray[int, ndim=1, mode='c'] niter not None,\
         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
         np.ndarray[double, ndim=2, mode='c'] fluxes not None):
@@ -386,7 +389,7 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),
-                                s0,
+                                s0, smin, smax,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))

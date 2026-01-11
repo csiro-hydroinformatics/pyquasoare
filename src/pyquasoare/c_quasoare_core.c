@@ -488,7 +488,10 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
-                            double s0, int * niter,
+                            double s0,
+                            double smin,
+                            double smax,
+                            int * niter,
                             double * s1, double * fluxes) {
     int ierr, t, j;
     double store=s0;
@@ -525,6 +528,10 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
         /* Loop initial state */
         store = s1[t];
+
+        /* Impose constraint */
+        store = store < smin ? smin : store > smax ? smax : store;
+        s1[t] = store;
     }
 
     return 0;
