@@ -499,7 +499,6 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
     for(t=0; t<nval; t++){
         store += perturb[t];
-        store = store < smin ? smin : store > smax ? smax : store;
 
         /* Integrate ode */
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
@@ -529,6 +528,10 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
         /* Loop initial state */
         store = s1[t];
+
+        /* Impose constraint */
+        store = store < smin ? smin : store > smax ? smax : store;
+        s1[t] = store;
     }
 
     return 0;
