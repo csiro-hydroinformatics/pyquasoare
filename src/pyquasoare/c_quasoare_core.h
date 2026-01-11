@@ -50,7 +50,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
 int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep,
                             double * alphas, double * scalings,
-                            int * reset,
+                            double * perturb,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,

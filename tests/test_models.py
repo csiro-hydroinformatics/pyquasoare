@@ -138,7 +138,7 @@ def test_quad_model(allclose):
         LOGGER.info(mess)
 
 
-def test_quad_model_reset(allclose):
+def test_quad_model_perturb(allclose):
     nalphas = 10
     alphas = np.linspace(0., 1.2, nalphas)
     start, end = "2017-01", "2022-12-31"
@@ -149,39 +149,32 @@ def test_quad_model_reset(allclose):
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
 
-    # Loop over sites
-    for isite, siteid in enumerate(data_reader.SITEIDS):
-        # Get climate data
-        df = data_reader.get_data(siteid, "daily")
-        df = df.loc[start:end]
-        nval = len(df)
-        inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
-        climdiff = inputs[:, 0]-inputs[:, 1]
+    # Get climate data
+    siteid = data_reader.SITEIDS[0]
+    df = data_reader.get_data(siteid, "daily")
+    df = df.loc[start:end]
+    nval = len(df)
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    climdiff = inputs[:, 0]-inputs[:, 1]
 
-        scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
-                                    np.maximum(-climdiff, 0.)/X1, \
-                                    np.ones(nval)])
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
+                                np.maximum(-climdiff, 0.)/X1, \
+                                np.ones(nval)])
 
-        s0 = 1./2
-        niter, s1, fx = models.quad_model(alphas, scalings, \
-                                        amat, bmat, cmat, s0, 1.)
+    s0 = 1./2
+    niter, s1, fx = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1.)
 
-        # Reset
-        scalings_3 = np.tile(scalings, (3, 1))
-        o = np.zeros(nval, dtype=int)
-        o[0] = 1
-        reset = np.tile(o, (3))
-        _, s1_3, fx_3 = models.quad_model(alphas, scalings_3, \
-                                          amat, bmat, cmat, s0, 1., reset)
-        ii0 = np.arange(nval)
-        for r in range(3):
-            ii = nval * r + ii0
-            assert np.allclose(s1_3[ii0], s1_3[ii])
-            assert np.allclose(s1, s1_3[ii])
+    perturb = 1e-10 * np.random.uniform(-1, 1, len(scalings))
+    _, s1p, fxp = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1., perturb)
+    assert allclose(s1, s1p)
+    assert allclose(fx, fxp)
 
-            assert np.allclose(fx_3[ii0], fx_3[ii])
-            assert np.allclose(fx, fx_3[ii])
-
+    perturb = 1e-1 * np.random.uniform(-1, 1, len(scalings))
+    _, s1p, fxp = models.quad_model(alphas, scalings, \
+                                    amat, bmat, cmat, s0, 1., perturb)
+    assert np.abs(s1 - s1p).max() > 0.1
 
 def test_routing_convergence(allclose):
     siteid = "203005"
