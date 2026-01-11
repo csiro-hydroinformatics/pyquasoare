@@ -69,7 +69,7 @@ cdef extern from 'c_quasoare_core.h':
     int c_quad_model(int nalphas, int nfluxes, int nval, int errors,
                             double timestep,
                             double * alphas, double * scalings,
-                            int * reset,
+                            double * perturb,
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
@@ -331,7 +331,7 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
 
 def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,\
         np.ndarray[double, ndim=2, mode='c'] scalings not None,
-        np.ndarray[int, ndim=1, mode='c'] reset not None,
+        np.ndarray[double, ndim=1, mode='c'] perturb not None,
         np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
         np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
@@ -345,8 +345,8 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
     cdef int nfluxes = a_matrix_noscaling.shape[1]
     cdef int nval = scalings.shape[0]
 
-    if reset.shape[0] != nval:
-        raise ValueError("reset.shape[0] != nval")
+    if perturb.shape[0] != nval:
+        raise ValueError("perturb.shape[0] != nval")
 
     if scalings.shape[1] != nfluxes:
         raise ValueError("scalings.shape[1] != nfluxes")
@@ -382,7 +382,7 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
     return c_quad_model(nalphas, nfluxes, nval, errors, timestep,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(scalings),
-                                <int*> np.PyArray_DATA(reset),
+                                <double*> np.PyArray_DATA(perturb),
                                 <double*> np.PyArray_DATA(a_matrix_noscaling),
                                 <double*> np.PyArray_DATA(b_matrix_noscaling),
                                 <double*> np.PyArray_DATA(c_matrix_noscaling),

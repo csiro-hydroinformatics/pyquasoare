@@ -15,7 +15,7 @@ def quad_model(alphas, scalings,
                a_matrix_noscaling,
                b_matrix_noscaling,
                c_matrix_noscaling, s0, timestep,
-               reset=None,
+               perturb=None,
                errors="ignore",
                fluxes=None, niter=None, s1=None):
     """ Integrate the approximate reservoir equation with initial initial
@@ -126,15 +126,15 @@ def quad_model(alphas, scalings,
         niter = np.zeros(nval, dtype=np.int32)
     if s1 is None:
         s1 = np.zeros(nval, dtype=np.float64)
-    if reset is None:
-        reset = np.zeros(nval, dtype=np.int32)
+    if perturb is None:
+        perturb = np.zeros(nval, dtype=np.float64)
     else:
-        reset = reset.astype(np.int32)
+        perturb = perturb.astype(np.float64)
 
     ierrors = np.int32(ERRORS.index(errors))
 
     ierr = c_pyquasoare.quad_model(ierrors, alphas, scalings,
-                                   reset,
+                                   perturb,
                                    a_matrix_noscaling,
                                    b_matrix_noscaling,
                                    c_matrix_noscaling,
