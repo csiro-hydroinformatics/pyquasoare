@@ -125,7 +125,7 @@ def quad_model(alphas, scalings,
     """
     if errors not in ERRORS:
         txt = "/".join(ERRORS)
-        errmsg = "Expected errors in {txt}, got {errors}."
+        errmsg = f"Expected errors in {txt}, got {errors}."
         raise ValueError(errmsg)
 
     nval = scalings.shape[0]
