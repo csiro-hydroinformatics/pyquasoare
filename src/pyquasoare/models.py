@@ -15,6 +15,8 @@ def quad_model(alphas, scalings,
                a_matrix_noscaling,
                b_matrix_noscaling,
                c_matrix_noscaling, s0, timestep,
+               smin=-np.inf,
+               smax=np.inf,
                perturb=None,
                errors="ignore",
                fluxes=None, niter=None, s1=None):
@@ -43,10 +45,14 @@ def quad_model(alphas, scalings,
         interpolation band (i.e. matrices of size [M-1, N]).
     s0 : float
         Initial condition
+    smin : float
+        Minimal store value.
+    smax : float
+        Maximum store value.
     timestep : float
         Integration time step.
-    reset : np.ndarray
-        Timeseries indicating when to reset the model (=1).
+    perturb : np.ndarray
+        Timeseries of state perturbation. Used in data assimilation algorithms.
     errors: str
         - if 'ignore', then skip over error during time step integration
         - if 'raise', throw a ValueError.
@@ -117,7 +123,11 @@ def quad_model(alphas, scalings,
     >>> fx.sum(axis=0)[1]+s0-s1[-1]
     -100.0
     """
-    assert errors in ERRORS
+    if errors not in ERRORS:
+        txt = "/".join(ERRORS)
+        errmsg = "Expected errors in {txt}, got {errors}."
+        raise ValueError(errmsg)
+
     nval = scalings.shape[0]
 
     if fluxes is None:
@@ -138,7 +148,8 @@ def quad_model(alphas, scalings,
                                    a_matrix_noscaling,
                                    b_matrix_noscaling,
                                    c_matrix_noscaling,
-                                   s0, timestep, niter, s1, fluxes)
+                                   s0, smin, smax,
+                                   timestep, niter, s1, fluxes)
 
     if errors == "raise" and ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()

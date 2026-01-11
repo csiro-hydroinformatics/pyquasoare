@@ -488,7 +488,10 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
                             double * a_matrix_noscaling,
                             double * b_matrix_noscaling,
                             double * c_matrix_noscaling,
-                            double s0, int * niter,
+                            double s0,
+                            double smin,
+                            double smax,
+                            int * niter,
                             double * s1, double * fluxes) {
     int ierr, t, j;
     double store=s0;
@@ -496,6 +499,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
     for(t=0; t<nval; t++){
         store += perturb[t];
+        store = store < smin ? smin : store > smax ? smax : store;
 
         /* Integrate ode */
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
