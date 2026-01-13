@@ -69,74 +69,74 @@ def get_vectors(*args, dtype=np.float64):
     return [x[0]*ones if len(x) == 1 else x for x in v]
 
 
-def quad_fun(a, b, c, s):
-    """ Quadratic approximation function f(s)=a.s^2+b.s+c
+def quad_fun(coefs, s, out=None):
+    """ Quadratic approximation function f(s) = a * s^2 + b * s + c
 
     Parameters
     -----------
-    a, b, c, s : float or np.ndarray
+    coefs : numpy.ndarray
+        3 coefficients.
+    s : numpy.ndarray
+        Values where quadratic function is computed.
 
     Returns
     -----------
-    float or np.ndarray
-        Function evaluation.
+    out : np.ndarray
+        Quadratic function evaluation.
     """
-    if all_scalar(a, b, c, s):
-        return c_pyquasoare.quad_fun(a, b, c, s)
-    else:
-        a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        c_pyquasoare.quad_fun_vect(a, b, c, s, o)
-        return o
+    s = np.atleast_1d(s)
+    out = np.zeros(len(s)) if out is None else out
+    c_pyquasoare.quad_fun(coefs, s, out)
+    return out
 
 
-def quad_grad(a, b, c, s):
-    """ Gradient of quadratic approximation function df/ds(s)=2a.s+b
+def quad_grad(coefs, s, out=None):
+    """ Gradient of quadratic approximation function df/ds(s) = 2 * a * s + b
 
     Parameters
     -----------
-    a, b, c, s : float or np.ndarray
+    coefs : numpy.ndarray
+        3 coefficients.
+    s : numpy.ndarray
+        Values where quadratic function gradient is computed.
 
     Returns
     -----------
-    float or np.ndarray
-        Gradient function evaluation.
+    out : np.ndarray
+        Quadratic function evaluation.
     """
-    if all_scalar(a, b, c, s):
-        return c_pyquasoare.quad_grad(a, b, c, s)
-    else:
-        a, b, c, s, o = get_vectors(a, b, c, s, np.nan)
-        c_pyquasoare.quad_grad_vect(a, b, c, s, o)
-        return o
+    s = np.atleast_1d(s)
+    out = np.zeros(len(s)) if out is None else out
+    c_pyquasoare.quad_grad(coefs, s, out)
+    return out
 
 
-def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
+def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
+                      out=None):
     """ Compute the interpolation coefficients for a function over
     the interval [alphaj, alpjajp1].
 
     The coefficients are obtained by matching the function with the
     quadratic approximation function at three points:
-    x = alphaj,
-    x = alphajp1,
-    x = (alphaj+alphajp1)/2.
+    1. alphas[j],
+    2. alphas[j + 1]
+    3. (alphas[j] + alphas[j + 1]) / 2
 
     Parameters
     -----------
-    alphaj : float
-        Lower bound of approximation interval.
-    alphajp1 : float
-        Upper bound of approximation interval.
-    f0 : float
-        Function value at x=alphaj.
-    f1 : float
-        Function value at x=alphajp1.
-    fm : float
-        Function value at x=(alphaj+alphajp1)/2.
+    alphas : numpy.ndarray
+        Interpolation nodes
+    falphas : float
+        Function values at interpolation nodes
+    fmid : numpy.ndarray
+        Function value at mid points between interpolation nodes
     approx_opt : int, default 1
         Options to restrict the quadratic function fitting:
         0 = linear (i.e. no quadratic term, i.e. ignore fm)
         1 = monotonic (i.e. no zero of the approximation functions)
         2 = free (no restriction)
-
+    out : numpy.ndarray
+        In place output result.
     Returns
     -----------
     coefs : np.ndarray
@@ -159,26 +159,26 @@ def quad_coefficients(alphaj, alphajp1, f0, f1, fm, approx_opt=1):
     >>> approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=2)
     array([-3.2648,  4.032 , -0.2672])
     """
-    coefs = np.zeros(3)
-    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphaj, alphajp1,
-                                          f0, f1, fm, coefs)
+    nalphas = len(alphas)
+    coefs = np.zeros((nalphas - 1, 3)) if out is None else out
+    ierr = c_pyquasoare.quad_coefficients(approx_opt, alphas,
+                                          falphas, fmid, coefs)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError("c_pyquasoare.quad_coefficients"
                          + f" returns {ierr} ({mess})")
-
     return coefs
 
 
-def quad_coefficient_matrix(funs, alphas, approx_opt=1):
+def quad_coefficient_matrix(funs, alphas, approx_opt=1, out=None):
     """ Compute interpolation coefficients for a set of flux functions and
     multiple interpolation bands.
 
     Parameters
     -----------
     funs : list of function
-        Flux functions.
-    alphas : np.ndarray
+        Flux functions (list of N elements).
+    alphas : numpy.ndarray
         Approximation nodes. Vector of length M.
         Should be strictly increasing, i.e. alphas[i]>alphas[i-1]
     approx_opt : int, default 1
@@ -186,18 +186,13 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
         0 = linear (i.e. no quadratic term)
         1 = monotonic (i.e. no zero of the approximation functions)
         2 = free (no restriction)
-
+    out : numpy.ndarray
+        A location into which the result is stored. Must have a shape
+        equal to (N, M-1, 3).
     Returns
     -------
-    a_matrix, b_matrix, c_matrix : np.ndarray
-        Approximation coefficient matrices of size [M-1 x N]
-        with M=len(alphas) and N=len(funs).
-
-    constants : np.ndarray
-        Matrix of constants Delta, tmax:
-        Delta = determinant of approximation function (i.e. b^2-4a.c)
-        tmax = Validity domain where solution of approximate reservoir
-               equation remains valid.
+    coefs : np.ndarray
+        Approximation coefficient matrix of size [N, M-1, 3].
 
     See Also
     --------
@@ -209,15 +204,14 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
     >>> from pyquasoare import approx
     >>> fun = lambda x: 1-x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.])
-    >>> amat, bmat, cmat, cst = \
-               approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
-    >>> amat
+    >>> coefs = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> coefs[0, :, 0]
     array([[-1.83755],
            [-4.98155]])
-    >>> bmat
+    >>> coefs[0, :, 1]
     array([[2.03385],
            [7.12215]])
-    >>> cmat
+    >>> coefs[0, :, 2]
     array([[ 0.41788],
            [-1.6406 ]])
     """
@@ -227,42 +221,18 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1):
         raise ValueError(f"Expected nfluxes<{QUASOARE_NFLUXES_MAX}, "
                          + f"got {nfluxes}.")
 
-    # we add one row at the top end bottom for continuity extension
-    a_matrix = np.zeros((nalphas-1, nfluxes))
-    b_matrix = np.zeros((nalphas-1, nfluxes))
-    c_matrix = np.zeros((nalphas-1, nfluxes))
-    constants = np.zeros((nalphas-1, nfluxes, 2))
+    coefs = np.zeros((nfluxes, nalphas - 1, 3)) if out is None else out
+    mid = (alphas[1:] + alphas[:-1]) / 2
 
-    for j in range(nalphas-1):
-        alphaj, alphajp1 = alphas[[j, j+1]]
-
-        for ifun, f in enumerate(funs):
-            f0 = f(alphaj)
-            f1 = f(alphajp1)
-            fm = f((alphaj+alphajp1)/2)
-            a, b, c = quad_coefficients(alphaj, alphajp1, f0, f1, fm,
-                                        approx_opt)
-            a_matrix[j, ifun] = a
-            b_matrix[j, ifun] = b
-            c_matrix[j, ifun] = c
-
-            # Discriminant
-            cst = np.zeros(3)
-            c_pyquasoare.quad_constants(a, b, c, cst)
-            Delta, qD, sbar = cst
-
-            # Tmax
-            t1 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD,
-                                               sbar, alphaj)
-            t2 = c_pyquasoare.quad_delta_t_max(a, b, c, Delta, qD,
-                                               sbar, alphajp1)
-            tmax = min(t1, t2)
-            constants[j, ifun, :] = [Delta, tmax]
-
-    return a_matrix, b_matrix, c_matrix, constants
+    for ifun, fun in enumerate(funs):
+        falphas = fun(alphas)
+        fmid = fun(mid)
+        quad_coefficients(alphas, falphas, fmid,
+                          approx_opt, out=coefs[ifun])
+    return coefs
 
 
-def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
+def quad_fun_from_matrix(alphas, coefs, x, out=None):
     """ Evaluate piecewise quadratic approximation function givien
     interpolation nodes (alphas), interpolation coefficients
     (a, b, c matrices) and evaluation points (x).
@@ -272,16 +242,19 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     alphas : np.ndarray
         Approximation nodes. Vector of length M.
         Should be strictly increasing, i.e. alphas[i]>alphas[i-1]
-    a_matrix, b_matrix, c_matrix : np.ndarray
-        Interpolation coefficients matrices of size [.
+    coefs : np.ndarray
+        Interpolation coefficients matrices of size [N, M - 1, 3].
     x : np.ndarray
-        Evaluation points of length nval.
+        Evaluation points of length P.
+    out : numpy.ndarray
+        A location into which the result is stored. Must have a shape
+        equal to (P, N).
 
     Returns
     -------
     outputs : np.ndarray
         Evaluatiopn of piecewise approximation function
-        (size [nval x N]
+        (size [P x N]
 
     See Also
     --------
@@ -292,12 +265,11 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
     --------
     >>> import numpy as np
     >>> from pyquasoare import approx
-    >>> fun = lambda x: 1-x**6/2
+    >>> fun = lambda x: 1 - x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.])
-    >>> amat, bmat, cmat, cst = \
-            approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> coefs = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> x = np.linspace(alphas[0], alphas[1], 10)
-    >>> quad_fun_from_matrix(alphas, amat, bmat, cmat, x)
+    >>> quad_fun_from_matrix(alphas, coefs, x)
     array([[0.976672  ],
            [0.9719599 ],
            [0.96543294],
@@ -310,52 +282,43 @@ def quad_fun_from_matrix(alphas, a_matrix, b_matrix, c_matrix, x):
            [0.868928  ]])
     """
     nalphas = len(alphas)
-    nfluxes = a_matrix.shape[1]
+    nfluxes = coefs.shape[0]
     assert np.all(np.diff(alphas) > 0)
-    assert a_matrix.shape[0] == nalphas-1
-    assert b_matrix.shape == a_matrix.shape
-    assert c_matrix.shape == a_matrix.shape
+    assert coefs.shape == (nfluxes, nalphas-1, 3)
 
     x = np.atleast_1d(x)
-    outputs = np.nan*np.zeros((len(x), a_matrix.shape[1]))
+    outputs = np.empty((len(x), nfluxes)) if out is None else out
 
     # Outside of alpha bounds
     alpha_min, alpha_max = alphas[0], alphas[-1]
     idx_low = x < alpha_min
     idx_high = x > alpha_max
+    co = np.zeros(3)
 
     for i in range(nfluxes):
         if idx_low.sum() > 0:
             # Linear trend in low extrapolation
-            al, bl, cl = a_matrix[0, i], b_matrix[0, i], c_matrix[0, i]
-            g = quad_grad(al, bl, cl, alpha_min)
-            cl = quad_fun(al, bl, cl, alpha_min)-g*alpha_min
-            bl = g
-            al = 0
-            o = quad_fun(al, bl, cl, x[idx_low])
-            outputs[idx_low, i] = o
+            g = quad_grad(coefs[i, 0], alpha_min)
+            co[2] = quad_fun(coefs[i, 0], alpha_min) - g * alpha_min
+            co[1] = g
+            co[0] = 0
+            outputs[idx_low, i] = quad_fun(co, x[idx_low])
 
         if idx_high.sum() > 0:
             # Linear trend in high extrapolation
-            ah, bh, ch = a_matrix[-1, i], b_matrix[-1, i], c_matrix[-1, i]
-            g = quad_grad(ah, bh, ch, alpha_max)
-            ch = quad_fun(ah, bh, ch, alpha_max)-g*alpha_max
-            bh = g
-            ah = 0
-            o = quad_fun(ah, bh, ch, x[idx_high])
-            outputs[idx_high, i] = o
+            g = quad_grad(coefs[i, -1], alpha_max)
+            co[2] = quad_fun(coefs[i, -1], alpha_max) - g * alpha_max
+            co[1] = g
+            co[0] = 0
+            outputs[idx_high, i] = quad_fun(co, x[idx_high])
 
     # Inside alpha bounds
     for j in range(nalphas-1):
-        alphaj, alphajp1 = alphas[[j, j+1]]
-        idx = (x >= alphaj-1e-10) & (x <= alphajp1+1e-10)
+        idx = (x >= alphas[j] - 1e-10) & (x <= alphas[j+ 1] + 1e-10)
         if idx.sum() == 0:
             continue
 
         for i in range(nfluxes):
-            a = a_matrix[j, i]
-            b = b_matrix[j, i]
-            c = c_matrix[j, i]
-            outputs[idx, i] = quad_fun(a, b, c, x[idx])
+            outputs[idx, i] = quad_fun(coefs[i, j], x[idx])
 
     return outputs

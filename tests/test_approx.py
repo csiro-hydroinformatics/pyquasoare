@@ -107,7 +107,7 @@ def reservoir_function(request, selfun):
         sol = None
 
     elif name == "runge":
-        alpha0, alpha1 = (-1, 3)
+        alpha0, alpha1 = (-1., 3.)
         fun = lambda x: 1./(1+x**2)
         dfun = lambda x: -2*x/(1+x**2)**2
         inflow = 0.
@@ -139,7 +139,7 @@ def reservoir_function(request, selfun):
         dfun = lambda x: alpha*(1-(x/K)**nu)-alpha*nu*(x/K)**nu
         inflow = 0.
         sol = lambda t, s0: K/(1+((K/s0)**nu-1)*np.exp(-alpha*nu*t))**(1./nu)
-        alpha0, alpha1 = 0, K
+        alpha0, alpha1 = 0., K
 
     return name, fun, dfun, sol, inflow, (alpha0, alpha1)
 
@@ -310,40 +310,33 @@ def test_quad_fun(allclose, generate_samples):
     if ntry==0:
         pytest.skip("Skip param config")
 
-    for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
-        o = approx.quad_fun(a, b, c, s0)
+    for itry, (param, s0) in enumerate(zip(params, s0s)):
+        o = approx.quad_fun(param, s0)
+        a, b, c = param
         expected = a*s0**2+b*s0+c
         assert allclose(o, expected)
 
-        o = approx.quad_grad(a, b, c, s0)
+        o = approx.quad_grad(param, s0)
         expected = 2*a*s0+b
         assert allclose(o, expected)
-
-        #o_slow = [slow.approx_fun(nu, a, b, c, s) for s in s0s]
-        #assert allclose(o_slow, expected)
-
-    a, b, c = [np.ascontiguousarray(v) for v in params.T]
-    o = approx.quad_fun(a, b, c, s0s)
-    expected = a*s0s**2+b*s0s+c
-    assert allclose(o, expected)
-
-    o = approx.quad_grad(a, b, c, s0s)
-    expected = 2*a*s0s+b
-    assert allclose(o, expected)
 
 
 def test_quad_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function
 
-    f0 = fun(alpha0)
-    f1 = fun(alpha1)
+    alphas = np.array([alpha0, alpha1]).astype(float)
+    f0 = float(fun(alpha0))
+    f1 = float(fun(alpha1))
+    falphas = np.array([f0, f1])
     xm = (alpha0+alpha1)/2
     fm = fun(xm)
-    a0, b0, c0 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 0)
-    a1, b1, c1 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 1)
-    a2, b2, c2 = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
+    fmid = np.array([fm])
 
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+    a0, b0, c0 = approx.quad_coefficients(alphas, falphas, fmid, 0)[0]
+    a1, b1, c1 = approx.quad_coefficients(alphas, falphas, fmid, 1)[0]
+    a2, b2, c2 = approx.quad_coefficients(alphas, falphas, fmid, 2)[0]
+
+    a, b, c = approx.quad_coefficients(alphas, falphas, fmid)[0]
     assert allclose([a, b, c], [a1, b1, c1])
 
     # Linear function
@@ -352,60 +345,71 @@ def test_quad_coefficients(allclose, reservoir_function):
     # Check function on bounds
     for x in [alpha0, alpha1]:
         ft = fun(x)
-        for a, b, c in zip([a0, a1, a2], [b0, b1, b2], \
+        for param in zip([a0, a1, a2], [b0, b1, b2], \
                                     [c0, c1, c2]):
-            fa = approx.quad_fun(a, b, c, x)
+            p = np.array(param).astype(float)
+            xx = np.array([x]).astype(float)
+            fa = approx.quad_fun(p, xx)
             assert allclose(ft, fa)
 
     v0, v1 = (f0+3*f1)/4, (f1+3*f0)/4
     v0, v1 = min(v0, v1), max(v0, v1)
     expected = max(v0, min(v1, fm))
-    fa = approx.quad_fun(a1, b1, c1, xm)
+    fa = approx.quad_fun(np.array([a1, b1, c1]), xm)
     assert allclose(fa, expected, atol=1e-10)
 
     # Linear function goes through mid point
-    fa = approx.quad_fun(a0, b0, c0, xm)
+    fa = approx.quad_fun(np.array([a0, b0, c0]), xm)
     expected = (f1+f0)/2
     assert allclose(fa, expected, atol=1e-10)
 
+    # Vectorisation
+    alphas = np.linspace(alpha0, alpha1, 10)
+    falphas = np.array([fun(a) for a in alphas])
+    fmid = np.array([fun((alphas[i] + alphas[i+1]) / 2) for i in range(9)])
+    coefs = approx.quad_coefficients(alphas, falphas, fmid)
 
 
 def test_quad_coefficients_edge_cases(allclose):
     # Identical band limits
-    alpha0, alpha1 = 1., 1.
-    f0, fm, f1 = 1., 1., 1.
+    alphas = np.array([1., 1.])
+    falphas = np.array([1., 1.])
+    fmid = np.array([1.])
     with pytest.raises(ValueError, match="not increasing"):
-        a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
+        approx.quad_coefficients(alphas, falphas, fmid)
 
     # high value within interval [f0, f1] -> monotonous
-    alpha0, alpha1 = 0., 1.
-    f0, fm, f1 = 1., 2.9, 3.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
-    fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, (f0+3*f1)/4.)
+    alphas = np.array([0., 1.])
+    falphas = np.array([1., 3.])
+    fmid = np.array([2.9])
+    co = approx.quad_coefficients(alphas, falphas, fmid)[0]
+    fm2 = approx.quad_fun(co, 0.5)
+    assert allclose(fm2, (falphas[0] + 3 * falphas[1]) / 4.)
 
     # high value outside interval [f0, f1] -> non mononotous
-    f0, fm, f1 = 1., 3.5, 3.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
-    fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, fm)
+    fmid = np.array([3.5])
+    co = approx.quad_coefficients(alphas, falphas, fmid, 2)[0]
+    fm2 = approx.quad_fun(co, 0.5)
+    assert allclose(fm2, fmid[0])
 
     # low value within interval -> monotonous
-    f0, fm, f1 = 1., -9., -10.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm)
-    fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, (f0+3*f1)/4.)
+    falphas = np.array([1., -10.])
+    fmid = np.array([-9.])
+    co = approx.quad_coefficients(alphas, falphas, fmid)[0]
+    fm2 = approx.quad_fun(co, 0.5)
+    assert allclose(fm2, (falphas[0] + 3 * falphas[1]) / 4.)
 
     # low value outside interval -> non monotonous
-    f0, fm, f1 = 1., -11., -10.
-    a, b, c = approx.quad_coefficients(alpha0, alpha1, f0, f1, fm, 2)
-    fm2 = approx.quad_fun(a, b, c, 0.5)
-    assert allclose(fm2, fm)
+    falphas = np.array([1., -10.])
+    fmid = np.array([-11.])
+    co = approx.quad_coefficients(alphas, falphas, fmid, 2)[0]
+    fm2 = approx.quad_fun(co, 0.5)
+    assert allclose(fm2, fmid[0])
 
 
 def test_quad_coefficient_matrix(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
-    funs = [lambda x: inflow, fun]
+    funs = [lambda x: inflow * np.ones_like(x), fun]
 
     nalphas = 21
     alphas = np.linspace(alpha0, alpha1, nalphas)
@@ -413,36 +417,37 @@ def test_quad_coefficient_matrix(allclose, reservoir_function):
     da = 0.005 if fname in ["recip", "recipquad", "ratio"] else (alpha1-alpha0)/10
     s = np.linspace(alpha0-da, alpha1+da, 1000)
     ftrue = fun(s)
-    isin = (s>=alpha0)&(s<=alpha1)
+    isin = (s >= alpha0) & (s <= alpha1)
 
     # Check max nfluxes
     nf = approx.QUASOARE_NFLUXES_MAX
     fs = [lambda x: x**a for a in np.linspace(1, 2, nf+1)]
     with pytest.raises(ValueError, match="nfluxes"):
-        amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fs, alphas)
+        coefs = approx.quad_coefficient_matrix(fs, alphas)
 
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas)
+    coefs = approx.quad_coefficient_matrix(funs, alphas)
+    coefs_copy = coefs.copy()
 
     # Check extrapolations
-    out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
+    out = approx.quad_fun_from_matrix(alphas, coefs, s)
+    assert allclose(coefs, coefs_copy)
     fapprox = out[:, 1]
 
     ilow = s<alpha0
-    y0 = approx.quad_fun(amat[0, 1], bmat[0, 1], cmat[0, 1], alpha0)
-    dy0 = approx.quad_grad(amat[0, 1], bmat[0, 1], cmat[0, 1], alpha0)
-    expected = y0+dy0*(s-alpha0)
+    y0 = approx.quad_fun(coefs[1, 0], alpha0)
+    dy0 = approx.quad_grad(coefs[1, 0], alpha0)
+    expected = y0 + dy0 * (s - alpha0)
     assert allclose(fapprox[ilow], expected[ilow])
 
     ihigh = s>alpha1
-    y1 = approx.quad_fun(amat[-1, 1], bmat[-1, 1], cmat[-1, 1], alpha1)
-    dy1 = approx.quad_grad(amat[-1, 1], bmat[-1, 1], cmat[-1, 1], alpha1)
-    expected = y1+dy1*(s-alpha1)
+    y1 = approx.quad_fun(coefs[1, -1], alpha1)
+    dy1 = approx.quad_grad(coefs[1, -1], alpha1)
+    expected = y1 + dy1 * (s - alpha1)
     assert allclose(fapprox[ihigh], expected[ihigh])
 
     # Check interpolation
-    for alpha in alphas:
-        out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, alpha)
-        assert allclose(out[0, 1], fun(alpha))
+    out = approx.quad_fun_from_matrix(alphas, coefs, alphas)
+    assert allclose(out[:, 1], fun(alphas))
 
 
 def test_quad_vs_lin(allclose, reservoir_function):
@@ -451,17 +456,17 @@ def test_quad_vs_lin(allclose, reservoir_function):
         # Skip x2, stiff and logistic which are perfect match with quadratic functions
         pytest.skip("Skip function")
 
-    funs = [lambda x: inflow+fun(x)]
+    funs = [lambda x: inflow + fun(x)]
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
 
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(funs, alphas)
+    coefs = approx.quad_coefficient_matrix(funs, alphas)
     s = np.linspace(alpha0, alpha1, 10000)
-    out = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, s)
+    out = approx.quad_fun_from_matrix(alphas, coefs, s)
     fapprox = out[:, 0]
 
-    amat_lin, bmat_lin, cmat_lin, _ = approx.quad_coefficient_matrix(funs, alphas, 0)
-    out = approx.quad_fun_from_matrix(alphas, amat_lin, bmat_lin, cmat_lin, s)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, 0)
+    out = approx.quad_fun_from_matrix(alphas, coefs, s)
     fapprox_lin = out[:, 0]
 
     ftrue = funs[0](s)
@@ -482,8 +487,8 @@ def test_quad_vs_lin(allclose, reservoir_function):
         "ratio": 5e-1, \
         "genlogistic": 2e-1
     }
-    ratio = rmse/rmse_lin
-    assert ratio<ratio_thresh[fname]
+    ratio = rmse / rmse_lin
+    assert ratio < ratio_thresh[fname]
     LOGGER.info("")
     LOGGER.info(f"[{fname}] quad vs lin: error ratio={ratio:2.2e}")
 

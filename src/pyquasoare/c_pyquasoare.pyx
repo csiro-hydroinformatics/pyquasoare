@@ -127,77 +127,82 @@ def get_error_message(int err_code):
     return message
 
 
-def quad_fun(double a, double b, double c, double s):
-    return c_quad_fun(a, b, c, s)
-
-def quad_fun_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
-                np.ndarray[double, ndim=1, mode='c'] b not None,\
-                np.ndarray[double, ndim=1, mode='c'] c not None,\
-                np.ndarray[double, ndim=1, mode='c'] s not None,\
-                np.ndarray[double, ndim=1, mode='c'] o not None):
-    cdef int nval = a.shape[0]
-    assert nval == b.shape[0]
-    assert nval == c.shape[0]
-    assert nval == s.shape[0]
-    assert nval == o.shape[0]
-
-    cdef int k
-    for k in range(nval):
-        o[k] = c_quad_fun(a[k], b[k], c[k], s[k])
-
-    return 0
-
-
-def quad_grad(double a, double b, double c, double s):
-    return c_quad_grad(a, b, c, s)
-
-def quad_grad_vect(np.ndarray[double, ndim=1, mode='c'] a not None,\
-                np.ndarray[double, ndim=1, mode='c'] b not None,\
-                np.ndarray[double, ndim=1, mode='c'] c not None,\
-                np.ndarray[double, ndim=1, mode='c'] s not None,\
-                np.ndarray[double, ndim=1, mode='c'] o not None):
-    cdef int nval = a.shape[0]
-    assert nval == b.shape[0]
-    assert nval == c.shape[0]
-    assert nval == s.shape[0]
-    assert nval == o.shape[0]
-
-    cdef int k
-    for k in range(nval):
-        o[k] = c_quad_grad(a[k], b[k], c[k], s[k])
-
-    return 0
-
-
-
-def quad_coefficients(int approx_opt, double a0, double a1,
-                        double f0, double f1, double fm,
-                        np.ndarray[double, ndim=1, mode='c'] coefs):
+def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
+             np.ndarray[double, ndim=1, mode='c'] s not None,
+             np.ndarray[double, ndim=1, mode='c'] o not None):
+    cdef int nval = s.shape[0]
+    assert o.shape[0] == nval
     assert coefs.shape[0] == 3
-    return c_quad_coefficients(approx_opt, a0, a1, f0, f1, fm,
-                                <double*> np.PyArray_DATA(coefs))
-
-
-def quad_steady(double a, double b, double c, \
-                        np.ndarray[double, ndim=1, mode='c'] steady not None):
-    assert steady.shape[0] == 2
-    return c_quad_steady(a, b, c, <double*> np.PyArray_DATA(steady))
-
-
-def quad_steady_vect(np.ndarray[double, ndim=1, mode='c'] a not None, \
-                        np.ndarray[double, ndim=1, mode='c'] b not None, \
-                        np.ndarray[double, ndim=1, mode='c'] c not None, \
-                        np.ndarray[double, ndim=2, mode='c'] steady not None):
     cdef int k
-    cdef int nval = a.shape[0]
-    assert b.shape[0] == nval
-    assert c.shape[0] == nval
+    for k in range(nval):
+        o[k] = c_quad_fun(coefs[0], coefs[1], coefs[2], s[k])
+
+    return 0
+
+
+def quad_grad(np.ndarray[double, ndim=1, mode='c'] coefs not None,
+              np.ndarray[double, ndim=1, mode='c'] s not None,
+              np.ndarray[double, ndim=1, mode='c'] o not None):
+    cdef int nval = s.shape[0]
+    assert o.shape[0] == nval
+    assert coefs.shape[0] == 3
+    cdef int k
+    for k in range(nval):
+        o[k] = c_quad_grad(coefs[0], coefs[1], coefs[2], s[k])
+
+    return 0
+
+
+def quad_coefficients(int approx_opt,
+                      np.ndarray[double, ndim=1, mode='c'] alphas,
+                      np.ndarray[double, ndim=1, mode='c'] falphas,
+                      np.ndarray[double, ndim=1, mode='c'] fmid,
+                      np.ndarray[double, ndim=2, mode='c'] coefs):
+    cdef int k
+    cdef int ierr
+    cdef int nalphas = alphas.shape[0]
+    cdef double a0
+    cdef double a1
+    cdef double f0
+    cdef double f1
+    cdef double fm
+    assert falphas.shape[0] == nalphas
+    assert fmid.shape[0] == nalphas - 1
+    assert coefs.shape[0] == nalphas - 1
+    assert coefs.shape[1] == 3
+
+    for k in range(nalphas - 1):
+        # Get interpolation nodes
+        a0 = alphas[k]
+        a1 = alphas[k + 1]
+
+        # Get interpolated values
+        f0 = falphas[k]
+        f1 = falphas[k + 1]
+        fm = fmid[k]
+
+        # Compute coefficients
+        ierr = c_quad_coefficients(approx_opt, a0, a1, f0, f1, fm,
+                                   <double*> np.PyArray_DATA(coefs[k]))
+        if ierr > 0:
+            return ierr
+
+    return 0
+
+
+def quad_steady(np.ndarray[double, ndim=2, mode='c'] coefs not None, \
+                np.ndarray[double, ndim=2, mode='c'] steady not None):
+    cdef int k
+    cdef int nval = coefs.shape[0]
+    assert coefs.shape[1] == 3
     assert steady.shape[0] == nval
     assert steady.shape[1] == 2
 
     for k in range(nval):
-        c_quad_steady(a[k], b[k], c[k], <double*> np.PyArray_DATA(steady[k]))
-
+        c_quad_steady(coefs[k, 0],
+                      coefs[k, 1],
+                      coefs[k, 2],
+                      <double*> np.PyArray_DATA(steady[k]))
     return 0
 
 
