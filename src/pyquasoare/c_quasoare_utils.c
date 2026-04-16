@@ -1,5 +1,28 @@
 #include "c_quasoare_utils.h"
 
+int c_double_compare(const void *a,const void *b) {
+    double *x = (double *) a;
+    double *y = (double *) b;
+
+    if (isnan(*y) && isnan(*x))
+        return 0;
+
+    else if (isnan(*y) && notnan(*x))
+        return -1;
+
+    else if (isnan(*x) && notnan(*y))
+        return 1;
+
+    else {
+        if (*x < *y)
+            return -1;
+        else if (*x > *y)
+            return 1;
+        else
+            return 0;
+    }
+}
+
 double c_get_nan() {
     /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
     static double zero1=0.;
@@ -16,6 +39,10 @@ double c_get_inf() {
 double c_compiler_accuracy_kahan(){
     long double t=3.0;
     return 1.0-(4.0/t-1.0)*t;
+}
+
+int notnan(double x){
+    return 1 - isnan(x);
 }
 
 int notnull(double x){

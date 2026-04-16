@@ -314,7 +314,7 @@ def quad_fun_from_matrix(alphas, coefs, x, out=None):
 
     # Inside alpha bounds
     for j in range(nalphas-1):
-        idx = (x >= alphas[j] - 1e-10) & (x <= alphas[j+ 1] + 1e-10)
+        idx = (x >= alphas[j] - 1e-10) & (x <= alphas[j + 1] + 1e-10)
         if idx.sum() == 0:
             continue
 

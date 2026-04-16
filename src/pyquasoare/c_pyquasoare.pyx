@@ -28,8 +28,6 @@ cdef extern from 'c_quasoare_core.h':
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
 
-    int c_quad_steady(double a, double b, double c, double steady[2])
-
     int c_quad_coefficients(int approx_opt, double a0, double a1,
                                 double f0, double f1, double fm,
                                 double coefs[3])
@@ -78,6 +76,16 @@ cdef extern from 'c_quasoare_core.h':
                             double smax,
                             int * niter,
                             double * s1, double * fluxes);
+
+cdef extern from 'c_quasoare_steady.h':
+    int c_quad_steady(double a, double b, double c, double steady[2])
+
+    int c_quad_steady_scalings(int nalphas, int nfluxes, int nscalings,
+                               double * alphas,
+                               double * coefs,
+                               double * scalings,
+                               double * buff,
+                               double * steady);
 
 
 cdef extern from 'c_nonlinrouting.h':
@@ -204,6 +212,33 @@ def quad_steady(np.ndarray[double, ndim=2, mode='c'] coefs not None, \
                       coefs[k, 2],
                       <double*> np.PyArray_DATA(steady[k]))
     return 0
+
+
+def quad_steady_scalings(np.ndarray[double, ndim=1, mode='c'] alphas not None,
+                        np.ndarray[double, ndim=3, mode='c'] coefs not None,
+                        np.ndarray[double, ndim=2, mode='c'] scalings not None,
+                        np.ndarray[double, ndim=1, mode='c'] buff not None,
+                        np.ndarray[double, ndim=2, mode='c'] steady not None):
+
+    cdef int nalphas = alphas.shape[0]
+    cdef int nfluxes = coefs.shape[0]
+    cdef int nscalings = scalings.shape[0]
+    cdef int ierr;
+
+    assert coefs.shape[1] == nalphas - 1
+    assert coefs.shape[2] == 3
+    assert scalings.shape[1] == nfluxes
+    assert buff.shape[0] == 2 * nalphas + 2
+    assert steady.shape[0] == nscalings
+    assert steady.shape[1] == 2 * nalphas + 2
+
+    ierr = c_quad_steady_scalings(nalphas, nfluxes, nscalings,
+                                  <double*> np.PyArray_DATA(alphas),
+                                  <double*> np.PyArray_DATA(coefs),
+                                  <double*> np.PyArray_DATA(scalings),
+                                  <double*> np.PyArray_DATA(buff),
+                                  <double*> np.PyArray_DATA(steady))
+    return ierr
 
 
 def quad_forward(double a, double b, double c, \

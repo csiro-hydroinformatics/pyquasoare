@@ -57,9 +57,9 @@ def test_kahan(allclose):
         stdy = steady.quad_steady(coefs)
         x1s, x2s = stdy[0]
 
-        if n%2 == 0 and n>2:
+        if n % 2 == 0 and n > 2:
             assert np.isclose(x1s, x1)
-            if n<42:
+            if n < 42:
                 assert np.isclose(x2s, x2)
         # loop
         Fnm2 = Fnm1
@@ -115,8 +115,10 @@ def test_scalings(allclose, generate_samples):
     for coefs in params:
         co2 = np.array([coefs]*2)[None, :, :]
         stdy = steady.quad_steady_scalings(alphas, co2, scalings)
+
         stdy0 = steady.quad_steady(coefs)
         notnan = ~np.isnan(stdy0)
+
         if notnan.sum()>0:
             tested += 1
             # All values are identical in the 0 axis
@@ -135,7 +137,7 @@ def test_scalings(allclose, generate_samples):
 
             # Check steady state value is 0
             feval = approx.quad_fun(coefs, stdy)
-            if abs(coefs[0])>1e-14:
+            if abs(coefs[0]) > 1e-14:
                 assert allclose(feval, 0, atol=5e-5)
 
     LOGGER.info(f"[{case}:{cname}] steady scalings: tested={(100.*tested)/ntry:0.0f}%")
@@ -173,6 +175,8 @@ def test_scalings_gr4j(allclose):
     stdy = steady.quad_steady_scalings(alphas, coefs, scalings)
 
     # only one steady state
+    import pdb; pdb.set_trace()
+
     assert stdy.shape[1] == 1
 
     for t in range(nval):

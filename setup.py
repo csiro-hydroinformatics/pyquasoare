@@ -11,6 +11,7 @@ extensions = [
         "src/pyquasoare/c_pyquasoare.pyx",
         "src/pyquasoare/c_quasoare_utils.c",
         "src/pyquasoare/c_quasoare_core.c",
+        "src/pyquasoare/c_quasoare_steady.c",
         "src/pyquasoare/c_nonlinrouting.c",
         "src/pyquasoare/c_gr4jprod.c"
         ],

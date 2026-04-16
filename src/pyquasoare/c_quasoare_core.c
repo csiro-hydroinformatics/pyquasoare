@@ -9,36 +9,6 @@ double c_quad_grad(double a, double b, double c, double s){
     return 2.*a*s+b;
 }
 
-int c_quad_steady(double a, double b, double c, double steady[2]){
-    double q, x1, x2;
-    double signb = b<0 ? -1. : 1.;
-    double constants[3], Delta;
-
-    c_quad_constants(a, b, c, constants);
-    Delta = constants[0];
-
-    steady[0] = c_get_nan();
-    steady[1] = c_get_nan();
-
-    if(notnull(a)){
-        if(isnull(Delta)){
-            steady[0] = -b/2./a;
-        }
-        else if(Delta>=0){
-            q = -0.5*(b+signb*sqrt(Delta));
-            x1 = q/a;
-            x2 = c/q;
-            steady[0] = x1<x2 ? x1 : x2;
-            steady[1] = x1<x2 ? x2 : x1;
-        }
-    }
-    else {
-        if(notnull(b)){
-            steady[0] = -c/b;
-        }
-    }
-    return 0;
-}
 
 /*
  * Quadratic interpolation coefficients to match a function such that
@@ -229,7 +199,7 @@ int c_quad_fluxes(int nfluxes,
     }
 
     /* increment fluxes */
-    for(i=0; i<nfluxes; i++){
+    for(i = 0; i < nfluxes; i++){
         aij = aj_vector[i];
         a_check += aij;
 

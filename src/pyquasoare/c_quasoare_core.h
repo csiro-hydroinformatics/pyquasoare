@@ -12,8 +12,6 @@
 double c_quad_fun(double a, double b, double c, double s);
 double c_quad_grad(double a, double b, double c, double s);
 
-int c_quad_steady(double a, double b, double c, double steady[2]);
-
 int c_quad_coefficients(int approx_opt, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]);
