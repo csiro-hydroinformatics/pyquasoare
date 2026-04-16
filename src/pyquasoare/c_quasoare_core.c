@@ -94,12 +94,12 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     double omega=0.;
     double exparg=0;
     double tau=t-t0;
-    double signD = Delta<0 ? -1. : 1.;
+    double signD = Delta < 0 ? -1. : 1.;
 
     /* Obtain the maximum time for which integration remains valid */
     double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, sbar, s0);
 
-    if(t<t0 || t>t0+delta_tmax)
+    if(t < t0 || t > t0 + delta_tmax)
         return s1;
 
     if(isequal(t, t0, QUASOARE_EPS, 0.))
@@ -114,11 +114,12 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     else{
         if(isnull(Delta)){
-            s1 = sbar+(s0-sbar)/(1-a*tau*(s0-sbar));
+            s1 = sbar + (s0 - sbar) / (1 - a * tau * (s0 - sbar));
         }
         else {
             omega = c_omega_fun(qD*tau, Delta);
-            s1 = sbar+(s0-sbar-signD*qD/a*omega)/(1.-a/qD*(s0-sbar)*omega);
+            s1 = sbar + (s0 - sbar - signD * qD / a * omega)
+                        / (1. - a / qD * (s0 - sbar) * omega);
         }
     }
     return s1;
@@ -137,8 +138,8 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
         if(isnull(Delta))
             return (1./(s0-sbar)-1./(s1-sbar))/a;
         else{
-            return (c_eta_fun(a*(s1-sbar)/qD, Delta)
-                                -c_eta_fun(a*(s0-sbar)/qD, Delta))/qD;
+            return (c_eta_fun(a *(s1 - sbar) / qD, Delta)
+                    - c_eta_fun(a * (s0 - sbar) / qD, Delta)) / qD;
         }
     }
 }
@@ -172,29 +173,29 @@ int c_quad_fluxes(int nfluxes,
 
     /* Calculate integral of S and S^2 */
     if (isnull(a) && isnull(b)) {
-        integS = s0*tau+c*tau2/2;
-        integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.;
+        integS = s0 * tau + c * tau2 / 2;
+        integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
     else if((isnull(a) && notnull(b))){
-        integS = (s1-s0-Cj*tau)/Bj;
-        integS2 = ((s1*s1-s0*s0)/2.-Cj*integS)/Bj;
+        integS = (s1 - s0 - Cj * tau) / Bj;
+        integS2 = ((s1 * s1 - s0 * s0) / 2. - Cj * integS) / Bj;
     }
     else if (notnull(a)){
         /* Integrate S only because S2 can be deducted from S */
         if(isnull(Delta))
-            integS = sbar*tau-log(1-a*tau*(s0-sbar))/a;
+            integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
         else {
-            omega = c_omega_fun(qD*tau, Delta);
-            signD = Delta<0 ? -1. : 1.;
+            omega = c_omega_fun(qD * tau, Delta);
+            signD = Delta < 0 ? -1. : 1.;
 
             /* Special formula to avoid the case where omega == 1 */
-            if(qD*tau>10 && Delta>0)
-                term1 = (log(2)-qD*tau)/a;
+            if(qD * tau > 10 && Delta > 0)
+                term1 = (log(2) - qD * tau) / a;
             else
-                term1 = log(1-signD*omega*omega)/2./a;
+                term1 = log(1 - signD * omega * omega) / 2. / a;
 
-            term2 = -log(1-a*(s0-sbar)/qD*omega)/a;
-            integS = sbar*tau+term1+term2;
+            term2 = -log(1 - a * (s0 - sbar) / qD * omega) / a;
+            integS = sbar * tau + term1 + term2;
         }
     }
 
@@ -210,9 +211,10 @@ int c_quad_fluxes(int nfluxes,
         c_check += cij;
 
         if(isnull(a))
-            fluxes[i] += aij*integS2+bij*integS+cij*tau;
+            fluxes[i] += aij * integS2 + bij * integS + cij * tau;
         else
-            fluxes[i] += aij/a*(s1-s0)+(bij-aij*b/a)*integS+(cij-aij*c/a)*tau;
+            fluxes[i] += aij/a * (s1-s0) + (bij-aij*b/a) * integS
+                         + (cij - aij * c / a) * tau;
     }
 
     if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
@@ -278,9 +280,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Extrapolation is triggered if s_start is
          * below alpha0+EPS for low and
          * above alpha1-EPS for high */
-        extrapolating_low = jalpha<0 ? 1 : 0;
-        extrapolating_high = jalpha>=nalphas-1 ? 1 : 0;
-        extrapolating = extrapolating_low+extrapolating_high>0 ? 1 : 0;
+        extrapolating_low = jalpha < 0 ? 1 : 0;
+        extrapolating_high = jalpha >= nalphas - 1 ? 1 : 0;
+        extrapolating = extrapolating_low + extrapolating_high > 0 ? 1 : 0;
 
         /* Get band limits */
         alpha0 = extrapolating_low ? -1*c_get_inf() : alphas[jalpha];
@@ -289,7 +291,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         /* Sum coefficients accross fluxes */
         Aj=0.; Bj=0.; Cj=0.;
 
-        for(i=0;i<nfluxes;i++){
+        for(i=0 ; i < nfluxes ; i++) {
             /* Scaling factor to be applied to each flux coefficient */
             scl = scalings[i];
             if(isnan(scl))
@@ -302,29 +304,29 @@ int c_quad_integrate(int nalphas, int nfluxes,
              * matching gradient at boundary.
              */
             if(extrapolating_low){
-                a = a_matrix_noscaling[i]*scl;
-                b = b_matrix_noscaling[i]*scl;
-                c = c_matrix_noscaling[i]*scl;
+                a = a_matrix_noscaling[i] * scl;
+                b = b_matrix_noscaling[i] * scl;
+                c = c_matrix_noscaling[i] * scl;
 
                 grad = c_quad_grad(a, b, c, alpha_min);
-                c = c_quad_fun(a, b, c, alpha_min)-grad*alpha_min;
+                c = c_quad_fun(a, b, c, alpha_min) - grad * alpha_min;
                 b = grad;
                 a = 0.;
             }
             else if(extrapolating_high){
-                a = a_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
-                b = b_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
-                c = c_matrix_noscaling[nfluxes*(nalphas-2)+i]*scl;
+                a = a_matrix_noscaling[nfluxes*(nalphas-2)+i] * scl;
+                b = b_matrix_noscaling[nfluxes*(nalphas-2)+i] * scl;
+                c = c_matrix_noscaling[nfluxes*(nalphas-2)+i] * scl;
 
                 grad = c_quad_grad(a, b, c, alpha_max);
-                c = c_quad_fun(a, b, c, alpha_max)-grad*alpha_max;
+                c = c_quad_fun(a, b, c, alpha_max) - grad*alpha_max;
                 b = grad;
                 a = 0.;
             }
             else {
-                a = a_matrix_noscaling[nfluxes*jalpha+i]*scl;
-                b = b_matrix_noscaling[nfluxes*jalpha+i]*scl;
-                c = c_matrix_noscaling[nfluxes*jalpha+i]*scl;
+                a = a_matrix_noscaling[nfluxes*jalpha+i] * scl;
+                b = b_matrix_noscaling[nfluxes*jalpha+i] * scl;
+                c = c_matrix_noscaling[nfluxes*jalpha+i] * scl;
             }
 
             /* Store flux coefficents */
@@ -370,7 +372,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                                     t_start, s_start, t_final);
 
         /* complete or move band if needed */
-        if(s_end>=alpha0 && s_end<=alpha1){
+        if(s_end>=alpha0 && s_end<=alpha1) {
             /* .. s_end is within band => complete */
             t_end = t_final;
             jalpha_next = jalpha;
@@ -382,11 +384,11 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 /* Ensure that s_end remains inside interpolation range */
                 s_low = alpha_min+2*QUASOARE_EPS;
                 s_high = alpha_max-2*QUASOARE_EPS;
-                if(funval<0 && extrapolating_high && s_end<s_high){
+                if(funval<0 && extrapolating_high && s_end<s_high) {
                     s_end = s_high;
                     jalpha_next = nalphas-2;
                 }
-                else if (funval>0 && extrapolating_low && s_end>s_low){
+                else if (funval>0 && extrapolating_low && s_end>s_low) {
                     s_end = s_low;
                     jalpha_next = 0;
                 }
@@ -406,22 +408,23 @@ int c_quad_integrate(int nalphas, int nfluxes,
 
             /* Increment time */
             t_end = t_start+c_quad_inverse(Aj, Bj, Cj,
-                                            Delta, qD, sbar,
-                                            s_start, s_end);
+                                           Delta, qD, sbar,
+                                           s_start, s_end);
             t_end = t_end<t_final && fabs(funval)>QUASOARE_EPS ? t_end : t_final;
         }
 
         /* Increment fluxes during the last interval */
         err_flux = c_quad_fluxes(nfluxes,
-                    a_vect, b_vect, c_vect,
-                    Aj, Bj, Cj, Delta, qD, sbar,
-                    t_start, t_end, s_start, s_end, fluxes);
+                                 a_vect, b_vect, c_vect,
+                                 Aj, Bj, Cj, Delta, qD, sbar,
+                                 t_start, t_end, s_start, s_end, fluxes);
         if(err_flux>0)
             return err_flux;
 
         /* Loop for next band */
         funval_prev = c_quad_fun(Aj, Bj, Cj, s_end);
-        if(isnull(funval_prev)){
+
+        if(isnull(funval_prev)) {
             /* .. f is null => we have reached steady state => complete */
             t_end = t_final;
             jalpha_next = jalpha;
@@ -464,26 +467,26 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
                             int * niter,
                             double * s1, double * fluxes) {
     int ierr, t, j;
-    double store=s0;
-    double t0=0.;
+    double store = s0;
+    double t0 = 0.;
 
-    for(t=0; t<nval; t++){
+    for(t=0; t<nval; t++) {
         store += perturb[t];
 
         /* Integrate ode */
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
-                            &(scalings[nfluxes*t]),
-                            a_matrix_noscaling,
-                            b_matrix_noscaling,
-                            c_matrix_noscaling,
-                            t0, store, timestep,
-                            &(niter[t]),
-                            &(s1[t]),
-                            &(fluxes[nfluxes*t]));
+                                &(scalings[nfluxes*t]),
+                                a_matrix_noscaling,
+                                b_matrix_noscaling,
+                                c_matrix_noscaling,
+                                t0, store, timestep,
+                                &(niter[t]),
+                                &(s1[t]),
+                                &(fluxes[nfluxes*t]));
 
         /* Manage errors */
-        if(ierr>0){
-            if(errors==1){
+        if(ierr>0) {
+            if(errors==1) {
                 return ierr;
             }
             else if (errors==0 || errors==2){
@@ -491,7 +494,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
                 s1[t] = store;
 
-                for(j=0;j<nfluxes;j++)
+                for(j = 0; j < nfluxes; j++)
                     fluxes[nfluxes*t+j] = c_get_nan();
             }
         }
