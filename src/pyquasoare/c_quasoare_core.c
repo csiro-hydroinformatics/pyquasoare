@@ -2,11 +2,11 @@
 
 /* Approximation functions */
 double c_quad_fun(double a, double b, double c, double s){
-    return (a*s+b)*s+c;
+    return notnan(s) ? (a * s + b) * s + c : c_get_nan();
 }
 
 double c_quad_grad(double a, double b, double c, double s){
-    return 2.*a*s+b;
+    return notnan(s) ? 2. * a * s + b : c_get_nan();
 }
 
 

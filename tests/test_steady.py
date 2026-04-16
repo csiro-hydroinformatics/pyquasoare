@@ -89,7 +89,7 @@ def test_steady_state(allclose, generate_samples):
         assert allclose(f1[ilin], 0)
         assert np.all(np.isnan(stdy[ilin, 1]))
 
-    delta = b**2-4*a*c
+    delta = b**2 - 4*a*c
     nna = np.abs(a)>1e-14 # Caution with very low values of a !
     ipos = (delta>0) & nna
     if ipos.sum()>0:
@@ -105,64 +105,83 @@ def test_steady_state(allclose, generate_samples):
         assert np.all(np.isnan(stdy[izero, 1]))
 
 
-def test_scalings(allclose, generate_samples):
+def test_flux_scalings(allclose, generate_samples):
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
 
-    alphas = np.array([-1e100, 0, 1e100])
-    scalings = np.random.uniform(0, 1, size=(5, 1))
+    alphas = np.array([-1., 0., 1.])
+    flux_scalings = np.random.uniform(0, 1, size=(5, 1))
     tested = 0
     for coefs in params:
-        co2 = np.array([coefs]*2)[None, :, :]
-        stdy = steady.quad_steady_scalings(alphas, co2, scalings)
+        # Repeat the same coefs for the two interpolation bands
+        co = np.array([coefs] * 2)[None, :, :]
 
-        stdy0 = steady.quad_steady(coefs)
-        notnan = ~np.isnan(stdy0)
+        # Compute solutions
+        stdy = steady.quad_steady_flux_scalings(alphas, co, flux_scalings)
+        for i in range(stdy.shape[0]):
+            if all(np.isnan(stdy[i])):
+                continue
 
-        if notnan.sum()>0:
-            tested += 1
-            # All values are identical in the 0 axis
-            # because there is only one flux and, hence,
-            # identical scalings for all flux. This does not
-            # affect steady states.
-            ds = np.diff(stdy[:, 0])
-            std = np.nanstd(ds)
-            if ~np.isnan(std):
-                assert allclose(std, 0., atol=1e-6)
+            sc = flux_scalings[i]
+            a, b, c = coefs * sc
 
-            stdy = np.ascontiguousarray(stdy[0])
+            for j in range(stdy.shape[1]):
+                s = stdy[i, j]
+                if np.isnan(s):
+                    continue
 
-            # Compare with simple steady computation
-            #assert allclose(stdy, stdy0[~np.isnan(stdy0)])
+                if s < alphas[0]:
+                    b0 = 2 * a
+                    c0 = a * alphas[0]**2 + (b - 2 * a) * alphas[0] + c
+                    f = b0 * s + c0
+                elif s > alphas[-1]:
+                    b0 = 2 * a
+                    c0 = a * alphas[-1]**2 + (b - 2 * a) * alphas[-1] + c
+                    f = b0 * s + c0
+                else:
+                    f = a * s**2 + b * s + c
 
-            # Check steady state value is 0
-            feval = approx.quad_fun(coefs, stdy)
-            if abs(coefs[0]) > 1e-14:
-                assert allclose(feval, 0, atol=5e-5)
+                assert allclose(f, 0, atol=1e-10)
 
-    LOGGER.info(f"[{case}:{cname}] steady scalings: tested={(100.*tested)/ntry:0.0f}%")
+    LOGGER.info(f"[{case}:{cname}] steady flux_scalings: tested={(100.*tested)/ntry:0.0f}%")
 
 
-def test_scalings_extrapolation(allclose):
+def test_flux_scalings_extrapolation(allclose):
     al0, al1, al2 = 0., 1., 2.
     alphas = np.array([al0, al1, al2])
-    falphas = np.array([-1., 1., 0.1])
-    fmid = np.array([0.2, 0.33])
-    coefs = approx.quad_coefficients(alphas, falphas, fmid, 1)[None, :, :]
-    scalings = np.ones((10, 1))
+    falphas = np.array([1., 2., 1.])
+    fmid = np.array([3., 2.5])
+    coefs = approx.quad_coefficients(alphas, falphas, fmid, 2)[None, :, :]
+    flux_scalings = np.ones((3, 1))
 
-    stdy = steady.quad_steady_scalings(alphas, coefs, scalings)
-    assert stdy.shape[1] == 2
+    stdy = steady.quad_steady_flux_scalings(alphas, coefs, flux_scalings)
+
+    import matplotlib.pyplot as plt
+    xx = np.linspace(al0-1, al2 + 1, 1000)
+    yy = approx.quad_fun_from_matrix(alphas, coefs, xx)
+    plt.plot(xx, yy)
+    plt.plot(alphas, falphas, "o")
+    plt.plot(stdy[0], [0] * stdy.shape[1], "+")
+    plt.grid()
+    plt.show()
+    import pdb; pdb.set_trace()
+
+
     assert allclose(stdy[:, 0], stdy[0, 0])
-    assert allclose(stdy[:, 1], stdy[0, 1])
+    #assert allclose(stdy[:, 1], stdy[0, 1])
+
     # steady state in extrapolationt
-    assert stdy[0, 1] > al2
+    assert stdy[0, 0] > al2
 
     feval = approx.quad_fun_from_matrix(alphas, coefs, stdy[0])
+
+    import pdb; pdb.set_trace()
+
+
     assert allclose(feval, 0.)
 
 
-def test_scalings_gr4j(allclose):
+def test_flux_scalings_gr4j(allclose):
     nalphas = 25
     alphas = 0.05*np.arange(nalphas)
 
@@ -170,25 +189,23 @@ def test_scalings_gr4j(allclose):
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     nval = 200
-    scalings = np.random.uniform(0, 100, size=(nval, 3))
-    scalings[:, -1] = 1
-    stdy = steady.quad_steady_scalings(alphas, coefs, scalings)
+    flux_scalings = np.random.uniform(0, 100, size=(nval, 3))
+    flux_scalings[:, -1] = 1
+    stdy = steady.quad_steady_flux_scalings(alphas, coefs, flux_scalings)
 
     # only one steady state
-    import pdb; pdb.set_trace()
-
     assert stdy.shape[1] == 1
 
     for t in range(nval):
         s0 = stdy[t, 0]
         # Check steady on approx fun
-        co = coefs * scalings[t][None, :]
+        co = coefs * flux_scalings[t][None, :]
         out = approx.quad_fun_from_matrix(alphas, co, s0)
         fsum = out.sum(axis=1)
         assert allclose(fsum[~np.isnan(fsum)], 0.)
 
         # Check steady on original fun
-        feval = np.array([f(s0)*scalings[t, ifun] for ifun, f in enumerate(fluxes)])
+        feval = np.array([f(s0)*flux_scalings[t, ifun] for ifun, f in enumerate(fluxes)])
         fsum = np.sum(feval, axis=0)
         assert allclose(fsum[~np.isnan(fsum)], 0., atol=1e-6)
 

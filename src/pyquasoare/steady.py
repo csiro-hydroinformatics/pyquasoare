@@ -22,17 +22,17 @@ def quad_steady(coefs, out=None):
     return stdy
 
 
-def quad_steady_scalings(alphas, noscaling_coefs, scalings, out=None):
-    """ Compute steady states using scalings """
+def quad_steady_flux_scalings(alphas, noscaling_coefs, flux_scalings, out=None):
+    """ Compute steady states using flux_scalings """
     nalphas = len(alphas)
     buff = np.empty(2 * nalphas + 2)
     if out is None:
-        out = np.empty((scalings.shape[0], 2 * nalphas + 2))
+        out = np.empty((flux_scalings.shape[0], 2 * nalphas + 2))
         out.fill(np.nan)
 
-    ierr = c_pyquasoare.quad_steady_scalings(alphas, noscaling_coefs,
-                                             scalings, buff, out)
+    ierr = c_pyquasoare.quad_steady_flux_scalings(alphas, noscaling_coefs,
+                                             flux_scalings, buff, out)
     if ierr > 0:
-        raise ValueError(f"c_pyquasoare.quad_steady_scalings returns {ierr}.")
+        raise ValueError(f"c_pyquasoare.quad_steady_flux_scalings returns {ierr}.")
 
     return out
