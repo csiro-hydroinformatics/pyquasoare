@@ -429,7 +429,10 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Configure integration
     t0 = 0 # Analytical solution always integrated from t0=0!
@@ -487,7 +490,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             grad = approx.quad_grad(params, alpha0)
             c = approx.quad_fun(params, alpha0) - grad*alpha0
             b = grad
-            expected = approx.quad_fun(0., b, c, s)
+            expected = approx.quad_fun(np.array([0., b[0], c[0]]), s)
             err = np.abs(np.arcsinh(ds[ilow])-np.arcsinh(expected[ilow]))
             errmax = err.max()
             errmax_max = max(errmax, errmax_max)
@@ -500,7 +503,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             grad = approx.quad_grad(params, alpha1)
             c = approx.quad_fun(params, alpha1)-grad*alpha1
             b = grad
-            expected = approx.quad_fun(0., b, c, s)
+            expected = approx.quad_fun(np.array([0., b[0], c[0]]), s)
             err = np.abs(np.arcsinh(ds[ihigh])-np.arcsinh(expected[ihigh]))
             errmax = err.max()
             errmax_max = max(errmax, errmax_max)
@@ -542,7 +545,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Adjust bounds to avoid numerical problems with analytical solution
     if re.search("^x|^logistic|sin", fname):
@@ -584,9 +590,9 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # C code
-            n, s_end, fluxes = integrate.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            n, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                        amat, bmat, cmat, t_start,
+                                                        s_start, timestep)
 
             # Check mass balance
             assert allclose(fluxes.sum()-s_end+s_start, 0.)
@@ -659,7 +665,10 @@ def test_reservoir_equation_gr4j(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -691,9 +700,9 @@ def test_reservoir_equation_gr4j(allclose):
                 scalings[:2] = pi, ei
 
                 # Integate equation
-                n, s_end, fx = integrate.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, 0., \
-                                                s_start, 1.)
+                n, s_end, fx = integrate.quad_integrate(alphas, scalings,
+                                                        amat, bmat, cmat, 0.,
+                                                        s_start, 1.)
                 sims[t, 0] = s_end*X1
                 sims[t, 1] = fx[0]*X1
                 sims[t, 2] = -fx[1]*X1
