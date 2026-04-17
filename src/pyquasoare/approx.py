@@ -137,8 +137,8 @@ def quad_fun_tangent(sref, coefs, s, out=None):
 
 def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
                       out=None):
-    """ Compute the interpolation coefficients for a function over
-    the interval [alphaj, alpjajp1].
+    """ Compute the interpolation coefficients of a piecewise
+    quadratic interpolating function.
 
     The coefficients are obtained by matching the function with the
     quadratic approximation function at three points:
