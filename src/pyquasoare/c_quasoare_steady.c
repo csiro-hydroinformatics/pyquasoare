@@ -39,7 +39,7 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
  * alphas : [nalphas]
  * coefs : [nfluxes x nalphas-1 x 3]
  * flux_scalings : [nflux_scalings x nfluxes]
- * buff : [2 * nalphas + 1]
+ * buff : [2 * nalphas + 2]
  */
 int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
                                 double * alphas,
