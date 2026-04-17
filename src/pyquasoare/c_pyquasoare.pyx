@@ -27,6 +27,7 @@ cdef extern from 'c_quasoare_utils.h':
 cdef extern from 'c_quasoare_core.h':
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
+    double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
 
     int c_quad_coefficients(int approx_opt, double a0, double a1,
                                 double f0, double f1, double fm,
@@ -144,6 +145,20 @@ def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
     cdef int k
     for k in range(nval):
         o[k] = c_quad_fun(coefs[0], coefs[1], coefs[2], s[k])
+
+    return 0
+
+
+def quad_fun_tangent(double sref,
+                           np.ndarray[double, ndim=1, mode='c'] coefs not None,
+                           np.ndarray[double, ndim=1, mode='c'] s not None,
+                           np.ndarray[double, ndim=1, mode='c'] o not None):
+    cdef int nval = s.shape[0]
+    assert o.shape[0] == nval
+    assert coefs.shape[0] == 3
+    cdef int k
+    for k in range(nval):
+        o[k] = c_quad_fun_tangent(coefs[0], coefs[1], coefs[2], sref, s[k])
 
     return 0
 

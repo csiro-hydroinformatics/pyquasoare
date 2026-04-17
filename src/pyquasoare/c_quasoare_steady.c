@@ -11,23 +11,26 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
     steady[0] = c_get_nan();
     steady[1] = c_get_nan();
 
-    if(notnull(a)){
+    if(notnull(a)) {
         if(isnull(Delta)) {
             steady[0] = constants[2];
         }
+
         else if(Delta > 0) {
             q = -0.5 * (b + signb * sqrt(Delta));
-            x1 = q/a;
-            x2 = c/q;
+            x1 = q / a;
+            x2 = c / q;
             steady[0] = x1 < x2 ? x1 : x2;
             steady[1] = x1 < x2 ? x2 : x1;
         }
     }
+
     else {
         if(notnull(b)){
             steady[0] = -c / b;
         }
     }
+
     return 0;
 }
 
@@ -39,15 +42,15 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
  * buff : [2 * nalphas + 1]
  */
 int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
-                           double * alphas,
-                           double * coefs,
-                           double * flux_scalings,
-                           double * buff,
-                           double * steady) {
+                                double * alphas,
+                                double * coefs,
+                                double * flux_scalings,
+                                double * buff,
+                                double * steady) {
     int i, j, jj, k, idx;
-    double al0, al1, sc;
+    double al0, al1, sc, grad, fun;
     double a, b, c;
-    double s, stdy[2];
+    double s, stdy[2], coefs_tangent[3];
 
     int ierr = 0;
     int ncols = 2 * nalphas + 2;
@@ -55,7 +58,6 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
 
     for(i = 0; i < nflux_scalings; i ++) {
 
-        fprintf(stdout, "\n");
         for(j = -1; j < nalphas; j++) {
             /* Compute quasoare coefficients */
             a = 0;
@@ -76,18 +78,18 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
             if(j == -1) {
                 al0 = -c_get_inf();
                 al1 = alphas[0];
-                /* linear function going through (al1, f(al1)) */
-                c = (a  * al1 + b - 2 * a) * al1 + c;
-                b = 2 * a;
-                a = 0;
+                c_quad_coefficient_tangent(a, b, c, al1, coefs_tangent);
+                a = coefs_tangent[0];
+                b = coefs_tangent[1];
+                c = coefs_tangent[2];
             }
             else if (j == nalphas - 1) {
                 al0 = alphas[j];
                 al1 = c_get_inf();
-                /* linear function going through (al0, f(al0)) */
-                c = (a * al0  + b - 2 * a) * al0 + c;
-                b = 2 * a;
-                a = 0;
+                c_quad_coefficient_tangent(a, b, c, al0, coefs_tangent);
+                a = coefs_tangent[0];
+                b = coefs_tangent[1];
+                c = coefs_tangent[2];
             }
             else {
                 al0 = alphas[j];
@@ -96,7 +98,6 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
 
             /* computes solutions */
             c_quad_steady(a, b, c, stdy);
-            fprintf(stdout, "\t%2d [%0.2f, %0.2f]: %0.2f\n", j, al0, al1, stdy[0]);
 
             /* Check that solutions belongs to interval
              * otherwise returns the max double to ensure

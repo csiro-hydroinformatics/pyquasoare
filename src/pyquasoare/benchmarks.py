@@ -74,7 +74,7 @@ def gr4jprod_fluxes_noscaling(eta=1./2.25):
     without climate input scaling.
     """
     def fpr(x):
-        return np.where(x > 0, 1. - x**2, 0.)
+        return np.where(x > 0, 1. - x**2, 1.)
 
     def fae(x):
         return np.where(x < 1, -x * (2 - x), -1.)
@@ -104,8 +104,8 @@ def gr4jprod_fluxes_scaled(P, E, X1, eta=1./2.25):
         Ei = max(E-P, 0)/X1
     """
     # interception reservoir
-    pi = max(0, (P-E)/X1)
-    ei = max(0, (E-P)/X1)
+    pi = max(0, (P-E) / X1)
+    ei = max(0, (E-P) / X1)
 
     # normalised fluxes
     normf, dnormf = gr4jprod_fluxes_noscaling(eta)

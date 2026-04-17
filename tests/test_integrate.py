@@ -104,7 +104,8 @@ def test_delta_t_max(allclose, generate_samples):
         # Steady state analysis for Delta>=0
         # simulation converges if initial condition is located
         # beyond or below roots depending on sign of a coef
-        stdy = steady.quad_steady(a, b, c)
+        coefs = np.array([[a, b, c]])
+        stdy = steady.quad_steady(coefs)[0]
         c1 = a<0 and s0>np.nanmin(stdy)
         c2 = a>0 and s0<np.nanmax(stdy)
         if Delta>=0 and (c1 or c2):
@@ -118,8 +119,9 @@ def test_delta_t_max(allclose, generate_samples):
 
         # --------- Advanced checks -----------
         # Run solver first to see how far it goes
-        f = lambda x: approx.quad_fun(a, b, c, x)
-        df = lambda x: approx.quad_grad(a, b, c, x)
+        params = np.array([a, b, c])
+        f = lambda x: approx.quad_fun(params, x)
+        df = lambda x: approx.quad_grad(params, x)
         te, ns1, _, _= slow.integrate_numerical([f], [df], t0, s0, t_eval)
 
         if len(te)==0:
@@ -292,10 +294,10 @@ def test_inverse(allclose, generate_samples):
         dsdt = approx.quad_fun(coefs, s1)
 
         # Takes into account distance with steady state
-        stdy = steady.quad_steady(coefs)
+        stdy = steady.quad_steady(coefs)[0]
         stdy[np.isnan(stdy)] = np.inf
-        dst1 = np.abs(s1-stdy[0])
-        dst2 = np.abs(s1-stdy[1])
+        dst1 = np.abs(s1 - stdy[0])
+        dst2 = np.abs(s1 - stdy[1])
 
         # Compute difference
         dta = integrate.quad_inverse(a, b, c, Delta, qD, sbar, s0, s1)
@@ -382,13 +384,17 @@ def test_increment_fluxes(allclose, generate_samples):
         #assert allclose(balance, 0., atol=1e-6)
 
         # Compare against numerical integration
+        params = np.zeros(3)
         def finteg(t, a, b, c):
             s = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t)
-            return approx.quad_fun(a, b, c, s)
+            params[0] = a
+            params[1] = b
+            params[2] = c
+            return approx.quad_fun(params, s)
 
-        expected = np.array([sci_integrate.quad(finteg, t0, t1, \
-                                    limit=500, args=(a, b, c))\
-                        for a, b, c in zip(avect, bvect, cvect)])
+        expected = np.array([sci_integrate.quad(finteg, t0, t1,
+                                                limit=500, args=(a, b, c))
+                             for a, b, c in zip(avect, bvect, cvect)])
         tol = expected[:, 1].max()
         errmax = np.abs(np.arcsinh(fluxes)-np.arcsinh(expected[:, 0])).max()
         assert errmax < 1e-6
@@ -398,16 +404,16 @@ def test_increment_fluxes(allclose, generate_samples):
 
         # Compare against slow
         fluxes_slow = np.zeros(3)
-        slow.quad_fluxes(avect, bvect, cvect, \
-                        aoj, boj, coj, Delta, qD, sbar, \
-                        t0, t1, s0, s1, fluxes_slow)
+        slow.quad_fluxes(avect, bvect, cvect,
+                         aoj, boj, coj, Delta, qD, sbar,
+                         t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
 
     mess = f"[{case}:{cname}] fluxes vs integration: "\
-                +f"errmax = {errmax_max:3.2e}"\
-                +f" balmax = {errbal_max:3.3e}"\
-                +f" assessed = {nassessed/ntry*100:0.0f}%"
+           + f"errmax = {errmax_max:3.2e}"\
+           + f" balmax = {errbal_max:3.3e}"\
+           + f" assessed = {nassessed/ntry*100:0.0f}%"
     LOGGER.info(mess)
 
 
@@ -477,8 +483,9 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         ilow = np.where(s<alpha0-1e-3)[0][:-2]
         if len(ilow)>5:
             aoj, boj, coj = amat[0].sum(), bmat[0].sum(), cmat[0].sum()
-            grad = approx.quad_grad(aoj, boj, coj, alpha0)
-            c = approx.quad_fun(aoj, boj, coj, alpha0)-grad*alpha0
+            params = np.array([aoj, boj, coj])
+            grad = approx.quad_grad(params, alpha0)
+            c = approx.quad_fun(params, alpha0) - grad*alpha0
             b = grad
             expected = approx.quad_fun(0., b, c, s)
             err = np.abs(np.arcsinh(ds[ilow])-np.arcsinh(expected[ilow]))
@@ -489,8 +496,9 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         ihigh = np.where(s>alpha1+1e-3)[0][:-2]
         if len(ihigh)>5:
             aoj, boj, coj = amat[-1].sum(), bmat[-1].sum(), cmat[-1].sum()
-            grad = approx.quad_grad(aoj, boj, coj, alpha1)
-            c = approx.quad_fun(aoj, boj, coj, alpha1)-grad*alpha1
+            params = np.array([aoj, boj, coj])
+            grad = approx.quad_grad(params, alpha1)
+            c = approx.quad_fun(params, alpha1)-grad*alpha1
             b = grad
             expected = approx.quad_fun(0., b, c, s)
             err = np.abs(np.arcsinh(ds[ihigh])-np.arcsinh(expected[ihigh]))

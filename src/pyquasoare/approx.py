@@ -111,6 +111,30 @@ def quad_grad(coefs, s, out=None):
     return out
 
 
+def quad_fun_tangent(sref, coefs, s, out=None):
+    """ Extrapolation of quadratic approximation function as a linear
+    tangent to the function in x=sref.
+
+    Parameters
+    -----------
+    sref : float
+        Approximation point.
+    coefs : numpy.ndarray
+        3 coefficients.
+    s : numpy.ndarray
+        Values where quadratic function gradient is computed.
+
+    Returns
+    -----------
+    out : np.ndarray
+        Quadratic function evaluation.
+    """
+    s = np.atleast_1d(s)
+    out = np.zeros(len(s)) if out is None else out
+    c_pyquasoare.quad_fun_tangent(sref, coefs, s, out)
+    return out
+
+
 def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
                       out=None):
     """ Compute the interpolation coefficients for a function over
@@ -288,29 +312,23 @@ def quad_fun_from_matrix(alphas, coefs, x, out=None):
 
     x = np.atleast_1d(x)
     outputs = np.empty((len(x), nfluxes)) if out is None else out
+    outputs.fill(np.nan)
 
     # Outside of alpha bounds
     alpha_min, alpha_max = alphas[0], alphas[-1]
     idx_low = x < alpha_min
     idx_high = x > alpha_max
-    co = np.zeros(3)
 
     for i in range(nfluxes):
         if idx_low.sum() > 0:
             # Linear trend in low extrapolation
-            g = quad_grad(coefs[i, 0], alpha_min)
-            co[2] = quad_fun(coefs[i, 0], alpha_min) - g * alpha_min
-            co[1] = g
-            co[0] = 0
-            outputs[idx_low, i] = quad_fun(co, x[idx_low])
+            co = coefs[i, 0]
+            outputs[idx_low, i] = quad_fun_tangent(alpha_min, co, x[idx_low])
 
         if idx_high.sum() > 0:
             # Linear trend in high extrapolation
-            g = quad_grad(coefs[i, -1], alpha_max)
-            co[2] = quad_fun(coefs[i, -1], alpha_max) - g * alpha_max
-            co[1] = g
-            co[0] = 0
-            outputs[idx_high, i] = quad_fun(co, x[idx_high])
+            co = coefs[i, -1]
+            outputs[idx_high, i] = quad_fun_tangent(alpha_max, co, x[idx_high])
 
     # Inside alpha bounds
     for j in range(nalphas-1):

@@ -320,6 +320,13 @@ def test_quad_fun(allclose, generate_samples):
         expected = 2*a*s0+b
         assert allclose(o, expected)
 
+        sref = 0.5
+        o = approx.quad_fun_tangent(sref, param, s0)
+        grad = approx.quad_grad(param, sref)
+        fun = approx.quad_fun(param, sref)
+        expected = fun + grad * (s0 - sref)
+        assert allclose(o, expected)
+
 
 def test_quad_coefficients(allclose, reservoir_function):
     fname, fun, dfun, _, _, (alpha0, alpha1) = reservoir_function

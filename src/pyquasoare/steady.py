@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyquasoare import has_c_module, approx
+from pyquasoare import has_c_module
 
 if has_c_module():
     import c_pyquasoare
@@ -22,7 +22,8 @@ def quad_steady(coefs, out=None):
     return stdy
 
 
-def quad_steady_flux_scalings(alphas, noscaling_coefs, flux_scalings, out=None):
+def quad_steady_flux_scalings(alphas, noscaling_coefs, flux_scalings,
+                              out=None):
     """ Compute steady states using flux_scalings """
     nalphas = len(alphas)
     buff = np.empty(2 * nalphas + 2)
@@ -31,8 +32,9 @@ def quad_steady_flux_scalings(alphas, noscaling_coefs, flux_scalings, out=None):
         out.fill(np.nan)
 
     ierr = c_pyquasoare.quad_steady_flux_scalings(alphas, noscaling_coefs,
-                                             flux_scalings, buff, out)
+                                                  flux_scalings, buff, out)
     if ierr > 0:
-        raise ValueError(f"c_pyquasoare.quad_steady_flux_scalings returns {ierr}.")
+        errmsg = f"c_pyquasoare.quad_steady_flux_scalings returns {ierr}."
+        raise ValueError(errmsg)
 
     return out
