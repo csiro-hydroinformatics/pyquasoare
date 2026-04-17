@@ -37,7 +37,10 @@ def test_quad_model_errors(allclose):
     # Compute approx coefs and introduce discontinuities
     # (i.e. should generate errors)
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
     amat[:, 0] = np.random.uniform(-10, 10, len(amat))
 
     # Get scaling data
@@ -82,7 +85,10 @@ def test_quad_model(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -146,7 +152,10 @@ def test_quad_model_perturb(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
+    amat = np.ascontiguousarray(coefs[:, :, 0].T)
+    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
+    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Get climate data
     siteid = data_reader.SITEIDS[0]
