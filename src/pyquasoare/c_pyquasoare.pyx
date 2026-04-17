@@ -47,36 +47,32 @@ cdef extern from 'c_quasoare_core.h':
     # The interface is changed to avoid the problem with
     # fixed length aj_vector, bj_vector, cj_vector
     int c_quad_fluxes(int nfluxes,
-                            double *aj_vector,
-                            double *bj_vector,
-                            double *cj_vector,
-                            double Aj, double Bj, double Cj,
-                            double Delta, double qD, double ssr,
-                            double t0, double t1, double s0, double s1,
-                            double * fluxes)
+                      double *aj_vector,
+                      double *bj_vector,
+                      double *cj_vector,
+                      double Aj, double Bj, double Cj,
+                      double Delta, double qD, double ssr,
+                      double t0, double t1, double s0, double s1,
+                      double * fluxes)
 
     int c_quad_integrate(int nalphas, int nfluxes,
-                                double * alphas, double * flux_scalings,
-                                double * a_matrix_noscaling,
-                                double * b_matrix_noscaling,
-                                double * c_matrix_noscaling,
-                                double t0,
-                                double s0,
-                                double timestep,
-                                int *niter, double * s1, double * fluxes)
+                         double * alphas, double * flux_scalings,
+                         double * coefs_noscaling,
+                         double t0,
+                         double s0,
+                         double timestep,
+                         int *niter, double * s1, double * fluxes)
 
     int c_quad_model(int nalphas, int nfluxes, int nval, int errors,
-                            double timestep,
-                            double * alphas, double * flux_scalings,
-                            double * perturb,
-                            double * a_matrix_noscaling,
-                            double * b_matrix_noscaling,
-                            double * c_matrix_noscaling,
-                            double s0,
-                            double smin,
-                            double smax,
-                            int * niter,
-                            double * s1, double * fluxes);
+                     double timestep,
+                     double * alphas, double * flux_scalings,
+                     double * perturb,
+                     double * coefs_noscaling,
+                     double s0,
+                     double smin,
+                     double smax,
+                     int * niter,
+                     double * s1, double * fluxes);
 
 cdef extern from 'c_quasoare_steady.h':
     int c_quad_steady(double a, double b, double c, double steady[2])
@@ -336,34 +332,23 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
 
 def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
                         np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
-                        np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
-                        np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
-                        np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
+                        np.ndarray[double, ndim=3, mode='c'] coefs_noscaling not None,
                         double t0, double s0, double timestep, \
                         np.ndarray[int, ndim=1, mode='c'] niter not None,\
                         np.ndarray[double, ndim=1, mode='c'] s1 not None,\
                         np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
-    cdef int nfluxes = a_matrix_noscaling.shape[1]
+    cdef int nfluxes = coefs_noscaling.shape[0]
 
     if flux_scalings.shape[0] != nfluxes:
         raise ValueError("flux_scalings.shape[0] != nfluxes")
 
-    if b_matrix_noscaling.shape[1] != nfluxes:
-        raise ValueError("b_matrix_noscaling.shape[1] != nfluxes")
+    if coefs_noscaling.shape[1] != nalphas - 1:
+        raise ValueError("coefs_noscaling.shape[1] != nalphas - 1")
 
-    if c_matrix_noscaling.shape[1] != nfluxes:
-        raise ValueError("c_matrix_noscaling.shape[1] != nfluxes")
-
-    if a_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("a_matrix_noscaling.shape[0] != nalphas-1")
-
-    if b_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("b_matrix_noscaling.shape[0] != nalphas-1")
-
-    if c_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("c_matrix_noscaling.shape[0] != nalphas-1")
+    if coefs_noscaling.shape[2] != 3:
+        raise ValueError("coefs_noscaling.shape[2] != 3")
 
     if niter.shape[0] != 1:
         raise ValueError("niter.shape[0] != 1")
@@ -378,29 +363,25 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
     return c_quad_integrate(nalphas, nfluxes,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(flux_scalings),
-                                <double*> np.PyArray_DATA(a_matrix_noscaling),
-                                <double*> np.PyArray_DATA(b_matrix_noscaling),
-                                <double*> np.PyArray_DATA(c_matrix_noscaling),
+                                <double*> np.PyArray_DATA(coefs_noscaling),
                                 t0, s0, timestep,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,\
-        np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
-        np.ndarray[double, ndim=1, mode='c'] perturb not None,
-        np.ndarray[double, ndim=2, mode='c'] a_matrix_noscaling not None,
-        np.ndarray[double, ndim=2, mode='c'] b_matrix_noscaling not None,
-        np.ndarray[double, ndim=2, mode='c'] c_matrix_noscaling not None,
-        double s0, double smin, double smax, double timestep, \
-        np.ndarray[int, ndim=1, mode='c'] niter not None,\
-        np.ndarray[double, ndim=1, mode='c'] s1 not None,\
-        np.ndarray[double, ndim=2, mode='c'] fluxes not None):
+def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
+               np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
+               np.ndarray[double, ndim=1, mode='c'] perturb not None,
+               np.ndarray[double, ndim=3, mode='c'] coefs_noscaling not None,
+               double s0, double smin, double smax, double timestep,
+               np.ndarray[int, ndim=1, mode='c'] niter not None,
+               np.ndarray[double, ndim=1, mode='c'] s1 not None,
+               np.ndarray[double, ndim=2, mode='c'] fluxes not None):
 
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
-    cdef int nfluxes = a_matrix_noscaling.shape[1]
+    cdef int nfluxes = coefs_noscaling.shape[0]
     cdef int nval = flux_scalings.shape[0]
 
     if perturb.shape[0] != nval:
@@ -409,20 +390,11 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
     if flux_scalings.shape[1] != nfluxes:
         raise ValueError("flux_scalings.shape[1] != nfluxes")
 
-    if b_matrix_noscaling.shape[1] != nfluxes:
-        raise ValueError("b_matrix_noscaling.shape[1] != nfluxes")
+    if coefs_noscaling.shape[1] != nalphas - 1:
+        raise ValueError("coefs_noscaling.shape[1] != nalphas - 1")
 
-    if c_matrix_noscaling.shape[1] != nfluxes:
-        raise ValueError("c_matrix_noscaling.shape[1] != nfluxes")
-
-    if a_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("a_matrix_noscaling.shape[0] != nalphas-1")
-
-    if b_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("b_matrix_noscaling.shape[0] != nalphas-1")
-
-    if c_matrix_noscaling.shape[0] != nalphas-1:
-        raise ValueError("c_matrix_noscaling.shape[0] != nalphas-1")
+    if coefs_noscaling.shape[2] != 3:
+        raise ValueError("coefs_noscaling.shape[2] != 3")
 
     if s1.shape[0] != nval:
         raise ValueError("s1.shape[0] != nval")
@@ -441,9 +413,7 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(flux_scalings),
                                 <double*> np.PyArray_DATA(perturb),
-                                <double*> np.PyArray_DATA(a_matrix_noscaling),
-                                <double*> np.PyArray_DATA(b_matrix_noscaling),
-                                <double*> np.PyArray_DATA(c_matrix_noscaling),
+                                <double*> np.PyArray_DATA(coefs_noscaling),
                                 s0, smin, smax,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),

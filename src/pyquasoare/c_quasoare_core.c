@@ -142,7 +142,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
 
 /* Primitive of 1/f*(s) */
 double c_quad_inverse(double a, double b, double c, double Delta, double qD,
-                            double sbar, double s0, double s1){
+                      double sbar, double s0, double s1){
     if(isnull(a) && isnull(b)){
         return (s1-s0)/c;
     }
@@ -162,13 +162,13 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
 
 /* Increment fluxes by integrating f*(s) */
 int c_quad_fluxes(int nfluxes,
-                        double * aj_vector,
-                        double * bj_vector,
-                        double * cj_vector,
-                        double Aj, double Bj, double Cj,
-                        double Delta, double qD, double sbar,
-                        double t0, double t1, double s0, double s1,
-                        double * fluxes){
+                  double * aj_vector,
+                  double * bj_vector,
+                  double * cj_vector,
+                  double Aj, double Bj, double Cj,
+                  double Delta, double qD, double sbar,
+                  double t0, double t1, double s0, double s1,
+                  double * fluxes){
     int i;
     double tau=t1-t0;
     double tau2=tau*tau;
@@ -244,15 +244,13 @@ int c_quad_fluxes(int nfluxes,
 /* Integrate reservoir equation over 1 time step and compute associated fluxes */
 int c_quad_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
-                            double * a_matrix_noscaling,
-                            double * b_matrix_noscaling,
-                            double * c_matrix_noscaling,
+                            double * coefs_noscaling,
                             double t0,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
-    int i, nit=0, jalpha_next=0, err_flux;
-    double Aj=0., Bj=0., Cj=0.;
+    int idx, i, nit=0, jalpha_next=0, err_flux;
+    double Aj = 0., Bj = 0., Cj = 0.;
     double a=0., b=0., c=0.;
     double coefs_tangent[3];
     double constants[3], Delta, qD, sbar;
@@ -320,9 +318,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
              * matching gradient at boundary.
              */
             if(extrapolating_low){
-                a = a_matrix_noscaling[i] * scl;
-                b = b_matrix_noscaling[i] * scl;
-                c = c_matrix_noscaling[i] * scl;
+                idx = (nalphas - 1) * 3 * i;
+                a = coefs_noscaling[idx] * scl;
+                b = coefs_noscaling[idx + 1] * scl;
+                c = coefs_noscaling[idx + 2] * scl;
 
                 c_quad_coefficient_tangent(a, b, c, alpha_min, coefs_tangent);
                 a = coefs_tangent[0];
@@ -330,9 +329,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 c = coefs_tangent[2];
             }
             else if(extrapolating_high){
-                a = a_matrix_noscaling[nfluxes * (nalphas-2) + i] * scl;
-                b = b_matrix_noscaling[nfluxes * (nalphas-2) + i] * scl;
-                c = c_matrix_noscaling[nfluxes * (nalphas-2) + i] * scl;
+                idx = (nalphas - 1) * 3 * i + 3 * (nalphas - 2);
+                a = coefs_noscaling[idx] * scl;
+                b = coefs_noscaling[idx + 1] * scl;
+                c = coefs_noscaling[idx + 2] * scl;
 
                 c_quad_coefficient_tangent(a, b, c, alpha_max, coefs_tangent);
                 a = coefs_tangent[0];
@@ -340,9 +340,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 c = coefs_tangent[2];
             }
             else {
-                a = a_matrix_noscaling[nfluxes * jalpha + i] * scl;
-                b = b_matrix_noscaling[nfluxes * jalpha + i] * scl;
-                c = c_matrix_noscaling[nfluxes * jalpha + i] * scl;
+                idx = (nalphas - 1) * 3 * i + 3 * jalpha;
+                a = coefs_noscaling[idx] * scl;
+                b = coefs_noscaling[idx + 1] * scl;
+                c = coefs_noscaling[idx + 2] * scl;
             }
 
             /* Store flux coefficents */
@@ -361,8 +362,8 @@ int c_quad_integrate(int nalphas, int nfluxes,
         if(isnan(Aj) || isnan(Bj) || isnan(Cj))
             return QUASOARE_NAN_COEFF;
 
-        Aj = fabs(Aj)<QUASOARE_EPS ? 0. : Aj;
-        Bj = fabs(Bj)<QUASOARE_EPS ? 0. : Bj;
+        Aj = fabs(Aj) < QUASOARE_EPS ? 0. : Aj;
+        Bj = fabs(Bj) < QUASOARE_EPS ? 0. : Bj;
 
         /* Compute discriminant variables */
         c_quad_constants(Aj, Bj, Cj, constants);
@@ -374,7 +375,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
         funval = c_quad_fun(Aj, Bj, Cj, s_start);
 
         /* Check continuity except for first iteration */
-        if(nit>1){
+        if(nit > 1){
             if(notequal(funval_prev, funval, QUASOARE_ATOL, QUASOARE_RTOL)) {
                 return QUASOARE_NOT_CONTINUOUS;
             }
@@ -474,9 +475,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep,
                  double * alphas, double * scalings,
                  double * perturb,
-                 double * a_matrix_noscaling,
-                 double * b_matrix_noscaling,
-                 double * c_matrix_noscaling,
+                 double * coefs_noscaling,
                  double s0,
                  double smin,
                  double smax,
@@ -492,9 +491,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
         /* Integrate ode */
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
                                 &(scalings[nfluxes * t]),
-                                a_matrix_noscaling,
-                                b_matrix_noscaling,
-                                c_matrix_noscaling,
+                                coefs_noscaling,
                                 t0, store, timestep,
                                 &(niter[t]),
                                 &(s1[t]),

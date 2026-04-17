@@ -38,10 +38,7 @@ def test_quad_model_errors(allclose):
     # (i.e. should generate errors)
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
-    amat[:, 0] = np.random.uniform(-10, 10, len(amat))
+    coefs[0, :, 0] = np.random.uniform(-10, 10, coefs.shape[1])
 
     # Get scaling data
     siteid = data_reader.SITEIDS[0]
@@ -50,29 +47,29 @@ def test_quad_model_errors(allclose):
     nval = len(df)
     inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
     climdiff = inputs[:, 0]-inputs[:, 1]
-    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
-                                np.maximum(-climdiff, 0.)/X1, \
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
+                                np.maximum(-climdiff, 0.)/X1,
                                 np.ones(nval)])
 
     # Run model without raising
     s0 = 1./2
-    niter, s1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.)
+    niter, s1, fx = models.quad_model(alphas, scalings, coefs,
+                                      s0, 1.)
     ierr = niter<0
     assert np.any(ierr)
     assert np.all(np.isnan(fx[ierr]))
 
     # Trigger warnings
     with pytest.warns(Warning):
-        niter, s1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1., \
-                                    errors="warn")
+        niter, s1, fx = models.quad_model(alphas, scalings, coefs,
+                                          s0, 1.,
+                                          errors="warn")
 
     # Trigger error
     with pytest.raises(ValueError, match="continuous"):
-        niter, s1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1., \
-                                    errors="raise")
+        niter, s1, fx = models.quad_model(alphas, scalings,
+                                          coefs, s0, 1.,
+                                          errors="raise")
 
 
 def test_quad_model(allclose):
@@ -86,9 +83,6 @@ def test_quad_model(allclose):
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -101,8 +95,8 @@ def test_quad_model(allclose):
         errmax_max = 0.
         errbalmax_max = 0.
         for X1 in X1s:
-            scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
-                                        np.maximum(-climdiff, 0.)/X1, \
+            scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
+                                        np.maximum(-climdiff, 0.)/X1,
                                         np.ones(nval)])
 
             # Run approximate solution + exclude PR and AE
@@ -111,17 +105,17 @@ def test_quad_model(allclose):
 
             # Run quad model
             s0 = 1./2
-            niter, s1, fx = models.quad_model(alphas, scalings, \
-                                            amat, bmat, cmat, s0, 1.)
+            niter, s1, fx = models.quad_model(alphas, scalings,
+                                              coefs, s0, 1.)
 
             sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
                                         -fx[:, 1]*X1, -fx[:, 2]*X1])
 
             # Compare with slow
-            niter_slow, s1_slow, fx_slow = slow.quad_model(alphas, scalings, \
-                                            amat, bmat, cmat, s0, 1.)
+            niter_slow, s1_slow, fx_slow = slow.quad_model(alphas, scalings,
+                                                           coefs, s0, 1.)
 
-            sims_slow = np.column_stack([s1_slow*X1, fx_slow[:, 0]*X1, \
+            sims_slow = np.column_stack([s1_slow*X1, fx_slow[:, 0]*X1,
                                         -fx_slow[:, 1]*X1, -fx_slow[:, 2]*X1])
             assert allclose(sims, sims_slow, atol=1e-5)
 
@@ -153,9 +147,6 @@ def test_quad_model_perturb(allclose):
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Get climate data
     siteid = data_reader.SITEIDS[0]
@@ -164,24 +155,24 @@ def test_quad_model_perturb(allclose):
     nval = len(df)
     inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
     climdiff = inputs[:, 0]-inputs[:, 1]
-    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
-                                np.maximum(-climdiff, 0.)/X1, \
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
+                                np.maximum(-climdiff, 0.)/X1,
                                 np.ones(nval)])
 
     s0 = 1./2
-    niter, s1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.)
+    niter, s1, fx = models.quad_model(alphas, scalings, coefs,
+                                      s0, 1.)
 
     perturb = 1e-10 * np.random.uniform(-1, 1, len(scalings))
-    _, s1p, fxp = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.,
+    _, s1p, fxp = models.quad_model(alphas, scalings,
+                                    coefs, s0, 1.,
                                     perturb=perturb)
     assert allclose(s1, s1p)
     assert allclose(fx, fxp)
 
     perturb = 1e-1 * np.random.uniform(-1, 1, len(scalings))
-    _, s1p, fxp = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.,
+    _, s1p, fxp = models.quad_model(alphas, scalings,
+                                    coefs, s0, 1.,
                                     perturb=perturb)
     assert np.abs(s1 - s1p).max() > 0.1
 
@@ -194,7 +185,7 @@ def test_quad_model_states_min_max(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Get climate data
     siteid = data_reader.SITEIDS[0]
@@ -203,19 +194,19 @@ def test_quad_model_states_min_max(allclose):
     nval = len(df)
     inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
     climdiff = inputs[:, 0]-inputs[:, 1]
-    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1, \
-                                np.maximum(-climdiff, 0.)/X1, \
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
+                                np.maximum(-climdiff, 0.)/X1,
                                 np.ones(nval)])
 
     s0 = 1./2
-    niter, s1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.)
+    niter, s1, fx = models.quad_model(alphas, scalings, coefs,
+                                      s0, 1.)
     assert s1.min() < 0.2
     assert s1.max() > 0.8
 
     smin, smax = 0.5, 0.51
-    niter, s1c, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, s0, 1.,
+    niter, s1c, fx = models.quad_model(alphas, scalings,
+                                       coefs, s0, 1.,
                                     smin=smin, smax=smax)
     assert np.all(s1c >= smin)
     assert np.all(s1c <= smax)
@@ -239,11 +230,10 @@ def test_routing_convergence(allclose):
 
     nalphas = 5
     alphas = np.linspace(0, 3., nalphas)
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
     s0 = 0.
-    niter, s1, sim = models.quad_model(alphas, scalings, \
-                            amat, bmat, cmat, s0, timestep)
-
+    niter, s1, sim = models.quad_model(alphas, scalings, coefs,
+                                       s0, timestep)
 
 
 def test_reservoir_interception(allclose):
@@ -259,12 +249,12 @@ def test_reservoir_interception(allclose):
     fE = lambda x: -1+(1-x)**nuE
 
     alphas = np.linspace(0, 1.05, 10)
-    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+    coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
 
     s0 = 0.
     timestep = 1.
-    niter, s1, sim = models.quad_model(alphas, scalings, \
-                            amat, bmat, cmat, s0, timestep)
+    niter, s1, sim = models.quad_model(alphas, scalings, coefs,
+                                       s0, timestep)
 
 
 def test_in_place_computing(allclose):
@@ -283,7 +273,7 @@ def test_in_place_computing(allclose):
     fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
     nalphas = 5
     alphas = np.linspace(0, 3., nalphas)
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs =approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Intialise two scalings
     scalings = np.column_stack([inflows, q0*np.ones(nval)])
@@ -302,9 +292,9 @@ def test_in_place_computing(allclose):
         scalings /= theta
 
         # Run model in place (i.e. no new array allocation)
-        models.quad_model(alphas, scalings, \
-                            amat, bmat, cmat, s0, timestep, \
-                            niter=niter, fluxes=fx, s1=s1)
+        models.quad_model(alphas, scalings, coefs,
+                          s0, timestep,
+                          niter=niter, fluxes=fx, s1=s1)
         sims[:, ith] = -fx[:, 1]*theta/timestep
 
         scalings *= theta

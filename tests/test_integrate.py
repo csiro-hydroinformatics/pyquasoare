@@ -349,7 +349,7 @@ def test_increment_fluxes(allclose, generate_samples):
         cvect += (coj-sc)/3.
 
         # Integrate forward analytically
-        t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj, \
+        t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj,
                                                         Delta, qD, sbar, s0))
         t0 = t1*0.05 # do not start at zero to avoid sharp falls
         t1 = t1*0.5 # far away from limits of validity
@@ -362,20 +362,20 @@ def test_increment_fluxes(allclose, generate_samples):
         cl = np.concatenate([cvect, np.zeros(n)])
         fluxes = np.zeros(3)
         with pytest.raises(ValueError):
-            integrate.quad_fluxes(al, bl, cl, \
+            integrate.quad_fluxes(al, bl, cl,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
-            integrate.quad_fluxes(avect, bvect, cvect2, \
+            integrate.quad_fluxes(avect, bvect, cvect2,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
 
         # Compute fluxes analytically
         fluxes = np.zeros(3)
-        integrate.quad_fluxes(avect, bvect, cvect, \
+        integrate.quad_fluxes(avect, bvect, cvect,
                         aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Test mass balance
@@ -430,9 +430,9 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
     coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
+    amat = coefs[:, :, 0].T
+    bmat = coefs[:, :, 1].T
+    cmat = coefs[:, :, 2].T
 
     # Configure integration
     t0 = 0 # Analytical solution always integrated from t0=0!
@@ -461,13 +461,13 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # integrate - C code
-            _, s_end, fluxes = integrate.quad_integrate(alphas, scalings, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start, timestep)
+            _, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                        coefs, t_start,
+                                                        s_start, timestep)
             # integrate - python code
-            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
+                                                             coefs, t_start,
+                                                             s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert np.allclose(fluxes, fluxes_slow)
@@ -509,19 +509,19 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             errmax_max = max(errmax, errmax_max)
 
     err_thresh = {
-        "x2": 5e-6, \
-        "x4": 5e-5, \
-        "x6": 5e-4, \
-        "x8": 1e-10, \
-        "tanh": 1e-10, \
-        "exp": 1e-7, \
-        "sin": 5e-6, \
-        "recip": 1e-6, \
-        "recipquad": 5e-6, \
-        "runge": 1e-10, \
-        "stiff": 1e-10, \
-        "ratio": 5e-8, \
-        "logistic": 1e-10, \
+        "x2": 5e-6,
+        "x4": 5e-5,
+        "x6": 5e-4,
+        "x8": 1e-10,
+        "tanh": 1e-10,
+        "exp": 1e-7,
+        "sin": 5e-6,
+        "recip": 1e-6,
+        "recipquad": 5e-6,
+        "runge": 1e-10,
+        "stiff": 1e-10,
+        "ratio": 5e-8,
+        "logistic": 1e-10,
         "genlogistic": 5e-8
     }
     assert errmax_max < err_thresh[fname]
@@ -546,9 +546,6 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
     coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Adjust bounds to avoid numerical problems with analytical solution
     if re.search("^x|^logistic|sin", fname):
@@ -591,16 +588,16 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             timestep = t1[i+1]-t_start
             # C code
             n, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
-                                                        amat, bmat, cmat, t_start,
+                                                        coefs, t_start,
                                                         s_start, timestep)
 
             # Check mass balance
             assert allclose(fluxes.sum()-s_end+s_start, 0.)
 
             # Python code
-            n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
+                                                                  coefs, t_start,
+                                                                  s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert allclose(fluxes, fluxes_slow)
@@ -666,9 +663,6 @@ def test_reservoir_equation_gr4j(allclose):
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -701,7 +695,7 @@ def test_reservoir_equation_gr4j(allclose):
 
                 # Integate equation
                 n, s_end, fx = integrate.quad_integrate(alphas, scalings,
-                                                        amat, bmat, cmat, 0.,
+                                                        coefs, 0.,
                                                         s_start, 1.)
                 sims[t, 0] = s_end*X1
                 sims[t, 1] = fx[0]*X1
@@ -735,16 +729,13 @@ def test_reservoir_interception(allclose):
 
     alphas = np.linspace(0, 1., 100)
     coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
-    amat = np.ascontiguousarray(coefs[:, :, 0].T)
-    bmat = np.ascontiguousarray(coefs[:, :, 1].T)
-    cmat = np.ascontiguousarray(coefs[:, :, 2].T)
 
     s_start = 0.5
     niters = []
     intfun = integrate.quad_integrate
     for t in range(len(scalings)):
         niter, s_end, sim = intfun(alphas, scalings[t],
-                                   amat, bmat, cmat, 0.,
+                                   coefs, 0.,
                                    s_start, 1.)
         s_start = s_end
 
