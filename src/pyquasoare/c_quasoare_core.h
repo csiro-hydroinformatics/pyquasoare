@@ -11,8 +11,8 @@
 
 double c_quad_fun(double a, double b, double c, double s);
 double c_quad_grad(double a, double b, double c, double s);
-
-int c_quad_steady(double a, double b, double c, double steady[2]);
+int c_quad_coefficients_tangent(double a, double b, double c, double sref, double coefs[3]);
+double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
 
 int c_quad_coefficients(int approx_opt, double a0, double a1,
                             double f0, double f1, double fm,
@@ -40,9 +40,7 @@ int c_quad_fluxes(int nfluxes,
 
 int c_quad_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
-                            double * a_matrix_noscaling,
-                            double * b_matrix_noscaling,
-                            double * c_matrix_noscaling,
+                            double * coefs_noscaling,
                             double t0,
                             double s0,
                             double timestep,
@@ -51,9 +49,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
 int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep,
                             double * alphas, double * scalings,
                             double * perturb,
-                            double * a_matrix_noscaling,
-                            double * b_matrix_noscaling,
-                            double * c_matrix_noscaling,
+                            double * coefs_noscaling,
                             double s0,
                             double smin,
                             double smax,

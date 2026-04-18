@@ -239,10 +239,7 @@ def quad_fluxes(a_vector, b_vector, c_vector,
         raise ValueError(f"c_pyquasoare.quad_fluxes returns {ierr} ({mess})")
 
 
-def quad_integrate(alphas, scalings,
-                   a_matrix_noscaling,
-                   b_matrix_noscaling,
-                   c_matrix_noscaling,
+def quad_integrate(alphas, flux_scalings, coefs_noscaling,
                    t0, s0, timestep):
     """ Integrate the approximate reservoir equation with initial time t0
     and initial condition s(t0)=s0 over a single timestep.
@@ -253,7 +250,7 @@ def quad_integrate(alphas, scalings,
         c_matrix_noscaling.
 
     The function allows scaling the fluxes by multiplicative factors
-    given in the scalings vector. The number of scaling factors should
+    given in the flux_scalings vector. The number of scaling factors should
     be identical to the number of fluxes (hence the number of columns
     in a_matrix_noscaling, b_matrix_noscaling and c_matrix_noscaling).
 
@@ -261,12 +258,13 @@ def quad_integrate(alphas, scalings,
     ----------
     alphas : np.ndarray
         Approximation nodes. Vector of length M.
-        Should be strictly increasing, i.e. alphas[i]>alphas[i-1]
-    scalings : np.ndarray
-        Vector of scaling factors applied to fluxes (array of size N).
-    a_matrix_noscaling, b_matrix_noscaling, c_matrix_noscaling: np.ndarray
+        Should be strictly increasing, i.e. alphas[i] > alphas[i-1]
+    flux_scalings : np.ndarray
+        Scaling factors applied to each fluxes.
+        This is a 1D array of length P, with P the number of fluxes.
+    coefs_noscaling: np.ndarray
         Interpolation coefficients for each flux and each
-        interpolation band (i.e. matrices of size [M-1, N]).
+        interpolation band. This is a 3D array of size [P x M-1 x 3].
     t0 : float
         Start time.
     s0 : float
@@ -310,15 +308,12 @@ def quad_integrate(alphas, scalings,
     array([0.31277265])
     """
     # Initialise
-    fluxes = np.zeros(a_matrix_noscaling.shape[1], dtype=np.float64)
+    fluxes = np.zeros(coefs_noscaling.shape[0], dtype=np.float64)
     niter = np.zeros(1, dtype=np.int32)
     s1 = np.zeros(1, dtype=np.float64)
 
     # run
-    ierr = c_pyquasoare.quad_integrate(alphas, scalings,
-                                       a_matrix_noscaling,
-                                       b_matrix_noscaling,
-                                       c_matrix_noscaling,
+    ierr = c_pyquasoare.quad_integrate(alphas, flux_scalings, coefs_noscaling,
                                        t0, s0, timestep, niter, s1, fluxes)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()

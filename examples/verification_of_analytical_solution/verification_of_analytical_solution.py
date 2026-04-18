@@ -78,11 +78,12 @@ axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 # Repeat
 nax = 0
 while nax < nrepeat:
-    a, b, c = np.random.uniform(param_min, param_max, 3)
+    coefs = np.random.uniform(param_min, param_max, 3)
+    a, b, c = coefs
 
     # Set s0 inside stable region to avoid getting
     # inifinite results
-    x0, x1 = steady.quad_steady(a, b, c)
+    x0, x1 = steady.quad_steady(coefs)[0]
     if np.isnan(x0) or np.isnan(x1):
         continue
 
@@ -136,7 +137,7 @@ while nax < nrepeat:
             + f" a={a:0.2f}"\
             + f" b={b:0.2f}"\
             + f" c={c:0.2f}"\
-            + f" $\Delta = {b**2-4*a*c:0.2f}$"
+            + f" $\\Delta = {b**2-4*a*c:0.2f}$"
     xlabel = "Time $t$"
     ylabel = "Storage $S(t)$" if nax % ncols == 0 else ""
     ax.set(title=title, xlabel=xlabel, ylabel=ylabel)

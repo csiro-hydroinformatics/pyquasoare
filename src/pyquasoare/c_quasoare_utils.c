@@ -1,29 +1,45 @@
 #include "c_quasoare_utils.h"
 
+int c_double_compare(const void *a,const void *b) {
+    double *x = (double *) a;
+    double *y = (double *) b;
+
+    if (*x < *y)
+        return -1;
+    else if (*x > *y)
+        return 1;
+    else
+        return 0;
+}
+
 double c_get_nan() {
     /* Defines two zero variables to make sure zero/zero != 1 (gcc compile) */
-    static double zero1=0.;
-    static double zero2=0.;
-    return zero1/zero2;
+    static double zero1 = 0.;
+    static double zero2 = 0.;
+    return zero1 / zero2;
 }
 
 double c_get_inf() {
-    static double zero=0.;
-    double inf=1./zero;
+    static double zero = 0.;
+    double inf = 1. / zero;
     return inf;
 }
 
 double c_compiler_accuracy_kahan(){
-    long double t=3.0;
-    return 1.0-(4.0/t-1.0)*t;
+    long double t = 3.0;
+    return 1.0 - (4.0 / t - 1.0) * t;
+}
+
+int notnan(double x){
+    return 1 - isnan(x);
 }
 
 int notnull(double x){
-    return x<0 || x>0 ? 1 : 0;
+    return x < 0 || x > 0 ? 1 : 0;
 }
 
 int isnull(double x){
-    return 1-notnull(x);
+    return 1 - notnull(x);
 }
 
 int isequal(double x, double y, double atol, double rtol){
@@ -49,16 +65,16 @@ double diff_of_products(double a, double b, double c, double d)
     double w = d*c;
     double e = fma(-d, c, w);
     double f = fma(a, b, -w);
-    return f+e;
+    return f + e;
 }
 
 
 int c_quad_constants(double a, double b, double c, double values[3]){
-    double Delta = isnull(b*b-4.*a*c) ? 0. : diff_of_products(b, b, 4.*a, c);
+    double Delta = isnull(b * b - 4. * a * c) ? 0. : diff_of_products(b, b, 4. * a, c);
     double qD = sqrt(fabs(Delta))/2;
     values[0] = Delta;
     values[1] = qD;
-    values[2] = -b/2./a;
+    values[2] = -b / 2. / a;
     return qD>=0. ? 0. : QUASOARE_UTILS_QD_NEGATIVE;
 }
 

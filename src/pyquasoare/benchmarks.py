@@ -26,10 +26,10 @@ def nonlinrouting_fluxes_noscaling(nu):
         warnings.warn(warnmess)
 
     def fin(x):
-        return 1.
+        return np.ones_like(x)
 
     def fout(x):
-        return -x**nu if x >= 0 else 0.
+        return np.where(x >= 0, -x**nu, 0.)
 
     fluxes = [fin, fout]
 
@@ -37,7 +37,7 @@ def nonlinrouting_fluxes_noscaling(nu):
         return 0.
 
     def dfout(x):
-        return -nu*x**(nu-1.) if x >= 0 else 0.
+        return np.where(x >= 0, -nu * x**(nu - 1.), 0.)
 
     dfluxes = [dfin, dfout]
 
@@ -74,24 +74,24 @@ def gr4jprod_fluxes_noscaling(eta=1./2.25):
     without climate input scaling.
     """
     def fpr(x):
-        return (1.-x**2) if x > 0 else 1.
+        return np.where(x > 0, 1. - x**2, 1.)
 
     def fae(x):
-        return -x*(2.-x) if x < 1. else -1.
+        return np.where(x < 1, -x * (2 - x), -1.)
 
     def fperc(x):
-        return -(eta*x)**5/4./eta if x > 0. else 0.
+        return np.where(x > 0, -(eta * x)**5 / 4. / eta, 0.)
 
     fluxes = [fpr, fae, fperc]
 
     def dfpr(x):
-        return -2.*x if x > 0. else 0.
+        return np.where(x > 0, -2 * x, 0.)
 
     def dfae(x):
-        return -2.*(1.-x) if x < 1. else 0.
+        return np.where(x < 1, -2 * (1. - x), 0.)
 
     def dfperc(x):
-        return -5./4.*(eta*x)**4 if x > 0. else 0.
+        return np.where(x > 0, -5./4.*(eta*x)**4, 0.)
 
     dfluxes = [dfpr, dfae, dfperc]
 
@@ -104,8 +104,8 @@ def gr4jprod_fluxes_scaled(P, E, X1, eta=1./2.25):
         Ei = max(E-P, 0)/X1
     """
     # interception reservoir
-    pi = max(0, (P-E)/X1)
-    ei = max(0, (E-P)/X1)
+    pi = max(0, (P-E) / X1)
+    ei = max(0, (E-P) / X1)
 
     # normalised fluxes
     normf, dnormf = gr4jprod_fluxes_noscaling(eta)

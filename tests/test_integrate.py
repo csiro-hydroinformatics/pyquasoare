@@ -104,7 +104,8 @@ def test_delta_t_max(allclose, generate_samples):
         # Steady state analysis for Delta>=0
         # simulation converges if initial condition is located
         # beyond or below roots depending on sign of a coef
-        stdy = steady.quad_steady(a, b, c)
+        coefs = np.array([[a, b, c]])
+        stdy = steady.quad_steady(coefs)[0]
         c1 = a<0 and s0>np.nanmin(stdy)
         c2 = a>0 and s0<np.nanmax(stdy)
         if Delta>=0 and (c1 or c2):
@@ -118,8 +119,9 @@ def test_delta_t_max(allclose, generate_samples):
 
         # --------- Advanced checks -----------
         # Run solver first to see how far it goes
-        f = lambda x: approx.quad_fun(a, b, c, x)
-        df = lambda x: approx.quad_grad(a, b, c, x)
+        params = np.array([a, b, c])
+        f = lambda x: approx.quad_fun(params, x)
+        df = lambda x: approx.quad_grad(params, x)
         te, ns1, _, _= slow.integrate_numerical([f], [df], t0, s0, t_eval)
 
         if len(te)==0:
@@ -201,7 +203,8 @@ def test_forward_vs_finite_difference(allclose, generate_samples):
         ds1 = (-s1[4:]+8*s1[3:-1]-8*s1[1:-3]+s1[:-4])/h/12
         td = t_eval[2:-2]
         # .. compares with expected from ode
-        expected = approx.quad_fun(a, b, c, s1[2:-2])
+        coefs = np.array([a, b, c])
+        expected = approx.quad_fun(coefs, s1[2:-2])
         err = np.abs(np.arcsinh(ds1)-np.arcsinh(expected))
 
         # Select place where derivative is not too high
@@ -230,6 +233,7 @@ def test_forward_vs_numerical(allclose, generate_samples):
     nassessed = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
+        coefs = np.array([a, b, c]).astype(float)
 
         # Set integration time
         Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.99)
@@ -237,8 +241,8 @@ def test_forward_vs_numerical(allclose, generate_samples):
             continue
         t_eval = np.linspace(0, Tmax, 1000)
 
-        f = lambda x: approx.quad_fun(a, b, c, x)
-        df = lambda x: approx.quad_grad(a, b, c, x)
+        f = lambda x: approx.quad_fun(coefs, x)
+        df = lambda x: approx.quad_grad(coefs, x)
         te, expected, nev, njac = slow.integrate_numerical([f], [df], t0, s0, t_eval)
         if len(te)<3:
             continue
@@ -279,6 +283,7 @@ def test_inverse(allclose, generate_samples):
     errmax_max = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
+        coefs = np.array([a, b, c]).astype(float)
 
         # Set integration time
         Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.9)
@@ -286,13 +291,13 @@ def test_inverse(allclose, generate_samples):
 
         # Simulate
         s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
-        dsdt = approx.quad_fun(a, b, c, s1)
+        dsdt = approx.quad_fun(coefs, s1)
 
         # Takes into account distance with steady state
-        stdy = steady.quad_steady(a, b, c)
+        stdy = steady.quad_steady(coefs)[0]
         stdy[np.isnan(stdy)] = np.inf
-        dst1 = np.abs(s1-stdy[0])
-        dst2 = np.abs(s1-stdy[1])
+        dst1 = np.abs(s1 - stdy[0])
+        dst2 = np.abs(s1 - stdy[1])
 
         # Compute difference
         dta = integrate.quad_inverse(a, b, c, Delta, qD, sbar, s0, s1)
@@ -344,7 +349,7 @@ def test_increment_fluxes(allclose, generate_samples):
         cvect += (coj-sc)/3.
 
         # Integrate forward analytically
-        t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj, \
+        t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj,
                                                         Delta, qD, sbar, s0))
         t0 = t1*0.05 # do not start at zero to avoid sharp falls
         t1 = t1*0.5 # far away from limits of validity
@@ -357,20 +362,20 @@ def test_increment_fluxes(allclose, generate_samples):
         cl = np.concatenate([cvect, np.zeros(n)])
         fluxes = np.zeros(3)
         with pytest.raises(ValueError):
-            integrate.quad_fluxes(al, bl, cl, \
+            integrate.quad_fluxes(al, bl, cl,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
-            integrate.quad_fluxes(avect, bvect, cvect2, \
+            integrate.quad_fluxes(avect, bvect, cvect2,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
 
         # Compute fluxes analytically
         fluxes = np.zeros(3)
-        integrate.quad_fluxes(avect, bvect, cvect, \
+        integrate.quad_fluxes(avect, bvect, cvect,
                         aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Test mass balance
@@ -379,13 +384,17 @@ def test_increment_fluxes(allclose, generate_samples):
         #assert allclose(balance, 0., atol=1e-6)
 
         # Compare against numerical integration
+        params = np.zeros(3)
         def finteg(t, a, b, c):
             s = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t)
-            return approx.quad_fun(a, b, c, s)
+            params[0] = a
+            params[1] = b
+            params[2] = c
+            return approx.quad_fun(params, s)
 
-        expected = np.array([sci_integrate.quad(finteg, t0, t1, \
-                                    limit=500, args=(a, b, c))\
-                        for a, b, c in zip(avect, bvect, cvect)])
+        expected = np.array([sci_integrate.quad(finteg, t0, t1,
+                                                limit=500, args=(a, b, c))
+                             for a, b, c in zip(avect, bvect, cvect)])
         tol = expected[:, 1].max()
         errmax = np.abs(np.arcsinh(fluxes)-np.arcsinh(expected[:, 0])).max()
         assert errmax < 1e-6
@@ -395,16 +404,16 @@ def test_increment_fluxes(allclose, generate_samples):
 
         # Compare against slow
         fluxes_slow = np.zeros(3)
-        slow.quad_fluxes(avect, bvect, cvect, \
-                        aoj, boj, coj, Delta, qD, sbar, \
-                        t0, t1, s0, s1, fluxes_slow)
+        slow.quad_fluxes(avect, bvect, cvect,
+                         aoj, boj, coj, Delta, qD, sbar,
+                         t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
 
     mess = f"[{case}:{cname}] fluxes vs integration: "\
-                +f"errmax = {errmax_max:3.2e}"\
-                +f" balmax = {errbal_max:3.3e}"\
-                +f" assessed = {nassessed/ntry*100:0.0f}%"
+           + f"errmax = {errmax_max:3.2e}"\
+           + f" balmax = {errbal_max:3.3e}"\
+           + f" assessed = {nassessed/ntry*100:0.0f}%"
     LOGGER.info(mess)
 
 
@@ -420,7 +429,10 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     nalphas = 5
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    amat = coefs[:, :, 0].T
+    bmat = coefs[:, :, 1].T
+    cmat = coefs[:, :, 2].T
 
     # Configure integration
     t0 = 0 # Analytical solution always integrated from t0=0!
@@ -449,13 +461,13 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # integrate - C code
-            _, s_end, fluxes = integrate.quad_integrate(alphas, scalings, \
-                                            amat, bmat, cmat, t_start, \
-                                            s_start, timestep)
+            _, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                        coefs, t_start,
+                                                        s_start, timestep)
             # integrate - python code
-            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
+                                                             coefs, t_start,
+                                                             s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert np.allclose(fluxes, fluxes_slow)
@@ -474,10 +486,11 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         ilow = np.where(s<alpha0-1e-3)[0][:-2]
         if len(ilow)>5:
             aoj, boj, coj = amat[0].sum(), bmat[0].sum(), cmat[0].sum()
-            grad = approx.quad_grad(aoj, boj, coj, alpha0)
-            c = approx.quad_fun(aoj, boj, coj, alpha0)-grad*alpha0
+            params = np.array([aoj, boj, coj])
+            grad = approx.quad_grad(params, alpha0)
+            c = approx.quad_fun(params, alpha0) - grad*alpha0
             b = grad
-            expected = approx.quad_fun(0., b, c, s)
+            expected = approx.quad_fun(np.array([0., b[0], c[0]]), s)
             err = np.abs(np.arcsinh(ds[ilow])-np.arcsinh(expected[ilow]))
             errmax = err.max()
             errmax_max = max(errmax, errmax_max)
@@ -486,28 +499,29 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         ihigh = np.where(s>alpha1+1e-3)[0][:-2]
         if len(ihigh)>5:
             aoj, boj, coj = amat[-1].sum(), bmat[-1].sum(), cmat[-1].sum()
-            grad = approx.quad_grad(aoj, boj, coj, alpha1)
-            c = approx.quad_fun(aoj, boj, coj, alpha1)-grad*alpha1
+            params = np.array([aoj, boj, coj])
+            grad = approx.quad_grad(params, alpha1)
+            c = approx.quad_fun(params, alpha1)-grad*alpha1
             b = grad
-            expected = approx.quad_fun(0., b, c, s)
+            expected = approx.quad_fun(np.array([0., b[0], c[0]]), s)
             err = np.abs(np.arcsinh(ds[ihigh])-np.arcsinh(expected[ihigh]))
             errmax = err.max()
             errmax_max = max(errmax, errmax_max)
 
     err_thresh = {
-        "x2": 5e-6, \
-        "x4": 5e-5, \
-        "x6": 5e-4, \
-        "x8": 1e-10, \
-        "tanh": 1e-10, \
-        "exp": 1e-7, \
-        "sin": 5e-6, \
-        "recip": 1e-6, \
-        "recipquad": 5e-6, \
-        "runge": 1e-10, \
-        "stiff": 1e-10, \
-        "ratio": 5e-8, \
-        "logistic": 1e-10, \
+        "x2": 5e-6,
+        "x4": 5e-5,
+        "x6": 5e-4,
+        "x8": 1e-10,
+        "tanh": 1e-10,
+        "exp": 1e-7,
+        "sin": 5e-6,
+        "recip": 1e-6,
+        "recipquad": 5e-6,
+        "runge": 1e-10,
+        "stiff": 1e-10,
+        "ratio": 5e-8,
+        "logistic": 1e-10,
         "genlogistic": 5e-8
     }
     assert errmax_max < err_thresh[fname]
@@ -531,7 +545,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     nalphas = 11
     alphas = np.linspace(alpha0, alpha1, nalphas)
     approx_opt = 2 if fname in ["logistic", "sin", "runge", "genlogistic"] else 1
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt)
 
     # Adjust bounds to avoid numerical problems with analytical solution
     if re.search("^x|^logistic|sin", fname):
@@ -573,17 +587,17 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # C code
-            n, s_end, fluxes = integrate.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            n, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                        coefs, t_start,
+                                                        s_start, timestep)
 
             # Check mass balance
             assert allclose(fluxes.sum()-s_end+s_start, 0.)
 
             # Python code
-            n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, t_start, \
-                                                s_start, timestep)
+            n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
+                                                                  coefs, t_start,
+                                                                  s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert allclose(fluxes, fluxes_slow)
@@ -648,7 +662,7 @@ def test_reservoir_equation_gr4j(allclose):
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
-    amat, bmat, cmat, cst =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Loop over sites
     for isite, siteid in enumerate(data_reader.SITEIDS):
@@ -680,9 +694,9 @@ def test_reservoir_equation_gr4j(allclose):
                 scalings[:2] = pi, ei
 
                 # Integate equation
-                n, s_end, fx = integrate.quad_integrate(alphas, scalings, \
-                                                amat, bmat, cmat, 0., \
-                                                s_start, 1.)
+                n, s_end, fx = integrate.quad_integrate(alphas, scalings,
+                                                        coefs, 0.,
+                                                        s_start, 1.)
                 sims[t, 0] = s_end*X1
                 sims[t, 1] = fx[0]*X1
                 sims[t, 2] = -fx[1]*X1
@@ -710,18 +724,18 @@ def test_reservoir_interception(allclose):
     theta = 0.01
     scalings = np.column_stack([P/theta, E/theta])
 
-    fP = lambda x: (1.0 - x) / math.sqrt((1. - x)**2 + 1e-6)
+    fP = lambda x: (1.0 - x) / np.sqrt((1. - x)**2 + 1e-6)
     fE = lambda x: -fP(1.0 - x)
 
     alphas = np.linspace(0, 1., 100)
-    amat, bmat, cmat, _ = approx.quad_coefficient_matrix([fP, fE], alphas)
+    coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
 
     s_start = 0.5
     niters = []
     intfun = integrate.quad_integrate
     for t in range(len(scalings)):
         niter, s_end, sim = intfun(alphas, scalings[t],
-                                   amat, bmat, cmat, 0.,
+                                   coefs, 0.,
                                    s_start, 1.)
         s_start = s_end
 

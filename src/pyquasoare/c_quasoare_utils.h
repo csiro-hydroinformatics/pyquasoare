@@ -43,7 +43,9 @@ double c_get_inf();
 double c_get_nan();
 int c_get_nfluxes_max();
 double c_compiler_accuracy_kahan();
+int c_double_compare(const void *a,const void *b);
 
+int notnan(double x);
 int isnull(double x);
 int notnull(double x);
 int isequal(double x, double y, double atol, double rtol);

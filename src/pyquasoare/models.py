@@ -11,10 +11,8 @@ else:
 ERRORS = ["ignore", "raise", "warn"]
 
 
-def quad_model(alphas, scalings,
-               a_matrix_noscaling,
-               b_matrix_noscaling,
-               c_matrix_noscaling, s0, timestep,
+def quad_model(alphas, flux_scalings, coefs_noscaling,
+               s0, timestep,
                smin=-np.inf,
                smax=np.inf,
                perturb=None,
@@ -29,7 +27,7 @@ def quad_model(alphas, scalings,
         c_matrix_noscaling.
 
     The function allows scaling the fluxes by multiplicative factors
-    given in the scalings matrix. The number of scaling factors should
+    given in the flux_scalings matrix. The number of scaling factors should
     be identical to the number of fluxes (hence the number of columns
     in a_matrix_noscaling, b_matrix_noscaling and c_matrix_noscaling).
 
@@ -37,12 +35,16 @@ def quad_model(alphas, scalings,
     ----------
     alphas : np.ndarray
         Approximation nodes. Vector of length M.
-        Should be strictly increasing, i.e. alphas[i]>alphas[i-1]
-    scalings : np.ndarray
-        Vector of scaling factors applied to fluxes (array of size N).
-    a_matrix_noscaling, b_matrix_noscaling, c_matrix_noscaling: np.ndarray
-        Interpolation coefficients for each flux and each
-        interpolation band (i.e. matrices of size [M-1, N]).
+        Should be strictly increasing, i.e. alphas[i] > alphas[i-1]
+    flux_scalings : np.ndarray
+        Scaling factors applied to each fluxes.
+        This is a 2D array of dimension [N X P], with N the number of timesteps
+        and P number of fluxes.
+    coefs_noscaling: np.ndarray
+        Quadratic interpolation coefficients for each flux and each
+        interpolation band. This is a 3D array of size [P x M-1 x 3].
+        There are 3 coefficients for each flux and each band corresponding
+        to the quadratic terms.
     s0 : float
         Initial condition
     smin : float
@@ -61,7 +63,6 @@ def quad_model(alphas, scalings,
         Arrays used by for computation "in place", i.e.
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
-
         If None, the arrays are allocated during every function run.
 
     Returns
@@ -128,10 +129,10 @@ def quad_model(alphas, scalings,
         errmsg = f"Expected errors in {txt}, got {errors}."
         raise ValueError(errmsg)
 
-    nval = scalings.shape[0]
+    nval = flux_scalings.shape[0]
 
     if fluxes is None:
-        fluxes = np.zeros(scalings.shape, dtype=np.float64)
+        fluxes = np.zeros(flux_scalings.shape, dtype=np.float64)
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
     if s1 is None:
@@ -143,11 +144,8 @@ def quad_model(alphas, scalings,
 
     ierrors = np.int32(ERRORS.index(errors))
 
-    ierr = c_pyquasoare.quad_model(ierrors, alphas, scalings,
-                                   perturb,
-                                   a_matrix_noscaling,
-                                   b_matrix_noscaling,
-                                   c_matrix_noscaling,
+    ierr = c_pyquasoare.quad_model(ierrors, alphas, flux_scalings,
+                                   perturb, coefs_noscaling,
                                    s0, smin, smax,
                                    timestep, niter, s1, fluxes)
 

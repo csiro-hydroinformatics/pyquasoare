@@ -230,15 +230,16 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector,
 
 
 # Integrate reservoir equation over 1 time step and compute associated fluxes
-def quad_integrate(alphas, scalings,
-                   a_matrix_noscaling,
-                   b_matrix_noscaling,
-                   c_matrix_noscaling,
+def quad_integrate(alphas, scalings, coefs,
                    t0, s0, timestep, debug=False):
 
     nalphas = len(alphas)
     alpha_min = alphas[0]
     alpha_max = alphas[nalphas-1]
+
+    a_matrix_noscaling = coefs[:, :, 0].T
+    b_matrix_noscaling = coefs[:, :, 1].T
+    c_matrix_noscaling = coefs[:, :, 2].T
 
     # Initial interval
     jmax = nalphas-2
@@ -417,10 +418,8 @@ def quad_integrate(alphas, scalings,
     return nit, s_end, fluxes
 
 
-def quad_model(alphas, scalings,
-               a_matrix_noscaling,
-               b_matrix_noscaling,
-               c_matrix_noscaling, s0, timestep,
+def quad_model(alphas, scalings, coefs,
+               s0, timestep,
                errors="ignore", debug=False):
     assert errors in ERRORS
     nval = scalings.shape[0]
@@ -432,10 +431,8 @@ def quad_model(alphas, scalings,
     for t in range(nval):
         try:
             niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings[t],
-                                                        a_matrix_noscaling,
-                                                        b_matrix_noscaling,
-                                                        c_matrix_noscaling,
-                                                        t0, s0, timestep,
+                                                        coefs, t0, s0,
+                                                        timestep,
                                                         debug=debug)
         except Exception as err:
             niter[t] = -1

@@ -6,9 +6,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <float.h>
 
 #include "c_quasoare_utils.h"
+#include "c_quasoare_core.h"
 
-int c_steady_state(double nu, double a, double b, double c, double steady[2]);
+int c_quad_steady(double a, double b, double c, double steady[2]);
+
+int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nscalings,
+                           double * alphas,
+                           double * coefs,
+                           double * flux_scalings,
+                           double * buff,
+                           double * steady);
 
 #endif
