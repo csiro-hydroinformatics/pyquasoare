@@ -5,14 +5,14 @@
 
 /**
 * Code to solve the unit inflow quadratic routing reservoir:
-* dS/dt = 1-S^2
+* dS/dt = 1 - S^2
 *
 * The reservoir has 2 flux functions:
 * f1(S) = 1  (constant)
 * f2(S) = -S^2
 *
 * The analytical solution of this reservoir is
-* S(t) = [s0+tanh(t)]/[1+s0*tanh(t)]
+* S(t) = [s0 + tanh(t)] / [1 + s0*tanh(t)]
 *
 * This model can be solved exactly with Quasoare.
 */
@@ -20,28 +20,26 @@
 
 int main(){
     int nalphas = 4;
-    double alphas[4]={0., 0.4, 0.8, 1.2};
+    double alphas[4] = {0., 0.4, 0.8, 1.2};
 
-    /* Coefficient matrices : 4 alphas x 2 fluxes -> 3x2 matrices*/
+    /* Coefficient matrices : 2 fluxes x 3 interpolation bands x 3 coefs
+     * containing 18 elements */
     int nfluxes = 2;
-    double amat[6], bmat[6], cmat[6];
+    double coefs[18];
 
     /* Interpolation coefficients */
     /* .. quadratic terms (only for f2) */
     fprintf(stdout, ".. Initialise coefficients\n");
-    amat[0] = 0; amat[1] = -1.;
-    amat[2] = 0; amat[3] = -1.;
-    amat[4] = 0; amat[5] = -1.;
 
-    /* .. linear terms (none) */
-    bmat[0] = 0; bmat[1] = 0;
-    bmat[2] = 0; bmat[3] = 0;
-    bmat[4] = 0; bmat[5] = 0;
+    /* First flux : f1(S) = 1  for all bands */
+    coefs[0] = 0; coefs[1] = 0; coefs[2] = 1;
+    coefs[3] = 0; coefs[4] = 0; coefs[5] = 1;
+    coefs[6] = 0; coefs[7] = 0; coefs[8] = 1;
 
-    /* .. constant terms (only for f1) */
-    cmat[0] = 1; cmat[1] = 0;
-    cmat[2] = 1; cmat[3] = 0;
-    cmat[4] = 1; cmat[5] = 0;
+    /* Second flux : f2(S) = -S^2  for all bands */
+    coefs[9] = -1; coefs[10] = 0; coefs[11] = 0;
+    coefs[12] = -1; coefs[13] = 0; coefs[14] = 0;
+    coefs[15] = -1; coefs[16] = 0; coefs[17] = 0;
 
     /* Setup ODE */
     double s0 = 0.1;
@@ -61,16 +59,20 @@ int main(){
 
     /* integrate */
     fprintf(stdout, ".. Run model\n");
-    for(i=0; i<nval; i++){
-        t1 = t0+timestep*i;
-        omega = tanh(t1);
-        anl = (s0+omega)/(1+s0*omega);
+    for(i=0; i<nval; i++) {
+        t1 = t0 + timestep * i;
+
+        /* Store level and fluxes - QuaSoARe solution */
         c_quad_integrate(nalphas, nfluxes, alphas, scalings,
-                            amat, bmat, cmat, t0, s0, t1,
-                            niter, s1, fluxes);
+                         coefs, t0, s0, t1,
+                         niter, s1, fluxes);
+
+        /* Store level - Analytical solution */
+        omega = tanh(t1);
+        anl = (s0 + omega) / (1 + s0 * omega);
 
         fprintf(fp, "%0.8f,%0.8f,%0.8f,%0.8f,%0.8f\n",
-                    t1, s1[0], fluxes[0], fluxes[1], anl);
+                t1, s1[0], fluxes[0], fluxes[1], anl);
     }
     fclose(fp);
     fprintf(stdout, ".. process completed\n");
