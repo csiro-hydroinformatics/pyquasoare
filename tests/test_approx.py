@@ -414,6 +414,27 @@ def test_quad_coefficients_edge_cases(allclose):
     assert allclose(fm2, fmid[0])
 
 
+def test_quad_coefficients_smooth(allclose, reservoir_function):
+    fname, fun, dfun, _, _, (beta0, beta1) = reservoir_function
+
+    betas = np.array([beta0, beta1]).astype(float)
+    fbetas = np.array([fun(beta0), fun(beta1)])
+    dfbetas = np.array([dfun(beta0), dfun(beta1)])
+
+    coefs = approx.quad_coefficients_smooth(betas, fbetas, dfbetas)
+
+    xx = np.linspace(beta0, beta1, 1000)
+    alphas = np.array([beta0, (beta0 + beta1) / 2, beta1])
+    yy = approx.quad_fun_from_matrix(alphas, coefs[None, :, :], xx)
+
+    import matplotlib.pyplot as plt
+    plt.plot(betas, fbetas, "o")
+    plt.plot(xx, yy)
+    plt.show()
+    import pdb; pdb.set_trace()
+
+
+
 def test_quad_coefficient_matrix(allclose, reservoir_function):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
     funs = [lambda x: inflow * np.ones_like(x), fun]

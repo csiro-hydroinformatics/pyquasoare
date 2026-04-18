@@ -77,6 +77,49 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
      return 0;
 }
 
+int c_quad_coefficients_smooth(double beta0, double beta1,
+                               double f0, double f1,
+                               double df0, double df1,
+                               double coefs1[3], double coefs2[3]) {
+    if(beta1 <= beta0) {
+        coefs1[0] = c_get_nan();
+        coefs1[1] = c_get_nan();
+        coefs1[2] = c_get_nan();
+        coefs2[0] = c_get_nan();
+        coefs2[1] = c_get_nan();
+        coefs2[2] = c_get_nan();
+        return QUASOARE_NONINCREASING_NODES;
+    }
+    /* Compute two sets of coefficients that performs
+     * a continuous piecewise quadratic interpolation
+     * with values in beta0 and beta1 equal to f0 and f1,
+     * derivatives equal to df0 and df1. The interpolation
+     * relies on a basis of 4 piecewise quadratic functions
+     * defined in [0, 1]. Each function is defined by two sets
+     * of coefficients:
+     * g1 : [  -2, 0, 1] / [  2, -4, 2]
+     * g2 : [   2, 0, 0] / [ -2,  4, -1]
+     * g3 : [-1.5, 1, 0] / [0.5, -1, 0.5]
+     * g4 : [-0.5, 0, 0] / [1.5, -2, 0.5]
+     *
+     * To translate a function defined on x in [beta0, beta1]
+     * to [0, 1], we introduce x = beta0 + (beta1 - beta0) u:
+     * This leads to
+     * df/du = df/dx (beta1 - beta0)
+     */
+    double delta = beta1 - beta0;
+    df0 *= delta;
+    df1 *= delta;
+
+    coefs1[0] = -2 * f0 + 2 * f1 - 1.5 * df0 - 0.5 * df1;
+    coefs1[1] = df0;
+    coefs1[2] = f0;
+    coefs2[0] = 2 * f0 - 2 * f1 + 0.5 * df0 + 1.5 * df1;
+    coefs2[1] = -4 * f0 + 4 * f1 - df0 - 2 * df1;
+    coefs2[2] = 2 * f0 - f1 + 0.5 * df0 + 0.5 * df1;
+
+    return 0;
+}
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c,
                           double Delta, double qD, double sbar,
