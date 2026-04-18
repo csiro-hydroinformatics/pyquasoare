@@ -109,12 +109,16 @@ jobs:
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_pyquasoare
           cd $GITHUB_WORKSPACE
+
           echo "--- pyquasoare examples : located in $PWD ---"
+          echo "... python examples"
           python examples/run_all_examples.py
           
+          echo "... C example quadroute"
           cd examples/quadroute
           ./compile_unix.sh
 
+          echo "... C example vicmod"
           cd ../vicmod
           ./compile_unix.sh
         
