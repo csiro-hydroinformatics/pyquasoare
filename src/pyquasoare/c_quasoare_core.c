@@ -9,7 +9,7 @@ double c_quad_grad(double a, double b, double c, double s){
     return notnan(s) ? 2. * a * s + b : c_get_nan();
 }
 
-int c_quad_coefficient_tangent(double a, double b, double c, double sref, double coefs[3]) {
+int c_quad_coefficients_tangent(double a, double b, double c, double sref, double coefs[3]) {
     coefs[0] = 0;
     coefs[1] = c_quad_grad(a, b, c, sref);
     coefs[2] = c_quad_fun(a, b, c, sref) - sref * coefs[1];
@@ -18,7 +18,7 @@ int c_quad_coefficient_tangent(double a, double b, double c, double sref, double
 
 double c_quad_fun_tangent(double a, double b, double c, double sref, double s){
     double coefs[3];
-    c_quad_coefficient_tangent(a, b, c, sref, coefs);
+    c_quad_coefficients_tangent(a, b, c, sref, coefs);
     return c_quad_fun(coefs[0], coefs[1], coefs[2], s);
 }
 
@@ -254,7 +254,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double a=0., b=0., c=0.;
     double coefs_tangent[3];
     double constants[3], Delta, qD, sbar;
-    double funval=0., funval_prev=0., grad=0.;
+    double funval=0., funval_prev=0.;
     double alpha0, alpha1, scl;
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
@@ -323,7 +323,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 b = coefs_noscaling[idx + 1] * scl;
                 c = coefs_noscaling[idx + 2] * scl;
 
-                c_quad_coefficient_tangent(a, b, c, alpha_min, coefs_tangent);
+                c_quad_coefficients_tangent(a, b, c, alpha_min, coefs_tangent);
                 a = coefs_tangent[0];
                 b = coefs_tangent[1];
                 c = coefs_tangent[2];
@@ -334,7 +334,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 b = coefs_noscaling[idx + 1] * scl;
                 c = coefs_noscaling[idx + 2] * scl;
 
-                c_quad_coefficient_tangent(a, b, c, alpha_max, coefs_tangent);
+                c_quad_coefficients_tangent(a, b, c, alpha_max, coefs_tangent);
                 a = coefs_tangent[0];
                 b = coefs_tangent[1];
                 c = coefs_tangent[2];

@@ -9,6 +9,7 @@
 #include <float.h>
 
 #include "c_quasoare_utils.h"
+#include "c_quasoare_core.h"
 
 int c_quad_steady(double a, double b, double c, double steady[2]);
 

@@ -78,7 +78,7 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
             if(j == -1) {
                 al0 = -c_get_inf();
                 al1 = alphas[0];
-                c_quad_coefficient_tangent(a, b, c, al1, coefs_tangent);
+                c_quad_coefficients_tangent(a, b, c, al1, coefs_tangent);
                 a = coefs_tangent[0];
                 b = coefs_tangent[1];
                 c = coefs_tangent[2];
@@ -86,7 +86,7 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
             else if (j == nalphas - 1) {
                 al0 = alphas[j];
                 al1 = c_get_inf();
-                c_quad_coefficient_tangent(a, b, c, al0, coefs_tangent);
+                c_quad_coefficients_tangent(a, b, c, al0, coefs_tangent);
                 a = coefs_tangent[0];
                 b = coefs_tangent[1];
                 c = coefs_tangent[2];
