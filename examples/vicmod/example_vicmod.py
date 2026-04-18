@@ -71,7 +71,7 @@ pnames = ["logSmax", "logkb", "alpha", "beta", "logGamma"]
 pmin = np.array([1, -1., 0., 0., -1.])[None, :]
 pmax = np.array([2., 1., 1., 2., 1.])[None, :]
 nparams = len(pnames)
-params = np.random.uniform(0, 1, size=(nsamples, nparams))*(pmax-pmin)+pmin
+params = np.random.uniform(0, 1, size=(nsamples, nparams)) * (pmax - pmin) + pmin
 params = pd.DataFrame(params, columns=pnames)
 
 # Run model for each parameter set
@@ -79,49 +79,50 @@ tot = 0
 for iparam, param in params.iterrows():
     print(f"Running parameter {iparam+1}/{nsamples}")
     logSmax, logKb, alpha, beta, logGamma = param.values
+
     Smax = 10**logSmax
     kb = 10**logKb
     gamma = 10**logGamma
 
     # Flux functions
     # .. rainfall inputs
-    f1 = lambda u: 1.
+    f1 = lambda u: 1. + u * 0.
     # .. Effective rainfall
-    mm = lambda x: min(1, max(0, x))
-    f2 = lambda u: -1+(1-mm(u))**alpha
+    mm = lambda x: np.clip(x, 0, 1)
+    f2 = lambda u: -1 + (1 - mm(u))**alpha
     # .. Baseflow
     f3 = lambda u: -mm(u)**beta
     # .. Actual ET
-    f4 = lambda u: -1+(1-mm(u))**gamma
+    f4 = lambda u: -1+(1 - mm(u))**gamma
 
     fluxes = [f1, f2, f3, f4]
 
     # Defines scaling factors for each flux
     scalings = np.column_stack([rain/Smax, rain/Smax, \
-                                    np.ones(nval)*kb/Smax, evap/Smax])
+                                np.ones(nval)*kb/Smax, evap/Smax])
 
     # Run the model using QuaSoare
     # .. Quadratic piecewise interpolation of the flux functions
     start = time.time()
-    amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # .. Ode solver
     u0 = 1./2
-    niter, u1, fx = models.quad_model(alphas, scalings, \
-                                    amat, bmat, cmat, u0, 1.)
+    niter, u1, fx = models.quad_model(alphas, scalings,
+                                      coefs, u0, 1.)
     end = time.time()
-    tot += end-start
+    tot += end - start
 
     # Convert simulated flux
-    sims = np.column_stack([u1, -fx[:, 1]*Smax, \
-                                -fx[:, 2]*Smax, -fx[:, 3]*Smax])
-    sims = pd.DataFrame(sims, columns=["Store", "Peff", "Bflow", "AET"], \
-                            index=day)
+    sims = np.column_stack([u1, -fx[:, 1]*Smax,
+                            -fx[:, 2]*Smax, -fx[:, 3]*Smax])
+    sims = pd.DataFrame(sims, columns=["Store", "Peff", "Bflow", "AET"],
+                        index=day)
 
     # Plots
     # .. Check interpolation
     xx = np.linspace(0, 1, 500)
-    yhats = approx.quad_fun_from_matrix(alphas, amat, bmat, cmat, xx)
+    yhats = approx.quad_fun_from_matrix(alphas, coefs, xx)
 
     plt.close("all")
     fig, axs = plt.subplots(ncols=3, figsize=(15, 5), layout="constrained")
@@ -133,15 +134,16 @@ for iparam, param in params.iterrows():
         ax.set(title=f"Function {iax+1}")
         ax.legend()
 
-    ftitle = f"Smax={Smax:0.1e} Kb={kb:0.1e} alpha={alpha:0.1e} beta={beta:0.1e} gamma={gamma:0.1e}"
+    ftitle = f"Smax={Smax:0.1e} Kb={kb:0.1e} alpha={alpha:0.1e}"\
+             + f" beta={beta:0.1e} gamma={gamma:0.1e}"
     fig.suptitle(ftitle, fontweight="bold")
     fp = fimg / f"VIC_param{iparam+1}_fluxes.png"
     fig.savefig(fp)
 
     # .. simulations
     plt.close("all")
-    fig, axs = plt.subplots(nrows=sims.shape[1], figsize=(15, 10),\
-                                layout="constrained", sharex=True)
+    fig, axs = plt.subplots(nrows=sims.shape[1], figsize=(15, 10),
+                            layout="constrained", sharex=True)
     for iax, ax in enumerate(axs):
         se = sims.iloc[:, iax]
         sims.iloc[:, iax].plot(ax=ax, legend=False)
