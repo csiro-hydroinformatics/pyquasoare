@@ -102,21 +102,41 @@ int c_quad_coefficients_smooth(double beta0, double beta1,
      * g3 : [-1.5, 1, 0] / [0.5, -1, 0.5]
      * g4 : [-0.5, 0, 0] / [1.5, -2, 0.5]
      *
-     * To translate a function defined on x in [beta0, beta1]
-     * to [0, 1], we introduce x = beta0 + (beta1 - beta0) u:
+     * To translate a function defined for x in [beta0, beta1]
+     * to [0, 1], we introduce u = (x - beta0) / (beta1 - beta0) = m + s x
      * This leads to
-     * df/du = df/dx (beta1 - beta0)
+     * a u^2 + b u + c = a (m + s x)^2 + b (m + s x) + c
+     *                 = a s^2 x^2 + (b s + 2 a m s) x + a m^2 + b m + c
+     * Hence
+     * a -> a s^2
+     * b -> b s + 2 a m s
+     * c -> a m^2 + b m + c
+     *
+     * Also, we have x = (u - m) / s hence
+     * df/du = df/dx 1/s
      */
     double delta = beta1 - beta0;
+    double s = 1./delta;
+    double m = -beta0 * s;
+    double s_sq = s * s;
+    double m_sq = m * m;
+
     df0 *= delta;
     df1 *= delta;
 
-    coefs1[0] = -2 * f0 + 2 * f1 - 1.5 * df0 - 0.5 * df1;
-    coefs1[1] = df0;
-    coefs1[2] = f0;
-    coefs2[0] = 2 * f0 - 2 * f1 + 0.5 * df0 + 1.5 * df1;
-    coefs2[1] = -4 * f0 + 4 * f1 - df0 - 2 * df1;
-    coefs2[2] = 2 * f0 - f1 + 0.5 * df0 + 0.5 * df1;
+    double a1 = -2 * f0 + 2 * f1 - 1.5 * df0 - 0.5 * df1;
+    double b1 = df0;
+    double c1 = f0;
+    coefs1[0] = a1 * s_sq;
+    coefs1[1] = b1 * s + 2 * a1 * m * s;
+    coefs1[2] = a1 * m_sq + b1 * m + c1;
+
+    double a2 = 2 * f0 - 2 * f1 + 0.5 * df0 + 1.5 * df1;
+    double b2 = -4 * f0 + 4 * f1 - df0 - 2 * df1;
+    double c2 = 2 * f0 - f1 + 0.5 * df0 + 0.5 * df1;
+    coefs2[0] = a2 * s_sq;
+    coefs2[1] = b2 * s + 2 * a2 * m * s;
+    coefs2[2] = a2 * m_sq + b2 * m + c2;
 
     return 0;
 }

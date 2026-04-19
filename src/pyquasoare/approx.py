@@ -194,6 +194,32 @@ def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
     return coefs
 
 
+def quad_alphas_smooth(betas, out=None):
+    """ Compute the interpolation nodes used in quad_coefficients_smooth
+
+    Parameters
+    -----------
+    betas : numpy.ndarray
+        Interpolation nodes
+    out : numpy.ndarray
+        In place output result.
+    Returns
+    -----------
+    coefs : np.ndarray
+        1D array containing (2*nbetas - 1) interpolation nodes
+
+    See Also
+    --------
+    quad_coefficients_smooth : Interpolation nodes.
+
+    """
+    nbetas = len(betas)
+    alphas = np.empty(2 * nbetas - 1) if out is None else out
+    alphas[::2] = betas
+    alphas[1::2] = (betas[:-1] + betas[1:]) / 2
+    return alphas
+
+
 def quad_coefficients_smooth(betas, fbetas, dfbetas, out=None):
     """ Compute the interpolation coefficients of a piecewise
     quadratic interpolating function given values and derivatives
@@ -208,7 +234,8 @@ def quad_coefficients_smooth(betas, fbetas, dfbetas, out=None):
     Parameters
     -----------
     betas : numpy.ndarray
-        Interpolation nodes
+        Interpolation nodes where values and derivatives
+        are matched.
     fbetas : float
         Function values at interpolation nodes
     dfbetas : float
@@ -218,7 +245,11 @@ def quad_coefficients_smooth(betas, fbetas, dfbetas, out=None):
     Returns
     -----------
     coefs : np.ndarray
-        2D array containing (2*nbetas - 1) triplets (a, b, c).
+        2D array containing 2*nbetas triplets (a, b, c).
+
+    See Also
+    --------
+    quad_alphas_smooth : Interpolation nodes.
 
     """
     nbetas = len(betas)
