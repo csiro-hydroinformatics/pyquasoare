@@ -18,6 +18,11 @@ int c_quad_coefficients(int approx_opt, double a0, double a1,
                             double f0, double f1, double fm,
                             double coefs[3]);
 
+int c_quad_coefficients_smooth(double beta0, double beta1,
+                               double f0, double f1,
+                               double df0, double df1,
+                               double coefs1[3], double coefs2[3]);
+
 double c_quad_delta_t_max(double a, double b, double c,
                             double Delta, double qD, double sbar, double s0);
 

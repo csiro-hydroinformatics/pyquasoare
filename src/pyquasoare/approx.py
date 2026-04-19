@@ -194,6 +194,75 @@ def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
     return coefs
 
 
+def quad_alphas_smooth(betas, out=None):
+    """ Compute the interpolation nodes used in quad_coefficients_smooth
+
+    Parameters
+    -----------
+    betas : numpy.ndarray
+        Interpolation nodes
+    out : numpy.ndarray
+        In place output result.
+    Returns
+    -----------
+    coefs : np.ndarray
+        1D array containing (2*nbetas - 1) interpolation nodes
+
+    See Also
+    --------
+    quad_coefficients_smooth : Interpolation nodes.
+
+    """
+    nbetas = len(betas)
+    alphas = np.empty(2 * nbetas - 1) if out is None else out
+    alphas[::2] = betas
+    alphas[1::2] = (betas[:-1] + betas[1:]) / 2
+    return alphas
+
+
+def quad_coefficients_smooth(betas, fbetas, dfbetas, out=None):
+    """ Compute the interpolation coefficients of a piecewise
+    quadratic interpolating function given values and derivatives
+    at interpolation nodes.
+
+    The interpolation creates two sets of coefficients for each
+    interpolation band. More precisely, for each couple [b0, b1]
+    in betas, two triplets (a1, b1, c1) and (a2, b2, c2) are
+    created. The first one is related to a quadratic function on
+    [b0, (b0+b1)/2], and the second for [(b0+b1)/2, b1].
+
+    Parameters
+    -----------
+    betas : numpy.ndarray
+        Interpolation nodes where values and derivatives
+        are matched.
+    fbetas : float
+        Function values at interpolation nodes
+    dfbetas : float
+        Function derivative at interpolation nodes
+    out : numpy.ndarray
+        In place output result.
+    Returns
+    -----------
+    coefs : np.ndarray
+        2D array containing 2*nbetas triplets (a, b, c).
+
+    See Also
+    --------
+    quad_alphas_smooth : Interpolation nodes.
+
+    """
+    nbetas = len(betas)
+    coefs = np.zeros((2 * (nbetas - 1), 3)) if out is None else out
+    ierr = c_pyquasoare.quad_coefficients_smooth(betas, fbetas, dfbetas,
+                                                 coefs)
+    if ierr > 0:
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError("c_pyquasoare.quad_coefficients_smooth"
+                         + f" returns {ierr} ({mess})")
+    return coefs
+
+
 def quad_coefficient_matrix(funs, alphas, approx_opt=1, out=None):
     """ Compute interpolation coefficients for a set of flux functions and
     multiple interpolation bands.

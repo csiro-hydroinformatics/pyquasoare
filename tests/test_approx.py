@@ -75,8 +75,8 @@ def reservoir_function(request, selfun):
 
     elif name == "stiff":
         lam = 100
-        fun = lambda x: -lam*x
-        dfun = lambda x: -lam
+        fun = lambda x: -lam * x
+        dfun = lambda x: -lam + 0 * x
         inflow = 1.
         sol = lambda t, s0: 1./lam-(1./lam-s0)*np.exp(-lam*t)
 
@@ -84,7 +84,7 @@ def reservoir_function(request, selfun):
         alpha0, alpha1 = (0.0, 1.0)
         w = 2*math.pi
         fun = lambda x: np.sin(w*x)
-        dfun = lambda x: -w*np.cos(w*x)
+        dfun = lambda x: w*np.cos(w*x)
         inflow = 0.
         tmp = lambda t, s0: np.arccos((np.cos(w*s0)-np.tanh(w*t)) \
                                         /(1-np.cos(w*s0)*np.tanh(w*t)))/w
@@ -93,16 +93,16 @@ def reservoir_function(request, selfun):
     elif name == "recip":
         alpha0, alpha1 = (0., 1.0)
         offset = 0.05
-        fun = lambda x: -offset/(1+offset-x)
-        dfun = lambda x: offset/(1+offset-x)**2
+        fun = lambda x: -offset / (1 + offset - x)
+        dfun = lambda x: - offset /(1 + offset - x)**2
         inflow = 0.
         sol = None
 
     elif name == "recipquad":
         alpha0, alpha1 = (0., 1.0)
         offset = 0.05
-        fun = lambda x: -offset**2/(1+offset-x)**2
-        dfun = lambda x: 2*offset**2/(1+offset-x)**3
+        fun = lambda x: -offset**2/(1 + offset - x)**2
+        dfun = lambda x: - 2 * offset**2 / (1 + offset - x)**3
         inflow = 0.
         sol = None
 
@@ -412,6 +412,28 @@ def test_quad_coefficients_edge_cases(allclose):
     co = approx.quad_coefficients(alphas, falphas, fmid, 2)[0]
     fm2 = approx.quad_fun(co, 0.5)
     assert allclose(fm2, fmid[0])
+
+
+def test_quad_coefficients_smooth(allclose, reservoir_function):
+    fname, fun, dfun, _, _, (beta0, beta1) = reservoir_function
+
+    nbetas = 10
+    betas = np.linspace(beta0, beta1, nbetas)
+    fbetas = np.array([fun(b) for b in betas])
+    dfbetas = np.array([dfun(b) for b in betas])
+
+    coefs = approx.quad_coefficients_smooth(betas, fbetas, dfbetas)
+
+    alphas = approx.quad_alphas_smooth(betas)
+    eps = 1e-7
+    for ib, b in enumerate(betas):
+        xx = np.array([b - eps, b, b + eps])
+        yy = approx.quad_fun_from_matrix(alphas, coefs[None, :, :], xx)
+        # Check value is matched
+        assert allclose(yy[1] , fbetas[ib])
+
+        # Check derivative is matched
+        assert allclose((yy[2] - yy[0]) / 2 / eps , dfbetas[ib], atol=5e-7)
 
 
 def test_quad_coefficient_matrix(allclose, reservoir_function):

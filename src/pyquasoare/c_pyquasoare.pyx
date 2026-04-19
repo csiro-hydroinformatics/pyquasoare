@@ -33,6 +33,11 @@ cdef extern from 'c_quasoare_core.h':
                                 double f0, double f1, double fm,
                                 double coefs[3])
 
+    int c_quad_coefficients_smooth(double beta0, double beta1,
+                                   double f0, double f1,
+                                   double df0, double df1,
+                                   double coefs1[3], double coefs2[3])
+
     double c_quad_delta_t_max(double a, double b, double c,
                                 double Delta, double qD, double ssr, double s0);
 
@@ -203,6 +208,45 @@ def quad_coefficients(int approx_opt,
         # Compute coefficients
         ierr = c_quad_coefficients(approx_opt, a0, a1, f0, f1, fm,
                                    <double*> np.PyArray_DATA(coefs[k]))
+        if ierr > 0:
+            return ierr
+
+    return 0
+
+
+def quad_coefficients_smooth(np.ndarray[double, ndim=1, mode='c'] betas not None,
+                             np.ndarray[double, ndim=1, mode='c'] fbetas not None,
+                             np.ndarray[double, ndim=1, mode='c'] dfbetas not None,
+                             np.ndarray[double, ndim=2, mode='c'] coefs not None):
+    cdef int k
+    cdef int ierr
+    cdef int nbetas = betas.shape[0]
+    cdef double b0
+    cdef double b1
+    cdef double f0
+    cdef double f1
+    cdef double df0
+    cdef double df1
+    assert fbetas.shape[0] == nbetas
+    assert dfbetas.shape[0] == nbetas
+    assert coefs.shape[0] == 2 * (nbetas - 1)
+    assert coefs.shape[1] == 3
+
+    for k in range(nbetas - 1):
+        # Get interpolation nodes
+        b0 = betas[k]
+        b1 = betas[k + 1]
+
+        # Get interpolated values
+        f0 = fbetas[k]
+        f1 = fbetas[k + 1]
+        df0 = dfbetas[k]
+        df1 = dfbetas[k + 1]
+
+        # Compute coefficients
+        ierr = c_quad_coefficients_smooth(b0, b1, f0, f1, df0, df1,
+                                          <double*> np.PyArray_DATA(coefs[2 * k]),
+                                          <double*> np.PyArray_DATA(coefs[2 * k + 1]))
         if ierr > 0:
             return ierr
 
