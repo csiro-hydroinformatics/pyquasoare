@@ -11,7 +11,7 @@ def test_readme_snipet():
         txt = fo.readlines()
 
     istarts = [iline + 1 for iline, line in enumerate(txt)
-              if line.strip() == "```python"]
+               if line.strip() == "```python"]
 
     # Test each snipet
     for isnip, istart in enumerate(istarts):
@@ -27,9 +27,8 @@ def test_readme_snipet():
 
         # Style
         cmd = f"flake8 {fsn}"
-        subprocess.check_call(cmd, shell=True)
+        subprocess.run(["flake8", fsn], check=True)
 
         # Run
-        cmd = f"python {fsn}"
-        subprocess.check_call(cmd, shell=True)
+        subprocess.run(["python", fsn], check=True)
 

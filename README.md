@@ -18,43 +18,57 @@ Lerat, J. (2025), Technical note: Quadratic Solution of the Approximate Reservoi
 - Git clone this repository and run `pip install .`
 
 # Basic use
-Solution of the production store from the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre:
+
+## Approximation of a function with a piecewise quadratic function:
+```python
+import numpy as np
+from pyquasoare import approx
+
+# We want to approximate a 6th order polynomial+
+funs = [lambda x: x - x**2 + x**6]
+
+# We select 20 nodes over [0, 1]
+nalphas = 20
+alphas = np.linspace(0., 1., nalphas)
+coefs = approx.quad_coefficient_matrix(funs, alphas)
+
+# Test the approximation
+xx = np.linspace(0, 1, 200)
+yy = approx.quad_fun_from_matrix(alphas, coefs, xx)
+```
+
+## Simulation using the production store of the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre
 
 ```python
-from pathlib import Path
-import math
 import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from pyquasoare import approx, models
-
-# Package root path (might need modification)
-froot = Path(__file__).parent.parent
 
 # The production store of the GR4J model is characterised by
 # the following differential equation:
 # dS / dt = P (1 - [S/X1]**2) - E S/X1 (2 - S/X1) - a (S/X1)**5
 # where S is the store volume (mm), X1 is the store capacity,
 # P and E are the rainfall and evapotranspiration (mm/day) and
-# a is constant set to 1/2.25**4/4 (~9.75e-3).
+# a is a constant set to 1/2.25**4/4 (~9.75e-3).
 #
 # If we introduce the following variables:
-# p = P/X1
-# e = E/X1
-# u = S/X1
+# p = P / X1
+# e = E / X1
+# u = S / X1
 # the previous equation becomes:
-# du / dt = p (1 - x**2) - e x (2 -x) - a x**5
+# du / dt = p (1 - u**2) - e u (2 - u) - a u**5
 # this equation has 3 fluxes:
-# * rainfall stored in store = p (1 - x**2)
-# * actual evapotranspiration = - e x (2-x)
-# * percolation = -a x**5
+# * rainfall infiltrated into the store : p (1 - u**2)
+# * actual evapotranspiration : - e u (2 - u)
+# * percolation : -a u**5
 
 X1 = 400
 
 fluxes = [
-    lambda x: 1 - x**2,
-    lambda x: -x * (2 - x),
-    lambda x: -(1. / 2.25)**5 / 4 * x**5
+    lambda u: 1 - u**2,
+    lambda u: -u * (2 - u),
+    lambda u: -(1. / 2.25)**5 / 4 * u**5
 ]
 
 # We are now solving this differential equation with QuaSoARe:
@@ -71,7 +85,7 @@ coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 nval = 1000
 time = pd.date_range("2000-01-01", freq="D", periods=nval)
 rain = np.maximum(np.random.exponential(8, size=nval) - 10, 0)
-evap = 2 + 1.5 * (np.sin(np.arange(nval) / 365.25 * 2 * math.pi) + 1)/2
+evap = 2 + 1.5 * (np.sin(np.arange(nval) / 365.25 * 2 * 6.28) + 1)/2
 
 # GR4J applies an interception function. This leads to
 rain_intercept = np.maximum(rain - evap, 0.)
@@ -96,23 +110,24 @@ sims = pd.DataFrame(np.column_stack([s1 * X1,
                                     -fx[:, 1] * X1,
                                     -fx[:, 2] * X1]),
                     index=time,
-                    columns=["store", "rain",
+                    columns=["store",
                              "infiltrated rain",
-                             "actual ET"])
+                             "actual ET",
+                             "percolation"])
 # Effective rainfall is the remaining of rainfall minus
 # infiltrated rainfall
 sims.loc[:, "effective rain"] = rain - sims.iloc[:, 1]
 
 # Plot results for the first 100 days
-# plt.close("all")
-# fig = plt.figure(figsize=(10, 10), layout="constrained")
-# axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
-#                          sharex=True)
-# for varname, ax in axs.items():
-#     sims.loc[:, varname].plot(ax=ax)
-#     ax.set(title=varname)
+plt.close("all")
+fig = plt.figure(figsize=(10, 10), layout="constrained")
+axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
+                         sharex=True)
+for varname, ax in axs.items():
+    sims.loc[:, varname].plot(ax=ax)
+    ax.set(title=varname)
 
-# fig.savefig("simulation.png")
+fig.savefig("simulation.png")
 ```
 
 # Generation of results supporting the QuaSoARe paper
