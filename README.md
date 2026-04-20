@@ -27,18 +27,17 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pyquasoare import approx, models
-from hydrodiy.io import csv
 
 # Package root path (might need modification)
 froot = Path(__file__).parent.parent
 
-# The production store of the GR4J model is characterised by 
+# The production store of the GR4J model is characterised by
 # the following differential equation:
 # dS / dt = P (1 - [S/X1]**2) - E S/X1 (2 - S/X1) - a (S/X1)**5
 # where S is the store volume (mm), X1 is the store capacity,
-# P and E are the rainfall and evapotranspiration (mm/day) and 
-# a is constant set to 2.25**4/4 (=6.407).
-# 
+# P and E are the rainfall and evapotranspiration (mm/day) and
+# a is constant set to 1/2.25**4/4 (~9.75e-3).
+#
 # If we introduce the following variables:
 # p = P/X1
 # e = E/X1
@@ -54,53 +53,66 @@ X1 = 400
 
 fluxes = [
     lambda x: 1 - x**2,
-    lambda x: -x*(2-x),
-    lambda x: -2.25**4/4*x
+    lambda x: -x * (2 - x),
+    lambda x: -(1. / 2.25)**5 / 4 * x**5
 ]
 
 # We are now solving this differential equation with QuaSoARe:
 
-# Definition of interpolation points
+# 1. Definition of interpolation points
 nalphas = 20
 alphas = np.linspace(0., 1.2, nalphas)
 
-# Quadratic piecewise interpolation of the flux functions
-amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+# 2. Quadratic piecewise interpolation of the flux functions
+coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
-# Creating random rainfall and PET data
+# 3. Processing rainfall and PET data
+# .. creating random data for the example
 nval = 1000
-rain = np.maximum(np.random.exponential(8, size=nval) - 2, 0)
-evap = 2 + 2 * (np.sin(np.arange(nval)/365.25 * 2 * math.pi) + 1)/2 
+time = pd.date_range("2000-01-01", freq="D", periods=nval)
+rain = np.maximum(np.random.exponential(8, size=nval) - 10, 0)
+evap = 2 + 1.5 * (np.sin(np.arange(nval) / 365.25 * 2 * math.pi) + 1)/2
 
-# GR4J applies an interception function. This 
-# leads to 
+# GR4J applies an interception function. This leads to
 rain_intercept = np.maximum(rain - evap, 0.)
 evap_intercept = np.maximum(evap - rain, 0.)
 
 # The scalings indicated below correspond to variables
-# 'p' and 'e' of the previous equation:
-scalings = np.column_stack([rain_intercept/X1, 
-                            evap_intercept/X1, 
+# 'p' and 'e' in the equations above:
+scalings = np.column_stack([rain_intercept / X1,
+                            evap_intercept / X1,
                             np.ones(nval)])
 
 # Run the model using QuaSoare
 s0 = 1./2
-niter, s1, fx = models.quad_model(alphas, scalings, \
-                                amat, bmat, cmat, s0, 1.)
+niter, s1, fx = models.quad_model(alphas, scalings,
+                                  coefs, s0, 1.)
 
-# All fluxes computed by QuaSoARe needs to be rescaled 
-# X1 because the equation was solved for variables 
+# All fluxes computed by QuaSoARe needs to be rescaled
+# by X1 because the equation was solved for variables
 # divided by X1 (see equations above)
-sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
-                            -fx[:, 1]*X1, -fx[:, 2]*X1])
+sims = pd.DataFrame(np.column_stack([s1 * X1,
+                                    fx[:, 0] * X1,
+                                    -fx[:, 1] * X1,
+                                    -fx[:, 2] * X1]),
+                    index=time,
+                    columns=["store", "rain",
+                             "infiltrated rain",
+                             "actual ET"])
+# Effective rainfall is the remaining of rainfall minus
+# infiltrated rainfall
+sims.loc[:, "effective rain"] = rain - sims.iloc[:, 1]
 
-# Plot results
+# Plot results for the first 100 days
 plt.close("all")
-fig, axs = plt.subplots(nrows=4, figsize=(15, 10), layout="constrained")
-for iax, ax in enumerate(axs):
-    ax.plot(time, sims[:, iax])
+fig = plt.figure(figsize=(10, 10), layout="constrained")
+axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
+                         sharex=True)
+for varname, ax in axs.items():
+    sims.loc[:, varname].plot(ax=ax)
+    ax.set(title=varname)
 
-plt.show()
+fig.savefig("simulation.png")
 ```
 
 # Generation of results supporting the QuaSoARe paper

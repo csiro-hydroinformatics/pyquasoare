@@ -1,21 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-## -- Script Meta Data --
-## Author  : ler015
-## Created : 2025-02-17 15:37:00.731309
-## Comment : Verification of QuaSoARe anaytical solution
-##
-## ------------------------------
+# -- Script Meta Data --
+# Author  : ler015
+# Created : 2025-02-17 15:37:00.731309
+# Comment : Verification of QuaSoARe anaytical solution
+#
+# ------------------------------
 
-
-import sys
 import math
 from pathlib import Path
 from string import ascii_letters as letters
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from pyquasoare import integrate, steady
@@ -58,9 +55,9 @@ def forward(a, b, c, s0, t):
     D = b**2 - 4 * a * c
     sD = -1 if D < 0 else 1
     qD = math.sqrt(abs(D)) / 2
-    w = np.tan(qD*t) if D < 0 else np.tanh(qD*t)
-    sb = -b/2/a
-    return sb+(s0-sb-sD*qD/a*w)/(1-a*(s0-sb)/qD*w)
+    w = np.tan(qD * t) if D < 0 else np.tanh(qD * t)
+    sb = -b / 2 / a
+    return sb + (s0 - sb - sD * qD / a * w) / (1 - a * (s0 - sb) / qD * w)
 
 # Initialise plot
 plt.close("all")
@@ -137,12 +134,12 @@ while nax < nrepeat:
             + f" a={a:0.2f}"\
             + f" b={b:0.2f}"\
             + f" c={c:0.2f}"\
-            + f" $\\Delta = {b**2-4*a*c:0.2f}$"
+            + f" $\\Delta = {b**2 - 4 * a * c:0.2f}$"
     xlabel = "Time $t$"
     ylabel = "Storage $S(t)$" if nax % ncols == 0 else ""
     ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
 
     nax += 1
 
-fp = fimg / f"verification.png"
+fp = fimg / "verification.png"
 fig.savefig(fp, dpi=fdpi)
