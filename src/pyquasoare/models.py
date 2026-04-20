@@ -88,12 +88,11 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     --------
     >>> from pyquasoare import approx, integrate, models
     >>> # Two fluxes : fixed inflow and outflow defined as a power function
-    >>> funs = [lambda x: 1., lambda x: -x**6/2]
+    >>> funs = [lambda x: np.ones_like(x), lambda x: -x**6/2]
     >>> # 10 interpolation nodes
     >>> alphas = np.linspace(0., 1.2, 10)
     >>> # Get interpolation coefficients for each band and each flux
-    >>> amat, bmat, cmat, cst = \
-             approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
+    >>> coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
     >>> # Define a simulation with 10 time steps
     >>> P = 10
     >>> # The inflow is a step response equal to 0 excel for the 3rd time step
@@ -103,7 +102,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     >>> # Run the model
     >>> s0 = 0.
     >>> timestep = 1.
-    >>> niter, s1, fx = quad_model(alphas, sc, amat, bmat, cmat, s0, timestep)
+    >>> niter, s1, fx = quad_model(alphas, sc, coefs, s0, timestep)
     >>> # ODE solution
     >>> s1
     array([ 0.        ,  0.        , 14.63001824,  0.92614791,  0.75904346,

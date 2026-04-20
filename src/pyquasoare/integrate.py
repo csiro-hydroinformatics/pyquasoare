@@ -68,9 +68,11 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
     --------
     >>> from pyquasoare import approx, integrate
     >>> fun = lambda x: 1-x**6/2
-    >>> a0, a1 = 0.6, 1.2
-    >>> f0, f1, fm = fun(a0), fun(a1), fun((a0+a1)/2)
-    >>> a, b, c = approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=1)
+    >>> alphas = np.array([0.6, 1.2])
+    >>> falphas = np.array([fun(a) for a in alphas])
+    >>> fmid = np.array([fun(alphas.mean())])
+    >>> coefs = approx.quad_coefficients(alphas, falphas, fmid, approx_opt=1)
+    >>> a, b, c = coefs[0]
     >>> Delta, qD, sbar = integrate.quad_constants(a, b, c)
     >>> t0 = 0; t = np.linspace(t0, 1, 10); s0 = 0.8
     >>> quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t)
@@ -120,10 +122,12 @@ def quad_delta_t_max(a, b, c, Delta, qD, sbar, s0):
     Examples
     --------
     >>> from pyquasoare import approx, integrate
-    >>> fun = lambda x: 1-x**6/2
-    >>> a0, a1 = 0.6, 1.2
-    >>> f0, f1, fm = fun(a0), fun(a1), fun((a0+a1)/2)
-    >>> a, b, c = approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=1)
+    >>> fun = lambda x: 1 - x**6 / 2
+    >>> alphas = np.array([0.6, 1.2])
+    >>> falphas = np.array([fun(a) for a in alphas])
+    >>> fmid = np.array([fun(alphas.mean())])
+    >>> coefs = approx.quad_coefficients(alphas, falphas, fmid, approx_opt=1)
+    >>> a, b, c = coefs[0]
     >>> Delta, qD, sbar = integrate.quad_constants(a, b, c)
     >>> quad_delta_t_max(a, b, c, Delta, qD, sbar, s0=0.8)
     inf
@@ -165,10 +169,12 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     Examples
     --------
     >>> from pyquasoare import approx, integrate
-    >>> fun = lambda x: 1-x**6/2
-    >>> a0, a1 = 0.6, 1.2
-    >>> f0, f1, fm = fun(a0), fun(a1), fun((a0+a1)/2)
-    >>> a, b, c = approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=1)
+    >>> fun = lambda x: 1 - x**6/2
+    >>> alphas = np.array([0.6, 1.2])
+    >>> falphas = np.array([fun(a) for a in alphas])
+    >>> fmid = np.array([fun(alphas.mean())])
+    >>> coefs = approx.quad_coefficients(alphas, falphas, fmid, approx_opt=1)
+    >>> a, b, c = coefs[0]
     >>> Delta, qD, sbar = integrate.quad_constants(a, b, c)
     >>> quad_inverse(a, b, c, Delta, qD, sbar, s0=0.8, s1=1.)
     0.3584916286499921
@@ -292,14 +298,12 @@ def quad_integrate(alphas, flux_scalings, coefs_noscaling,
     >>> from pyquasoare import approx, integrate
     >>> fun = lambda x: 1-x**6/2
     >>> alphas = np.array([0.6, 0.8, 1.2])
-    >>> amat, bmat, cmat, cst = \
-               approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
+    >>> coefs = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> sc = np.ones(1)
     >>> t0 = 0
     >>> s0 = 0.8
     >>> timestep = 1.
-    >>> niter, s1, fx = \
-               quad_integrate(alphas, sc, amat, bmat, cmat, t0, s0, timestep)
+    >>> niter, s1, fx = quad_integrate(alphas, sc, coefs, t0, s0, timestep)
     >>> niter
     1
     >>> s1
