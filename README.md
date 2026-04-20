@@ -41,8 +41,6 @@ yy = approx.quad_fun_from_matrix(alphas, coefs, xx)
 
 ```python
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from pyquasoare import approx, models
 
 # The production store of the GR4J model is characterised by
@@ -81,11 +79,10 @@ alphas = np.linspace(0., 1.2, nalphas)
 coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
 # 3. Processing rainfall and PET data
-# .. creating random data for the example
+# .. creating random climate data over 1000 days
 nval = 1000
-time = pd.date_range("2000-01-01", freq="D", periods=nval)
-rain = np.maximum(np.random.exponential(8, size=nval) - 10, 0)
-evap = 2 + 1.5 * (np.sin(np.arange(nval) / 365.25 * 2 * 6.28) + 1)/2
+rain = np.maximum(np.random.exponential(10, size=nval) - 10, 0)
+evap = 2 + 3 * (np.sin(np.arange(nval) / 365.25 * 2 * 6.28) + 1)/2
 
 # GR4J applies an interception function. This leads to
 rain_intercept = np.maximum(rain - evap, 0.)
@@ -97,37 +94,28 @@ scalings = np.column_stack([rain_intercept / X1,
                             evap_intercept / X1,
                             np.ones(nval)])
 
-# Run the model using QuaSoare
+# 4. Run the model using QuaSoare
 s0 = 1./2
 niter, s1, fx = models.quad_model(alphas, scalings,
                                   coefs, s0, 1.)
 
+# 5. Compute fluxes and store level
+store = s1 * X1
+
 # All fluxes computed by QuaSoARe needs to be rescaled
 # by X1 because the equation was solved for variables
 # divided by X1 (see equations above)
-sims = pd.DataFrame(np.column_stack([s1 * X1,
-                                    fx[:, 0] * X1,
-                                    -fx[:, 1] * X1,
-                                    -fx[:, 2] * X1]),
-                    index=time,
-                    columns=["store",
-                             "infiltrated rain",
-                             "actual ET",
-                             "percolation"])
-# Effective rainfall is the remaining of rainfall minus
-# infiltrated rainfall
-sims.loc[:, "effective rain"] = rain - sims.iloc[:, 1]
+infiltrated_rain = fx[:, 0] * X1
 
-# Plot results for the first 100 days
-plt.close("all")
-fig = plt.figure(figsize=(10, 10), layout="constrained")
-axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
-                         sharex=True)
-for varname, ax in axs.items():
-    sims.loc[:, varname].plot(ax=ax)
-    ax.set(title=varname)
+# actual ET and percolation are losses from the store,
+# so they are negative. The sign is changed below to
+# get positive fluxes
+actual_et = -fx[:, 1] * X1
+percolation = -fx[:, 2] * X1
 
-fig.savefig("simulation.png")
+# Effective rainfall is the sum between what remains
+# of rainfall after infiltration and percolation.
+effective_rain = rain - infiltrated_rain + percolation
 ```
 
 # Generation of results supporting the QuaSoARe paper
