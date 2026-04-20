@@ -27,6 +27,7 @@ jobs:
       
       - name: Create conda environment if needed
         run: |
+           sudo apt-get install libtinfo5
            source $CONDA/etc/profile.d/conda.sh
            conda env create -f env_pyquasoare.yml
 
@@ -110,7 +111,6 @@ jobs:
           conda activate env_pyquasoare
           cd $GITHUB_WORKSPACE
 
-
           echo "--- pyquasoare examples : located in $PWD ---"
           echo "... python examples"
           flake8 --ignore=E302,E305,E266,E265 examples
@@ -123,4 +123,3 @@ jobs:
           echo "... C example vicmod"
           cd ../vicmod
           ./compile_unix.sh
-        
