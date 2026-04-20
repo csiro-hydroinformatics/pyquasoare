@@ -25,7 +25,7 @@ from pathlib import Path
 import math
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from pyquasoare import approx, models
 
 # Package root path (might need modification)
@@ -104,15 +104,15 @@ sims = pd.DataFrame(np.column_stack([s1 * X1,
 sims.loc[:, "effective rain"] = rain - sims.iloc[:, 1]
 
 # Plot results for the first 100 days
-plt.close("all")
-fig = plt.figure(figsize=(10, 10), layout="constrained")
-axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
-                         sharex=True)
-for varname, ax in axs.items():
-    sims.loc[:, varname].plot(ax=ax)
-    ax.set(title=varname)
+# plt.close("all")
+# fig = plt.figure(figsize=(10, 10), layout="constrained")
+# axs = fig.subplot_mosaic([[vn] for vn in sims.columns],
+#                          sharex=True)
+# for varname, ax in axs.items():
+#     sims.loc[:, varname].plot(ax=ax)
+#     ax.set(title=varname)
 
-fig.savefig("simulation.png")
+# fig.savefig("simulation.png")
 ```
 
 # Generation of results supporting the QuaSoARe paper
