@@ -1,4 +1,4 @@
-import importlib
+import importlib.util
 
 __version__ = "2.0"
 

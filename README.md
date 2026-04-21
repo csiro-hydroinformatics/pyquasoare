@@ -18,89 +18,104 @@ Lerat, J. (2025), Technical note: Quadratic Solution of the Approximate Reservoi
 - Git clone this repository and run `pip install .`
 
 # Basic use
-Solution of the production store from the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre:
+
+## Approximation of a function with a piecewise quadratic function:
+```python
+import numpy as np
+from pyquasoare import approx
+
+# We want to approximate a 6th order polynomial+
+funs = [lambda x: x - x**2 + x**6]
+
+# We select 20 nodes over [0, 1]
+nalphas = 20
+alphas = np.linspace(0., 1., nalphas)
+coefs = approx.quad_coefficient_matrix(funs, alphas)
+
+# Test the approximation
+xx = np.linspace(0, 1, 200)
+yy = approx.quad_fun_from_matrix(alphas, coefs, xx)
+```
+
+## Simulation using the production store of the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre
 
 ```python
-from pathlib import Path
-import math
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from pyquasoare import approx, models
-from hydrodiy.io import csv
 
-# Package root path (might need modification)
-froot = Path(__file__).parent.parent
-
-# The production store of the GR4J model is characterised by 
+# The production store of the GR4J model is characterised by
 # the following differential equation:
 # dS / dt = P (1 - [S/X1]**2) - E S/X1 (2 - S/X1) - a (S/X1)**5
 # where S is the store volume (mm), X1 is the store capacity,
-# P and E are the rainfall and evapotranspiration (mm/day) and 
-# a is constant set to 2.25**4/4 (=6.407).
-# 
+# P and E are the rainfall and evapotranspiration (mm/day) and
+# a is a constant set to 1/2.25**4/4 (~9.75e-3).
+#
 # If we introduce the following variables:
-# p = P/X1
-# e = E/X1
-# u = S/X1
+# p = P / X1
+# e = E / X1
+# u = S / X1
 # the previous equation becomes:
-# du / dt = p (1 - x**2) - e x (2 -x) - a x**5
+# du / dt = p (1 - u**2) - e u (2 - u) - a u**5
 # this equation has 3 fluxes:
-# * rainfall stored in store = p (1 - x**2)
-# * actual evapotranspiration = - e x (2-x)
-# * percolation = -a x**5
+# * rainfall infiltrated into the store : p (1 - u**2)
+# * actual evapotranspiration : - e u (2 - u)
+# * percolation : -a u**5
 
 X1 = 400
 
 fluxes = [
-    lambda x: 1 - x**2,
-    lambda x: -x*(2-x),
-    lambda x: -2.25**4/4*x
+    lambda u: 1 - u**2,
+    lambda u: -u * (2 - u),
+    lambda u: -(1. / 2.25)**5 / 4 * u**5
 ]
 
 # We are now solving this differential equation with QuaSoARe:
 
-# Definition of interpolation points
+# 1. Definition of interpolation points
 nalphas = 20
 alphas = np.linspace(0., 1.2, nalphas)
 
-# Quadratic piecewise interpolation of the flux functions
-amat, bmat, cmat, cst = approx.quad_coefficient_matrix(fluxes, alphas)
+# 2. Quadratic piecewise interpolation of the flux functions
+coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
-# Creating random rainfall and PET data
+# 3. Processing rainfall and PET data
+# .. creating random climate data over 1000 days
 nval = 1000
-rain = np.maximum(np.random.exponential(8, size=nval) - 2, 0)
-evap = 2 + 2 * (np.sin(np.arange(nval)/365.25 * 2 * math.pi) + 1)/2 
+rain = np.maximum(np.random.exponential(10, size=nval) - 10, 0)
+evap = 2 + 3 * (np.sin(np.arange(nval) / 365.25 * 2 * 6.28) + 1)/2
 
-# GR4J applies an interception function. This 
-# leads to 
+# GR4J applies an interception function. This leads to
 rain_intercept = np.maximum(rain - evap, 0.)
 evap_intercept = np.maximum(evap - rain, 0.)
 
 # The scalings indicated below correspond to variables
-# 'p' and 'e' of the previous equation:
-scalings = np.column_stack([rain_intercept/X1, 
-                            evap_intercept/X1, 
+# 'p' and 'e' in the equations above:
+scalings = np.column_stack([rain_intercept / X1,
+                            evap_intercept / X1,
                             np.ones(nval)])
 
-# Run the model using QuaSoare
+# 4. Run the model using QuaSoare
 s0 = 1./2
-niter, s1, fx = models.quad_model(alphas, scalings, \
-                                amat, bmat, cmat, s0, 1.)
+niter, s1, fx = models.quad_model(alphas, scalings,
+                                  coefs, s0, 1.)
 
-# All fluxes computed by QuaSoARe needs to be rescaled 
-# X1 because the equation was solved for variables 
+# 5. Compute fluxes and store level
+store = s1 * X1
+
+# All fluxes computed by QuaSoARe needs to be rescaled
+# by X1 because the equation was solved for variables
 # divided by X1 (see equations above)
-sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
-                            -fx[:, 1]*X1, -fx[:, 2]*X1])
+infiltrated_rain = fx[:, 0] * X1
 
-# Plot results
-plt.close("all")
-fig, axs = plt.subplots(nrows=4, figsize=(15, 10), layout="constrained")
-for iax, ax in enumerate(axs):
-    ax.plot(time, sims[:, iax])
+# actual ET and percolation are losses from the store,
+# so they are negative. The sign is changed below to
+# get positive fluxes
+actual_et = -fx[:, 1] * X1
+percolation = -fx[:, 2] * X1
 
-plt.show()
+# Effective rainfall is the sum between what remains
+# of rainfall after infiltration and percolation.
+effective_rain = rain - infiltrated_rain + percolation
 ```
 
 # Generation of results supporting the QuaSoARe paper

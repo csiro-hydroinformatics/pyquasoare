@@ -47,6 +47,7 @@ logs/
 images/
 data/
 outputs/
+tests/snipets
 src/pyquasoare/c_pyquasoare.c
 .gitattributes
 *.json

@@ -7,11 +7,11 @@
 ## Comment : Run all example scripts
 ##
 ## ------------------------------
-import sys, os, re
+import re
 from pathlib import Path
 import subprocess
 
-from hydrodiy.io import csv, iutils
+from hydrodiy.io import iutils
 
 #----------------------------------------------------------------------
 # Config
@@ -40,7 +40,7 @@ lf = froot.glob("*/*.py")
 
 for f in lf:
     if re.search("run_all_examples", f.stem):
-        LOGGER.info("Skip "+ f.stem)
+        LOGGER.info("Skip " + f.stem)
         continue
 
     LOGGER.info(f"Running {f.stem}")
@@ -49,4 +49,3 @@ for f in lf:
 
 
 LOGGER.info("Process completed")
-

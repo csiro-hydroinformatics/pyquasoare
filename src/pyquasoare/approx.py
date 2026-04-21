@@ -174,14 +174,15 @@ def quad_coefficients(alphas, falphas, fmid, approx_opt=1,
     --------
     >>> from pyquasoare import approx
     >>> fun = lambda x: 1-x**6/2
-    >>> a0, a1 = 0.6, 1
-    >>> f0, f1, fm = fun(a0), fun(a1), fun((a0+a1)/2)
-    >>> approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=0)
-    array([ 0.     , -1.19168,  1.69168])
-    >>> approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=1)
-    array([-2.9792 ,  3.57504, -0.09584])
-    >>> approx.quad_coefficients(a0, a1, f0, f1, fm, approx_opt=2)
-    array([-3.2648,  4.032 , -0.2672])
+    >>> alphas = np.array([0.6, 1.])
+    >>> falphas = np.array([fun(a) for a in alphas])
+    >>> fmid = np.array([fun(alphas.mean())])
+    >>> approx.quad_coefficients(alphas, falphas, fmid, approx_opt=0)
+    array([[ 0.     , -1.19168,  1.69168]])
+    >>> approx.quad_coefficients(alphas, falphas, fmid, approx_opt=1)
+    array([[-2.9792 ,  3.57504, -0.09584]])
+    >>> approx.quad_coefficients(alphas, falphas, fmid, approx_opt=2)
+    array([[-3.2648,  4.032 , -0.2672]])
     """
     nalphas = len(alphas)
     coefs = np.zeros((nalphas - 1, 3)) if out is None else out
@@ -299,14 +300,11 @@ def quad_coefficient_matrix(funs, alphas, approx_opt=1, out=None):
     >>> alphas = np.array([0.6, 0.8, 1.])
     >>> coefs = approx.quad_coefficient_matrix([fun], alphas, approx_opt=1)
     >>> coefs[0, :, 0]
-    array([[-1.83755],
-           [-4.98155]])
+    array([-1.83755, -4.98155])
     >>> coefs[0, :, 1]
-    array([[2.03385],
-           [7.12215]])
+    array([2.03385, 7.12215])
     >>> coefs[0, :, 2]
-    array([[ 0.41788],
-           [-1.6406 ]])
+    array([ 0.41788, -1.6406 ])
     """
     nalphas = len(alphas)
     nfluxes = len(funs)
