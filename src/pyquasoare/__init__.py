@@ -1,7 +1,5 @@
 import importlib.util
 
-__version__ = "2.0"
-
 
 def has_c_module(raise_error=True):
     mname = "c_pyquasoare"

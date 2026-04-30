@@ -13,77 +13,31 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v3
+      - uses: actions/checkout@v6
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
-     
-      - name: Add conda to system path
-        run: |
-          # $CONDA is an environment variable pointing to the root of the miniconda directory
-          echo $CONDA/bin >> $GITHUB_PATH
-      
-      - name: Create conda environment if needed
-        run: |
-           sudo apt-get install libtinfo5
-           source $CONDA/etc/profile.d/conda.sh
-           conda env create -f env_pyquasoare.yml
+          python-version-file: "pyproject.toml"
 
-      - name : Install hydrodiy package in conda env 
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-          mkdir -p src
-          cd src
-          git clone https://github.com/csiro-hydroinformatics/hydrodiy.git
-          cd hydrodiy
-          echo "--- hydrodiy install : located in $PWD ---"
-          pip install -e .
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      - name : Install pygme package in conda env 
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-          mkdir -p src
-          cd src
-          git clone https://github.com/csiro-hydroinformatics/pygme.git
-          cd pygme
-          echo "--- pygme install : located in $PWD ---"
-          pip install -e .
+      - name : Install pyquasoare package 
+        run: uv sync --locked --all-extras --dev
 
-      - name : Install pyquasoare package in conda env 
+      - name: Lint with ruff
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-          echo "--- pyquasoare install : located in $PWD ---"
-          pip install -e .
-
-      - name: Lint with flake8
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-          flake8 src/pyquasoare
+          uv run ruff check src/pyquasoare
 
       - name: Run tests
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-          echo "--- pyquasoare test : located in $PWD ---"
-          pytest --ignore=src/pygme --ignore=src/hydrodiy --doctest-modules src
-          pytest --ignore=src/pygme --ignore=src/hydrodiy --ntry=100 --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
-      
+          uv run --locked pytest --doctest-modules src
+          uv run --locked pytest --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
+ 
       - name: Parse coverage report and create badge
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
+          uv run python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
 
       - name: Update gist badge
         run: |
@@ -107,13 +61,10 @@ jobs:
 
       - name: Run examples
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_pyquasoare
-          cd $GITHUB_WORKSPACE
-
+          set -e
           echo "--- pyquasoare examples : located in $PWD ---"
           echo "... python examples"
-          flake8 --ignore=E302,E305,E266,E265 examples
+          uv run ruff check examples
           python examples/run_all_examples.py
           
           echo "... C example quadroute"
