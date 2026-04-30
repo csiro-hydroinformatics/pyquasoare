@@ -46,7 +46,7 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t,
                 s = 1. if scaling is None else scaling[i]
                 df = dfluxes[i](y[-1]) * s
                 if hasattr(df, "squeeze"):
-                    df = f.squeeze()
+                    df = df.squeeze()
                 total += df
                 m[i, 0] = df
 
