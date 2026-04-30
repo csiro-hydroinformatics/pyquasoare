@@ -305,9 +305,9 @@ def quad_integrate(alphas, flux_scalings, coefs_noscaling,
     >>> timestep = 1.
     >>> niter, s1, fx = quad_integrate(alphas, sc, coefs, t0, s0, timestep)
     >>> niter
-    1
+    np.int32(1)
     >>> s1
-    1.1127726488382736
+    np.float64(1.1127726488382736)
     >>> fx
     array([0.31277265])
     """
