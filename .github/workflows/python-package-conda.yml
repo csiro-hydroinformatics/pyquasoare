@@ -32,6 +32,7 @@ jobs:
 
       - name: Run tests
         run: |
+          set -e
           uv run --locked pytest --doctest-modules src
           uv run --locked pytest --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
  
@@ -41,6 +42,7 @@ jobs:
 
       - name: Update gist badge
         run: |
+          set -e
           sed 's/\"/\\\"/g' coverage_badge.svg > coverage_badge.txt
           echo "{\"files\": {\"coverage_badge.svg\": {\"content\": \"$(cat coverage_badge.txt)\"}}}" > coverage_badge.json
           curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
