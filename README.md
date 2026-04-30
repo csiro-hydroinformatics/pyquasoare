@@ -14,8 +14,8 @@ Equation (QuaSoARe) method described in the following paper:
 Lerat, J. (2025), Technical note: Quadratic Solution of the Approximate Reservoir Equation (QuaSoARe), Hydrol. Earth Syst. Sci., 29, 2003–2021, https://doi.org/10.5194/hess-29-2003-2025, 2025.
 
 # Installation
-- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_pyquasoare.yml](env_pyquasoare.yml) file in this repository.
-- Git clone this repository and run `pip install .`
+- Create a suitable python environment. We recommend using [uv](https://docs.astral.sh/uv) combined with the package definition provided in the [pyproject.toml](pyproject.toml) file in this repository.
+- Install via `uv run pip install -e .`
 
 # Basic use
 
@@ -24,17 +24,43 @@ Lerat, J. (2025), Technical note: Quadratic Solution of the Approximate Reservoi
 import numpy as np
 from pyquasoare import approx
 
-# We want to approximate a 6th order polynomial+
-funs = [lambda x: x - x**2 + x**6]
+# We want to approximate a 6th order polynomial
+def fun(x):
+    return x - x**2 + x**6
 
-# We select 20 nodes over [0, 1]
+# 1. Chose 20 nodes over [0, 1]:
 nalphas = 20
 alphas = np.linspace(0., 1., nalphas)
-coefs = approx.quad_coefficient_matrix(funs, alphas)
+
+# 2. Evaluate the function at the nodes and 
+# at the mid point:
+fa = fun(alphas)
+fmid = fun((alphas[1:] + alphas[:-1]) / 2)
+
+# 3. Compute the quadratic interpolation coefficients
+coefs = approx.quad_coefficients(alphas, fa, fmid)
 
 # Test the approximation
 xx = np.linspace(0, 1, 200)
-yy = approx.quad_fun_from_matrix(alphas, coefs, xx)
+yy = approx.quad_fun_from_matrix(alphas, coefs[None, :, :], xx)
+
+# The approximation can also be defined to match function
+# values and derivatives leading to an interpolatin with a
+# continuous derivative (hence smooth).
+nbetas = 10
+betas = np.linspace(0., 1., nbetas)
+fb = fun(betas)
+
+def dfun(x):
+    return 1 - 2 * x + 6 * x**5
+dfb = dfun(betas)
+
+# Warning: this process generates quadratic coefficients
+# for 2*n - 1 intervals: [beta1, (beta1+beta2)/2, beta2, ...]
+coefs = approx.quad_coefficients_smooth(betas, fb, dfb)
+new = approx.quad_alphas_smooth(betas)
+
+yyd = approx.quad_fun_from_matrix(new, coefs[None, :, :], xx)
 ```
 
 ## Simulation using the production store of the [GR4J](https://www.sciencedirect.com/science/article/pii/S0022169403002257) daily rainfall-runoff model using QuaSoAre
