@@ -25,7 +25,9 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t,
         total = 0.
         for i in range(nfluxes):
             s = 1. if scaling is None else scaling[i]
-            f = fluxes[i](y[-1])*s
+            f = fluxes[i](y[-1]) * s
+            if hasattr(f, "squeeze"):
+                f = f.squeeze()
             total += f
             v[i] = f
 
@@ -42,7 +44,9 @@ def integrate_numerical(fluxes, dfluxes, t0, s0, t,
             total = 0.
             for i in range(nfluxes):
                 s = 1. if scaling is None else scaling[i]
-                df = dfluxes[i](y[-1])*s
+                df = dfluxes[i](y[-1]) * s
+                if hasattr(df, "squeeze"):
+                    df = df.squeeze()
                 total += df
                 m[i, 0] = df
 

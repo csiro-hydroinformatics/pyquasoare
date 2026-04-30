@@ -26,9 +26,8 @@ def test_readme_snipet():
             fo.write("".join(txt[istart: iend]))
 
         # Style
-        cmd = f"flake8 {fsn}"
-        subprocess.run(["flake8", fsn], check=True)
+        subprocess.run(["uv", "run", "ruff", "check", fsn], check=True)
 
         # Run
-        subprocess.run(["python", fsn], check=True)
+        subprocess.run(["uv", "run", "python", fsn], check=True)
 

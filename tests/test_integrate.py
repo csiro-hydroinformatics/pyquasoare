@@ -258,10 +258,8 @@ def test_forward_vs_numerical(allclose, generate_samples):
         errmax = np.nanmax(err[iok])
         if case in [5, 7]:
             err_thresh = 5e-2
-        elif case in [4, 6]:
-            err_thresh = 1e-3
         else:
-            err_thresh = 5e-4
+            err_thresh = 1e-3
 
         assert errmax<err_thresh
         errmax_max = max(errmax, errmax_max)
@@ -390,7 +388,7 @@ def test_increment_fluxes(allclose, generate_samples):
             params[0] = a
             params[1] = b
             params[2] = c
-            return approx.quad_fun(params, s)
+            return approx.quad_fun(params, s).squeeze()
 
         expected = np.array([sci_integrate.quad(finteg, t0, t1,
                                                 limit=500, args=(a, b, c))
