@@ -258,10 +258,8 @@ def test_forward_vs_numerical(allclose, generate_samples):
         errmax = np.nanmax(err[iok])
         if case in [5, 7]:
             err_thresh = 5e-2
-        elif case in [4, 6]:
-            err_thresh = 1e-3
         else:
-            err_thresh = 5e-4
+            err_thresh = 1e-3
 
         assert errmax<err_thresh
         errmax_max = max(errmax, errmax_max)
