@@ -390,7 +390,7 @@ def test_increment_fluxes(allclose, generate_samples):
             params[0] = a
             params[1] = b
             params[2] = c
-            return approx.quad_fun(params, s)
+            return approx.quad_fun(params, s).squeeze()
 
         expected = np.array([sci_integrate.quad(finteg, t0, t1,
                                                 limit=500, args=(a, b, c))
