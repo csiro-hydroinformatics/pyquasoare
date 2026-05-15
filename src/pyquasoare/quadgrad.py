@@ -1,5 +1,3 @@
-import warnings
-
 import numpy as np
 
 from pyquasoare import has_c_module
