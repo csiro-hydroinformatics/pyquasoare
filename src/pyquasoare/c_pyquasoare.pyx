@@ -104,6 +104,20 @@ cdef extern from 'c_gr4jprod.h':
                         double *inputs,
                         double * outputs)
 
+cdef extern from 'c_quadgrad.h':
+    int c_quadgrad_run(int nval, int nreaches,
+                       double timestep,
+                       double x0,
+                       double * gammas,
+                       double * qin,
+                       double * states,
+                       double * qout);
+
+cdef extern from 'c_quadgrad_d.h':
+    int c_quadgrad_run_d(int nval, int nreaches, double timestep, double x0,
+        double *gammas, double *gammasd, double *qin, double *states, double *
+        statesd, double *qout, double *qoutd);
+
 def __cinit__(self):
     pass
 
@@ -508,3 +522,77 @@ def gr4jprod(int nsubdiv, double X1, double s0,
                                 <double*> np.PyArray_DATA(inputs),
                                 <double*> np.PyArray_DATA(outputs))
 
+def quadgrad(double timestep, double x0,
+             np.ndarray[double, ndim=1, mode='c'] gammas not None,
+             np.ndarray[double, ndim=1, mode='c'] qin not None,
+             np.ndarray[double, ndim=2, mode='c'] states not None,
+             np.ndarray[double, ndim=2, mode='c'] qout not None):
+
+    cdef int nval = qin.shape[0]
+    cdef int nreaches = gammas.shape[0]
+
+    if states.shape[0] != nval:
+        raise ValueError("states.shape[0] != qin.shape[0]")
+
+    if qout.shape[0] != nval:
+        raise ValueError("qout.shape[0] != qin.shape[0]")
+
+    if states.shape[1] != nreaches:
+        raise ValueError("states.shape[1] != gammas.shape[0]")
+
+    if qout.shape[1] != nreaches:
+        raise ValueError("qout.shape[1] != gammas.shape[0]")
+
+    return c_quadgrad_run(nval, nreaches, timestep, x0,
+                          <double*> np.PyArray_DATA(gammas),
+                          <double*> np.PyArray_DATA(qin),
+                          <double*> np.PyArray_DATA(states),
+                          <double*> np.PyArray_DATA(qout))
+
+def quadgrad_tangent(double timestep, double x0,
+             np.ndarray[double, ndim=1, mode='c'] gammas not None,
+             np.ndarray[double, ndim=1, mode='c'] gammas_diff not None,
+             np.ndarray[double, ndim=1, mode='c'] qin not None,
+             np.ndarray[double, ndim=2, mode='c'] states not None,
+             np.ndarray[double, ndim=2, mode='c'] states_diff not None,
+             np.ndarray[double, ndim=2, mode='c'] qout not None,
+             np.ndarray[double, ndim=2, mode='c'] qout_diff not None):
+
+    cdef int nval = qin.shape[0]
+    cdef int nreaches = gammas.shape[0]
+
+    if states.shape[0] != nval:
+        raise ValueError("states.shape[0] != qin.shape[0]")
+
+    if states_diff.shape[0] != nval:
+        raise ValueError("states_diff.shape[0] != qin.shape[0]")
+
+    if qout.shape[0] != nval:
+        raise ValueError("qout.shape[0] != qin.shape[0]")
+
+    if qout_diff.shape[0] != nval:
+        raise ValueError("qout_diff.shape[0] != qin.shape[0]")
+
+    if gammas_diff.shape[0] != nreaches:
+        raise ValueError("gammas_diff.shape[0] != gammas.shape[0]")
+
+    if states.shape[1] != nreaches:
+        raise ValueError("states.shape[1] != gammas.shape[0]")
+
+    if states_diff.shape[1] != nreaches:
+        raise ValueError("states_diff.shape[1] != gammas.shape[0]")
+
+    if qout.shape[1] != nreaches:
+        raise ValueError("qout.shape[1] != gammas.shape[0]")
+
+    if qout_diff.shape[1] != nreaches:
+        raise ValueError("qout_diff.shape[1] != gammas.shape[0]")
+
+    return c_quadgrad_run_d(nval, nreaches, timestep, x0,
+                            <double*> np.PyArray_DATA(gammas),
+                            <double*> np.PyArray_DATA(gammas_diff),
+                            <double*> np.PyArray_DATA(qin),
+                            <double*> np.PyArray_DATA(states),
+                            <double*> np.PyArray_DATA(states_diff),
+                            <double*> np.PyArray_DATA(qout),
+                            <double*> np.PyArray_DATA(qout_diff))
