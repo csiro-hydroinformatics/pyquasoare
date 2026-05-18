@@ -104,19 +104,45 @@ cdef extern from 'c_gr4jprod.h':
                         double *inputs,
                         double * outputs)
 
-cdef extern from 'c_quadgrad.h':
-    int c_quadgrad_run(int nval, int nreaches,
-                       double timestep,
-                       double x0,
-                       double * gammas,
-                       double * qin,
-                       double * states,
-                       double * qout);
+cdef extern from 'c_gradbench.h':
+    int c_gradbench_quadrouting(int nval, int nreaches,
+                                double timestep,
+                                double * x0_ro_route,
+                                double * gammas_ro_route,
+                                double * qin,
+                                double * states_ro_route,
+                                double * qout_ro_route)
 
-cdef extern from 'c_quadgrad_d.h':
-    int c_quadgrad_run_d(int nval, int nreaches, double timestep, double x0,
-        double *gammas, double *gammasd, double *qin, double *states, double *
-        statesd, double *qout, double *qoutd);
+    int c_gradbench_rainfallrunoff(int nval,
+                                   double timestep,
+                                   double x0_rr_prod,
+                                   double x0_rr_route,
+                                   double gamma_rr_prod,
+                                   double gamma_rr_route,
+                                   double demand_rr_route,
+                                   double * pin,
+                                   double * ein,
+                                   double * states_rr_prod,
+                                   double * states_rr_route,
+                                   double * qout_rr_prod,
+                                   double * qout_rr_route)
+
+    int c_gradbench_semidist(int nval, int nreaches,
+                             double timestep,
+                             double x0,
+                             double * gammas_rr_prod,
+                             double * gammas_rr_route,
+                             double * gammas_ro_route,
+                             double * demand_rr_route,
+                             double * pin,
+                             double * ein,
+                             double * states_rr_prod,
+                             double * states_rr_route,
+                             double * states_ro_route,
+                             double * qout_rr_prod,
+                             double * qout_rr_route,
+                             double * qout_ro_route)
+
 
 def __cinit__(self):
     pass
@@ -522,77 +548,79 @@ def gr4jprod(int nsubdiv, double X1, double s0,
                                 <double*> np.PyArray_DATA(inputs),
                                 <double*> np.PyArray_DATA(outputs))
 
-def quadgrad(double timestep, double x0,
-             np.ndarray[double, ndim=1, mode='c'] gammas not None,
+
+def gradbench_quadrouting(double timestep,
+             np.ndarray[double, ndim=1, mode='c'] x0_ro_route not None,
+             np.ndarray[double, ndim=1, mode='c'] gammas_ro_route not None,
              np.ndarray[double, ndim=1, mode='c'] qin not None,
-             np.ndarray[double, ndim=2, mode='c'] states not None,
-             np.ndarray[double, ndim=2, mode='c'] qout not None):
+             np.ndarray[double, ndim=2, mode='c'] states_ro_route not None,
+             np.ndarray[double, ndim=2, mode='c'] qout_ro_route not None):
 
     cdef int nval = qin.shape[0]
-    cdef int nreaches = gammas.shape[0]
+    cdef int nreaches = x0_ro_route.shape[0]
 
-    if states.shape[0] != nval:
-        raise ValueError("states.shape[0] != qin.shape[0]")
+    if states_ro_route.shape[0] != nval:
+        raise ValueError("states_ro_route.shape[0] != qin.shape[0]")
 
-    if qout.shape[0] != nval:
-        raise ValueError("qout.shape[0] != qin.shape[0]")
+    if qout_ro_route.shape[0] != nval:
+        raise ValueError("qout_ro_route.shape[0] != qin.shape[0]")
 
-    if states.shape[1] != nreaches:
-        raise ValueError("states.shape[1] != gammas.shape[0]")
+    if gammas_ro_route.shape[0] != nreaches:
+        raise ValueError("gammas_ro_route.shape[0] != x0_ro_route.shape[0]")
 
-    if qout.shape[1] != nreaches:
-        raise ValueError("qout.shape[1] != gammas.shape[0]")
+    if states_ro_route.shape[1] != nreaches:
+        raise ValueError("states_ro_route.shape[1] != x0_ro_route.shape[0]")
 
-    return c_quadgrad_run(nval, nreaches, timestep, x0,
-                          <double*> np.PyArray_DATA(gammas),
+    if qout_ro_route.shape[1] != nreaches:
+        raise ValueError("qout_ro_route.shape[1] != x0_ro_route.shape[0]")
+
+    return c_gradbench_quadrouting(nval, nreaches, timestep,
+                          <double*> np.PyArray_DATA(x0_ro_route),
+                          <double*> np.PyArray_DATA(gammas_ro_route),
                           <double*> np.PyArray_DATA(qin),
-                          <double*> np.PyArray_DATA(states),
-                          <double*> np.PyArray_DATA(qout))
+                          <double*> np.PyArray_DATA(states_ro_route),
+                          <double*> np.PyArray_DATA(qout_ro_route))
 
-def quadgrad_tangent(double timestep, double x0,
-             np.ndarray[double, ndim=1, mode='c'] gammas not None,
-             np.ndarray[double, ndim=1, mode='c'] gammas_diff not None,
-             np.ndarray[double, ndim=1, mode='c'] qin not None,
-             np.ndarray[double, ndim=2, mode='c'] states not None,
-             np.ndarray[double, ndim=2, mode='c'] states_diff not None,
-             np.ndarray[double, ndim=2, mode='c'] qout not None,
-             np.ndarray[double, ndim=2, mode='c'] qout_diff not None):
 
-    cdef int nval = qin.shape[0]
-    cdef int nreaches = gammas.shape[0]
+def gradbench_rainfallrunoff(double timestep,
+                             double x0_rr_prod,
+                             double x0_rr_route,
+                             double gamma_rr_prod,
+                             double gamma_rr_route,
+                             double demand_rr_route,
+                             np.ndarray[double, ndim=1, mode='c'] pin not None,
+                             np.ndarray[double, ndim=1, mode='c'] ein not None,
+                             np.ndarray[double, ndim=1, mode='c'] states_rr_prod not None,
+                             np.ndarray[double, ndim=1, mode='c'] states_rr_route not None,
+                             np.ndarray[double, ndim=1, mode='c'] qout_rr_prod not None,
+                             np.ndarray[double, ndim=1, mode='c'] qout_rr_route not None):
 
-    if states.shape[0] != nval:
-        raise ValueError("states.shape[0] != qin.shape[0]")
+    cdef int nval = pin.shape[0]
 
-    if states_diff.shape[0] != nval:
-        raise ValueError("states_diff.shape[0] != qin.shape[0]")
+    if ein.shape[0] != nval:
+        raise ValueError("ein.shape[0] != pin.shape[0]")
 
-    if qout.shape[0] != nval:
-        raise ValueError("qout.shape[0] != qin.shape[0]")
+    if states_rr_prod.shape[0] != nval:
+        raise ValueError("states_rr_prod.shape[0] != pin.shape[0]")
 
-    if qout_diff.shape[0] != nval:
-        raise ValueError("qout_diff.shape[0] != qin.shape[0]")
+    if states_rr_route.shape[0] != nval:
+        raise ValueError("states_rr_route.shape[0] != pin.shape[0]")
 
-    if gammas_diff.shape[0] != nreaches:
-        raise ValueError("gammas_diff.shape[0] != gammas.shape[0]")
+    if qout_rr_prod.shape[0] != nval:
+        raise ValueError("qout_rr_prod.shape[0] != pin.shape[0]")
 
-    if states.shape[1] != nreaches:
-        raise ValueError("states.shape[1] != gammas.shape[0]")
+    if qout_rr_route.shape[0] != nval:
+        raise ValueError("qout_rr_route.shape[0] != pin.shape[0]")
 
-    if states_diff.shape[1] != nreaches:
-        raise ValueError("states_diff.shape[1] != gammas.shape[0]")
-
-    if qout.shape[1] != nreaches:
-        raise ValueError("qout.shape[1] != gammas.shape[0]")
-
-    if qout_diff.shape[1] != nreaches:
-        raise ValueError("qout_diff.shape[1] != gammas.shape[0]")
-
-    return c_quadgrad_run_d(nval, nreaches, timestep, x0,
-                            <double*> np.PyArray_DATA(gammas),
-                            <double*> np.PyArray_DATA(gammas_diff),
-                            <double*> np.PyArray_DATA(qin),
-                            <double*> np.PyArray_DATA(states),
-                            <double*> np.PyArray_DATA(states_diff),
-                            <double*> np.PyArray_DATA(qout),
-                            <double*> np.PyArray_DATA(qout_diff))
+    return c_gradbench_rainfallrunoff(nval, timestep,
+                                      x0_rr_prod,
+                                      x0_rr_route,
+                                      gamma_rr_prod,
+                                      gamma_rr_route,
+                                      demand_rr_route,
+                                      <double*> np.PyArray_DATA(pin),
+                                      <double*> np.PyArray_DATA(ein),
+                                      <double*> np.PyArray_DATA(states_rr_prod),
+                                      <double*> np.PyArray_DATA(states_rr_route),
+                                      <double*> np.PyArray_DATA(qout_rr_prod),
+                                      <double*> np.PyArray_DATA(qout_rr_route))

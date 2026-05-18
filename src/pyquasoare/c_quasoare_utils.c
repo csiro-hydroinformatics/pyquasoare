@@ -71,7 +71,7 @@ double diff_of_products(double a, double b, double c, double d)
 
 int c_quad_constants(double a, double b, double c, double values[3]){
     double Delta = isnull(b * b - 4. * a * c) ? 0. : diff_of_products(b, b, 4. * a, c);
-    double qD = sqrt(fabs(Delta))/2;
+    double qD = sqrt(fabs(Delta)) / 2;
     values[0] = Delta;
     values[1] = qD;
     values[2] = -b / 2. / a;
@@ -82,12 +82,12 @@ double c_eta_fun(double x, double Delta){
     if(Delta<0.)
         return atan(x);
     else
-        if(fabs(x)<1.)
+        if(fabs(x) < 1.)
             return -atanh(x);
-        else if (fabs(x)>1.)
-            return -atanh(1./x);
+        else if (fabs(x) > 1.)
+            return -atanh(1. / x);
         else
-            return x<0 ? c_get_inf() : -1.*c_get_inf();
+            return x<0 ? c_get_inf() : -1. * c_get_inf();
 }
 
 double c_omega_fun(double x, double Delta){
