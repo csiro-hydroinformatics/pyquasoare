@@ -140,6 +140,8 @@ int c_quad_coefficients_smooth(double beta0, double beta1,
 
     return 0;
 }
+
+
 /* solution valididty range */
 double c_quad_delta_t_max(double a, double b, double c,
                           double Delta, double qD, double sbar,
@@ -165,6 +167,7 @@ double c_quad_delta_t_max(double a, double b, double c,
     return delta_tmax;
 }
 
+
 /* Solution of dS/dt = f*(s) */
 double c_quad_forward(double a, double b, double c, double Delta, double qD,
                             double sbar, double t0, double s0, double t){
@@ -184,11 +187,11 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
         return s0;
 
     if(isnull(a) && isnull(b)){
-        s1 = s0+c*tau;
+        s1 = s0 + c * tau;
     }
     else if((isnull(a) && notnull(b))){
-        exparg = b*tau;
-        s1 = fabs(exparg)<QUASOARE_EPS ? s0*(1+exparg)+c*tau : -c/b+(s0+c/b)*exp(exparg);
+        exparg = b * tau;
+        s1 = fabs(exparg) < QUASOARE_EPS ? s0 * (1 + exparg) + c * tau : -c / b +(s0 + c / b) * exp(exparg);
     }
     else{
         if(isnull(Delta)){
@@ -202,6 +205,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     return s1;
 }
+
 
 /* Primitive of 1/f*(s) */
 double c_quad_inverse(double a, double b, double c, double Delta, double qD,
@@ -233,15 +237,15 @@ int c_quad_fluxes(int nfluxes,
                   double t0, double t1, double s0, double s1,
                   double * fluxes){
     int i;
-    double tau=t1-t0;
-    double tau2=tau*tau;
-    double tau3=tau2*tau;
+    double tau = t1 - t0;
+    double tau2 = tau * tau;
+    double tau3 = tau2 * tau;
     double aij, bij, cij;
-    double a = Aj, a_check=0.;
-    double b = Bj, b_check=0.;
-    double c = Cj, c_check=0.;
-    double integS=0., integS2=0.;
-    double omega=0., signD=0., term1=0., term2=0.;
+    double a = Aj, a_check = 0.;
+    double b = Bj, b_check = 0.;
+    double c = Cj, c_check = 0.;
+    double integS = 0., integS2 = 0.;
+    double omega = 0., signD = 0., term1 = 0., term2 = 0.;
 
     if(t1<t0)
         return QUASOARE_TIME_TOOLOW;
