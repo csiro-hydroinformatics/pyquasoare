@@ -191,7 +191,8 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     else if((isnull(a) && notnull(b))){
         exparg = b * tau;
-        s1 = fabs(exparg) < QUASOARE_EPS ? s0 * (1 + exparg) + c * tau : -c / b +(s0 + c / b) * exp(exparg);
+        s1 = fabs(exparg) < QUASOARE_EPS ? s0 * (1 + exparg) + c * tau
+            : -c / b +(s0 + c / b) * exp(exparg);
     }
     else{
         if(isnull(Delta)){
@@ -244,8 +245,9 @@ int c_quad_fluxes(int nfluxes,
     double a = Aj, a_check = 0.;
     double b = Bj, b_check = 0.;
     double c = Cj, c_check = 0.;
-    double integS = 0., integS2 = 0.;
     double omega = 0., signD = 0., term1 = 0., term2 = 0.;
+    double integS = c_get_nan();
+    double integS2 = c_get_nan();
 
     if(t1<t0)
         return QUASOARE_TIME_TOOLOW;
@@ -263,7 +265,8 @@ int c_quad_fluxes(int nfluxes,
         integS2 = ((s1 * s1 - s0 * s0) / 2. - Cj * integS) / Bj;
     }
     else if (notnull(a)){
-        /* Integrate S only because S2 can be deducted from S */
+        /* Integrate S only because S2 can be deducted from S
+         * and, hence, is not used in subsequent flux computation */
         if(isnull(Delta))
             integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
         else {
@@ -295,7 +298,7 @@ int c_quad_fluxes(int nfluxes,
         if(isnull(a))
             fluxes[i] += aij * integS2 + bij * integS + cij * tau;
         else
-            fluxes[i] += aij/a * (s1-s0) + (bij-aij*b/a) * integS
+            fluxes[i] += aij / a * (s1 - s0) + (bij - aij * b / a) * integS
                          + (cij - aij * c / a) * tau;
     }
 
