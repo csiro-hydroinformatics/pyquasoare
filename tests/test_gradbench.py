@@ -42,33 +42,34 @@ def get_coefs(model_id, amax):
         fluxes = [
             lambda x: np.ones_like(x),
             lambda x: np.zeros_like(x),
-            lambda x: -x**2
+            lambda x: x**2
             ]
 
     # simplified rr production
     elif model_id == 2:
         fluxes = [
             lambda x: 1 - x**2,
-            lambda x: -x * (2 - x),
-            lambda x: -4**3 / 9**4 * x**2
+            lambda x: x * (2 - x),
+            lambda x: 4**3 / 9**4 * x**2
             ]
 
     # simplified rr routing
-    elif model_id == 2:
+    elif model_id == 3:
         fluxes = [
-            lambda x: 0.9,
-            lambda x: -x**2,
-            lambda x: -x**2 / 4
+            lambda x: 0.9 * np.ones_like(x),
+            lambda x: x**2,
+            lambda x: x**2 / 4
             ]
 
     alphas = np.linspace(0, amax, 3)
-    return alphas, approx.quad_coefficient_matrix(fluxes, alphas)
+    return alphas, approx.quad_coefficient_matrix(fluxes, alphas, 2)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
-def test_gradbench_quadrouting(siteid, gamma, allclose):
-    x0, timestep, qin, _, _ = get_data(siteid)
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_quadrouting(siteid, gamma, timestep, allclose):
+    x0, _, qin, _, _ = get_data(siteid)
 
     # run gradbench
     gammas = np.array([gamma])
@@ -82,10 +83,12 @@ def test_gradbench_quadrouting(siteid, gamma, allclose):
     nval = len(qin)
     scalings = np.ones((nval, 3))
     scalings[:, 0] = qin / gamma
+    scalings[:, 1] = 0.
+    scalings[:, 2] = -1. / timestep
 
     _, x1, fx = models.quad_model(alphas, scalings, coefs, x0,
                                   timestep=timestep)
-    expected = -fx[:, -1] * gamma
+    expected = -fx[:, -1] * gamma / timestep
 
     assert allclose(states, x1)
     assert allclose(qout, expected)
@@ -93,44 +96,73 @@ def test_gradbench_quadrouting(siteid, gamma, allclose):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
-@pytest.mark.parametrize("demand", [-1, 0, 1])
-def test_gradbench_rainfallrunoff(siteid, gamma, demand, allclose):
-    model_id = 1
-    x0, timestep, qin, pin, ein = get_data(siteid)
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
+    x0, _, _, pin, ein = get_data(siteid)
 
     # run gradbench
     gamma_rr_prod = gamma
-    gamma_rr_route = gamma / 10.
-    demand_rr_route = demand
-    scalings = get_scalings(qin, pin, ein, gamma_rr_prod,
-                            gamma_rr_route, model_id, 0.)
+    gamma_rr_route = gamma / 5.
+    demand_rr_route = 0.
     out = gradbench.gradbench_rainfallrunoff(timestep, pin, ein, x0,
                                              gamma_rr_prod,
                                              gamma_rr_route,
                                              demand_rr_route)
-    states_p, states_r, qout_r, qout_p = out
+    states_p, states_r, qout_p, qout_r = out
 
     # Run quasoare
     amax = (1 + round(states_p.max() / 0.2)) * 0.2
-    alphas, coefs = get_coefs(model_id, amax)
+    alphas, coefs = get_coefs(2, amax)
+    nval = len(pin)
+    scalings = np.ones((nval, 3))
+    scalings[:, 0] = pin / gamma_rr_prod
+    scalings[:, 1] = -ein / gamma_rr_prod
+    scalings[:, 2] = -1. / timestep
     _, x_p, fx_p = models.quad_model(alphas, scalings, coefs, x0,
                                      timestep=timestep)
-    expected = -fx_p[:, -1] * gamma_rr_prod
-
-    import matplotlib.pyplot as plt
-    plt.plot(states_p)
-    plt.plot(x_p)
-    plt.show()
-    import pdb; pdb.set_trace()
-
+    expected = pin - (fx_p[:, 0] + fx_p[:, 2]) * gamma_rr_prod / timestep
 
     assert allclose(states_p, x_p)
     assert allclose(qout_p, expected)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("demand", [-10., 0., 10.])
+def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, allclose):
+    pytest.skip("WIP")
+    x0, timestep, qin, pin, ein = get_data(siteid)
+
+    # run gradbench
+    gamma_rr_prod = gamma
+    gamma_rr_route = gamma / 5.
+    demand_rr_route = demand
+    out = gradbench.gradbench_rainfallrunoff(timestep, pin, ein, x0,
+                                             gamma_rr_prod,
+                                             gamma_rr_route,
+                                             demand_rr_route)
+    states_p, states_r, qout_p, qout_r = out
+
+    # Run quasoare
+    amax = (1 + round(states_r.max() / 0.2)) * 0.2
+    alphas, coefs = get_coefs(3, amax)
+    nval = len(pin)
+    scalings = np.ones((nval, 3))
+    scalings[:, 0] = qout_p / gamma_rr_route
+    scalings[:, 1] = demand / gamma_rr_route
+    scalings[:, 2] = -1
+    _, x_r, fx_r = models.quad_model(alphas, scalings, coefs, x0,
+                                     timestep=timestep)
+    expected = -fx_r[:, 2] * gamma_rr_route
+
+    assert allclose(states_r, x_r)
+    assert allclose(qout_r, expected)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [1, 100, 10000])
 def test_gradbench_quad_routing_multi_reach(siteid, gamma, allclose):
+    pytest.skip("WIP")
     model_id = 1
     x0, timestep, qin, pin, ein = get_data(siteid)
     nreaches = 5

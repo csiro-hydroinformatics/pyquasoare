@@ -43,7 +43,7 @@ int gb_constants(double a, double b, double c, double constants[4]) {
 }
 
 double gb_forward(double a, double b, double c, double constants[4],
-               double timestep, double s0){
+                  double timestep, double s0){
     double s1 = 0;
     double omega = 0.;
     double exparg = 0;
@@ -55,11 +55,12 @@ double gb_forward(double a, double b, double c, double constants[4],
     double sbar = constants[3];
 
     if(gb_isnull(a) && gb_isnull(b)){
-        s1 = s0+c*tau;
+        s1 = s0 + c * tau;
     }
     else if((gb_isnull(a) && gb_notnull(b))){
-        exparg = b*tau;
-        s1 = fabs(exparg)<1e-12 ? s0*(1+exparg)+c*tau : -c/b+(s0+c/b)*exp(exparg);
+        exparg = b * tau;
+        s1 = fabs(exparg) < 1e-12 ? s0 * (1 + exparg) + c * tau :
+                -c / b + (s0 + c / b) * exp(exparg);
     }
     else{
         if(gb_isnull(Delta)){
@@ -74,11 +75,12 @@ double gb_forward(double a, double b, double c, double constants[4],
     return s1;
 }
 
-double gb_integrate(double a, double b, double c, double constants[4],
-                    double timestep, double s0, double s1,
-                    double integ[2])  {
+/* computes integral of x and x^2 over [0, Δ] */
+double gb_integrate_x(double a, double b, double c, double constants[4],
+                      double timestep, double s0, double s1,
+                      double integ[2])  {
     double tau = timestep;
-    double tau2 = tau*tau;
+    double tau2 = tau * tau;
     double tau3 = tau2 * tau;
 
     double Delta = constants[0];
@@ -112,6 +114,9 @@ double gb_integrate(double a, double b, double c, double constants[4],
             term2 = -log(1 - a * (s0 - sbar) / qD * omega) / a;
             integS = sbar * tau + term1 + term2;
         }
+
+        /* Eq B13 in Lerat (2025) */
+        integS2 = (s1 - s0 - b * integS - c * tau) / a;
     }
 
     integ[0] = integS;
@@ -121,7 +126,14 @@ double gb_integrate(double a, double b, double c, double constants[4],
 
 int ro_route_runtimestep(double qstar1, double timestep, double gamma,
                          double x0, double * state, double * flux) {
-    /* Quasaore coefficients */
+    /* Quasaore coefficients
+     * dx/dt = Q1* / Γ - 1/Δ x^2
+     *       = a x^2 + b x + c
+     *
+     * Output flux = Q1* - Q1 - Q2
+     * F = Q1* - Q1* (1 - intx2) + Γ/Δ  4^3/9^4 intx2
+     */
+
     double a = -1. / timestep;
     double b = 0;
     double c = qstar1 / gamma;
@@ -141,9 +153,11 @@ int rr_prod_runtimestep(double qstar1, double qstar2,
                        double timestep, double gamma,
                        double x0, double * state, double * flux) {
     /* Quasaore coefficients
-     * dx/dt = Q1* / G (1-x^2) - Q2* / G x(2-x) -4^3/9^4/delta x^2
+     * dx/dt = Q1* / G (1-x^2) - Q2* / G x(2-x) - 4^3/9^4/Δ x^2
      *       = a x^2 + b x + c
      *
+     * Output flux = Q1* - Q1 - Q2
+     * F = Q1* - Q1* (1 - intx2) + Γ/Δ  4^3/9^4 intx2
      */
     double a = (qstar2 - qstar1) / gamma - 64. / 6561. / timestep;
     double b = -2 * qstar2 / gamma;
@@ -156,10 +170,10 @@ int rr_prod_runtimestep(double qstar1, double qstar2,
 
     *state = x1;
 
-    /* compute flux */
+    /* compute output flux, i.e. Q1*-Q1 + Q3 */
     double integ[2];
-    gb_integrate(a, b, c, constants, timestep, x0, x1, integ);
-    *flux = (qstar1 + 64. / 6561. / timestep) * integ[1];
+    gb_integrate_x(a, b, c, constants, timestep, x0, x1, integ);
+    *flux = (qstar1 + gamma * 64. / 6561. / timestep) * integ[1] / timestep;
 
     return 0;
 }
@@ -168,9 +182,13 @@ int rr_route_runtimestep(double qstar1, double qstar2,
                         double timestep, double gamma,
                         double x0, double * state, double * flux) {
     /* Quasaore coefficients
-     * dx/dt = Q1/G (1-x^2) - Q2/G x(2-x) -4^3/9^4/delta x^2
+     * dx/dt = Q1* / G 0.9 + Q2* / G x^2 - 1/4/Δ  x^2
+     *
+     * Output flux = Q1* - Q1 - Q2
+     * F = 0.1 Q1* + Γ/Δ/4 * intx2
+     *
      */
-    double a = -qstar2 / gamma - 1./ 4 / timestep;
+    double a = qstar2 / gamma - 1. / 4. / timestep;
     double b = 0.;
     double c = qstar1 / gamma * 0.9;
     double constants[4];
@@ -182,8 +200,8 @@ int rr_route_runtimestep(double qstar1, double qstar2,
     *state = x1;
 
     double integ[2];
-    gb_integrate(a, b, c, constants, timestep, x0, x1, integ);
-    *flux = qstar1 * 0.1 + integ[1] / 4 / timestep;
+    gb_integrate_x(a, b, c, constants, timestep, x0, x1, integ);
+    *flux = (qstar1 * 0.1 + gamma * integ[1] / 4 / timestep) / timestep;
 
     return 0;
 }
@@ -341,5 +359,3 @@ int c_gradbench_semidist(int nval, int nreaches,
 
     return 0;
 }
-
-
