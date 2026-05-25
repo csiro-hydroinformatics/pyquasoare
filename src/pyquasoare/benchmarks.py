@@ -166,7 +166,35 @@ def gradbench_quadrouting(timestep, qin, x0, gammas):
     return states, qout
 
 
-def gradbench_rainfallrunoff(timestep, pin, ein, x0,
+def gradbench_quadrouting_tangent(timestep, qin, x0, gammas, dgammas):
+    timestep = np.float64(timestep)
+    gammas = np.ascontiguousarray(gammas).astype(np.float64)
+    dgammas = np.ascontiguousarray(dgammas).astype(np.float64)
+    qin = np.ascontiguousarray(qin).astype(np.float64)
+
+    nval = qin.shape[0]
+    nreaches = len(gammas)
+    x0 = np.array([x0] * nreaches)
+    states = np.empty((nval, nreaches))
+    dstates = np.empty((nval, nreaches))
+    qout = np.empty((nval, nreaches))
+    dqout = np.empty((nval, nreaches))
+
+    ierr = c_pyquasoare_benchmarks.gradbench_quadrouting_d(timestep, x0,
+                                                           gammas,
+                                                           dgammas,
+                                                           qin,
+                                                           states,
+                                                           dstates,
+                                                           qout,
+                                                           dqout)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_quadrouting_d returns {ierr}")
+
+    return states, dstates, qout, dqout
+
+
+def gradbench_rainfall_runoff(timestep, pin, ein, x0,
                              gamma_rr_prod, gamma_rr_route,
                              demand_rr_route):
     timestep = np.float64(timestep)
@@ -181,7 +209,7 @@ def gradbench_rainfallrunoff(timestep, pin, ein, x0,
     qout_rr_prod = np.empty(nval)
     qout_rr_route = np.empty(nval)
 
-    ierr = c_pyquasoare_benchmarks.gradbench_rainfallrunoff(timestep,
+    ierr = c_pyquasoare_benchmarks.gradbench_rainfall_runoff(timestep,
                                                             x0_rr_prod,
                                                             x0_rr_route,
                                                             gamma_rr_prod,

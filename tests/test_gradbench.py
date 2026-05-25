@@ -97,14 +97,46 @@ def test_gradbench_quadrouting(siteid, gamma, timestep, allclose):
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("timestep", [1., 0.1])
-def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
+def test_gradbench_quadrouting_tangent(siteid, gamma, timestep, allclose):
+    x0, _, qin, _, _ = get_data(siteid)
+
+    eps = 1e-6
+
+    # run benchmarks
+    gammas = np.array([gamma])
+    dgammas = np.array([1.])
+    out = benchmarks.gradbench_quadrouting_tangent(timestep, qin, x0,
+                                                   gammas, dgammas)
+    states, dstates, qout, dqout = out
+
+    qout = qout.squeeze()
+    dqout = dqout.squeeze()
+    states = states.squeeze()
+    dstates = dstates.squeeze()
+
+    gammas = np.array([gamma - eps])
+    states1, qout1 = benchmarks.gradbench_quadrouting(timestep, qin, x0, gammas)
+    gammas = np.array([gamma + eps])
+    states2, qout2 = benchmarks.gradbench_quadrouting(timestep, qin, x0, gammas)
+
+    dqout_expected = (qout2 - qout1).squeeze() / 2 / eps
+    assert allclose(dqout, dqout_expected)
+
+    dstates_expected = (states2 - states1).squeeze() / 2 / eps
+    assert allclose(dstates, dstates_expected)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_rainfall_runoff_prod(siteid, gamma, timestep, allclose):
     x0, _, _, pin, ein = get_data(siteid)
 
     # run benchmarks
     gamma_rr_prod = gamma
     gamma_rr_route = gamma / 5.
     demand_rr_route = 0.
-    out = benchmarks.gradbench_rainfallrunoff(timestep, pin, ein, x0,
+    out = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
                                              gamma_rr_prod,
                                              gamma_rr_route,
                                              demand_rr_route)
@@ -130,14 +162,14 @@ def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
 @pytest.mark.parametrize("timestep", [1., 0.1])
-def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, timestep, allclose):
+def test_gradbench_rainfall_runoff_route(siteid, gamma, demand, timestep, allclose):
     x0, _, _, pin, ein = get_data(siteid)
 
     # run benchmarks
     gamma_rr_prod = gamma
     gamma_rr_route = gamma / 5.
     demand_rr_route = demand
-    out = benchmarks.gradbench_rainfallrunoff(timestep, pin, ein, x0,
+    out = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
                                              gamma_rr_prod,
                                              gamma_rr_route,
                                              demand_rr_route)
@@ -250,32 +282,3 @@ def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
     assert allclose(qout_rr_r, q_qout_rr_r)
     assert allclose(qout_ro_r, q_qout_ro_r)
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("gamma", [1, 100, 10000])
-def test_gradbench_tangent(siteid, gamma, allclose):
-    pytest.skip("WIP")
-    x0, timestep, qin = get_data(siteid)
-    eps = 1e-6
-
-    # run benchmarks
-    gammas = np.array([gamma - eps])
-    states_1, qout_1 = benchmarks.benchmarks(timestep, qin, x0, gammas)
-    qout_1 = qout_1.squeeze()
-    states_1 = states_1.squeeze()
-
-    gammas = np.array([gamma + eps])
-    states_2, qout_2 = benchmarks.benchmarks(timestep, qin, x0, gammas)
-    qout_2 = qout_2.squeeze()
-    states_2 = states_2.squeeze()
-
-    sexpected = (states_2 - states_1) / 2 / eps
-    qexpected = (qout_2 - qout_1) / 2 / eps
-
-    # run benchmarks tangent
-    gammas = np.array([gamma])
-    gammas_diff = np.array([1.])
-    states, qout, states_diff, qout_diff = benchmarks.gradbench_tangent(timestep, qin, x0,
-                                                                     gammas,
-                                                                     gammas_diff)
-    assert allclose(sexpected, states_diff.squeeze())
-    assert allclose(qexpected, qout_diff.squeeze(), atol=5e-7)

@@ -19,7 +19,10 @@ extensions = [
         "src/pyquasoare/c_pyquasoare_benchmarks.pyx",
         "src/pyquasoare/c_nonlinrouting.c",
         "src/pyquasoare/c_gr4jprod.c",
-        "src/pyquasoare/c_gradbench.c",
+        "src/pyquasoare/c_gradbench_quadrouting.c",
+        "src/pyquasoare/c_gradbench_quadrouting_d.c",
+        "src/pyquasoare/c_gradbench_rainfall_runoff.c",
+        "src/pyquasoare/c_gradbench_semidist.c",
         ],
         include_dirs=[numpy.get_include()])
 
