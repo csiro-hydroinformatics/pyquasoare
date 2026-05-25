@@ -10,7 +10,7 @@ import pandas as pd
 
 from hydrodiy.io import iutils
 
-from pyquasoare import approx, models, gradbench, steady
+from pyquasoare import approx, models, benchmarks, steady
 
 import data_reader
 
@@ -71,9 +71,9 @@ def get_coefs(model_id, amax):
 def test_gradbench_quadrouting(siteid, gamma, timestep, allclose):
     x0, _, qin, _, _ = get_data(siteid)
 
-    # run gradbench
+    # run benchmarks
     gammas = np.array([gamma])
-    states, qout = gradbench.gradbench_quadrouting(timestep, qin, x0, gammas)
+    states, qout = benchmarks.gradbench_quadrouting(timestep, qin, x0, gammas)
     qout = qout.squeeze()
     states = states.squeeze()
 
@@ -100,11 +100,11 @@ def test_gradbench_quadrouting(siteid, gamma, timestep, allclose):
 def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
     x0, _, _, pin, ein = get_data(siteid)
 
-    # run gradbench
+    # run benchmarks
     gamma_rr_prod = gamma
     gamma_rr_route = gamma / 5.
     demand_rr_route = 0.
-    out = gradbench.gradbench_rainfallrunoff(timestep, pin, ein, x0,
+    out = benchmarks.gradbench_rainfallrunoff(timestep, pin, ein, x0,
                                              gamma_rr_prod,
                                              gamma_rr_route,
                                              demand_rr_route)
@@ -133,11 +133,11 @@ def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
 def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, timestep, allclose):
     x0, _, _, pin, ein = get_data(siteid)
 
-    # run gradbench
+    # run benchmarks
     gamma_rr_prod = gamma
     gamma_rr_route = gamma / 5.
     demand_rr_route = demand
-    out = gradbench.gradbench_rainfallrunoff(timestep, pin, ein, x0,
+    out = benchmarks.gradbench_rainfallrunoff(timestep, pin, ein, x0,
                                              gamma_rr_prod,
                                              gamma_rr_route,
                                              demand_rr_route)
@@ -173,7 +173,7 @@ def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
         pin[:nval, isite] = p[:nval]
         ein[:nval, isite] = e[:nval]
 
-    # run gradbench
+    # run benchmarks
     nval = len(pin)
 
     gammas_rr_prod = np.array([gamma] * nreaches)
@@ -181,7 +181,7 @@ def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
     gammas_ro_route = np.array([gamma / 20] * nreaches)
     demands_rr_route = np.ones(nreaches) * demand
 
-    out = gradbench.gradbench_semidist(timestep, pin, ein, x0, areas,
+    out = benchmarks.gradbench_semidist(timestep, pin, ein, x0, areas,
                                        gammas_rr_prod, gammas_rr_route,
                                        gammas_ro_route, demands_rr_route)
     states_rr_p, states_rr_r, states_ro_r, qout_rr_p, qout_rr_r, qout_ro_r = out
@@ -257,24 +257,24 @@ def test_gradbench_tangent(siteid, gamma, allclose):
     x0, timestep, qin = get_data(siteid)
     eps = 1e-6
 
-    # run gradbench
+    # run benchmarks
     gammas = np.array([gamma - eps])
-    states_1, qout_1 = gradbench.gradbench(timestep, qin, x0, gammas)
+    states_1, qout_1 = benchmarks.benchmarks(timestep, qin, x0, gammas)
     qout_1 = qout_1.squeeze()
     states_1 = states_1.squeeze()
 
     gammas = np.array([gamma + eps])
-    states_2, qout_2 = gradbench.gradbench(timestep, qin, x0, gammas)
+    states_2, qout_2 = benchmarks.benchmarks(timestep, qin, x0, gammas)
     qout_2 = qout_2.squeeze()
     states_2 = states_2.squeeze()
 
     sexpected = (states_2 - states_1) / 2 / eps
     qexpected = (qout_2 - qout_1) / 2 / eps
 
-    # run gradbench tangent
+    # run benchmarks tangent
     gammas = np.array([gamma])
     gammas_diff = np.array([1.])
-    states, qout, states_diff, qout_diff = gradbench.gradbench_tangent(timestep, qin, x0,
+    states, qout, states_diff, qout_diff = benchmarks.gradbench_tangent(timestep, qin, x0,
                                                                      gammas,
                                                                      gammas_diff)
     assert allclose(sexpected, states_diff.squeeze())
