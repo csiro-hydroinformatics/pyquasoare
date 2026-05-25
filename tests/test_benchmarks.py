@@ -30,34 +30,34 @@ def test_benchmarks_error(allclose):
     df = data_reader.get_data(siteid, "daily")
     inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
     X1, s0 = 1., 1./2
-    with pytest.raises(ValueError, match="out of bounds"):
+    with pytest.raises(ValueError, match="gr4jprod"):
         gp = benchmarks.gr4jprod(1, X1, s0, inputs)
 
     X1, s0 = 1000., -1.
-    with pytest.raises(ValueError, match="out of bounds"):
+    with pytest.raises(ValueError, match="gr4jprod"):
         gp = benchmarks.gr4jprod(1, X1, s0, inputs)
 
 
     inflows = inputs[:, 0]
     timestep, theta, nu, q0, s0 = 1., -1., 2., 1., 0.
-    with pytest.raises(ValueError, match="out of bounds"):
-        sim = benchmarks.nonlinrouting(1, timestep, theta, \
-                                        nu, q0, s0, inflows)
+    with pytest.raises(ValueError, match="nonlinrouting"):
+        sim = benchmarks.nonlinrouting(1, timestep, theta,
+                                       nu, q0, s0, inflows)
 
     timestep, theta, nu, q0, s0 = 1., 1., 0.5, 1., 0.
-    with pytest.raises(ValueError, match="out of bounds"):
-        sim = benchmarks.nonlinrouting(1, timestep, theta, \
-                                        nu, q0, s0, inflows)
+    with pytest.raises(ValueError, match="nonlinrouting"):
+        sim = benchmarks.nonlinrouting(1, timestep, theta,
+                                       nu, q0, s0, inflows)
 
     timestep, theta, nu, q0, s0 = 1., 1., 2., -1., 0.
-    with pytest.raises(ValueError, match="out of bounds"):
-        sim = benchmarks.nonlinrouting(1, timestep, theta, \
-                                        nu, q0, s0, inflows)
+    with pytest.raises(ValueError, match="nonlinrouting"):
+        sim = benchmarks.nonlinrouting(1, timestep, theta,
+                                       nu, q0, s0, inflows)
 
     timestep, theta, nu, q0, s0 = 1., 1., 2., 1., -1.
-    with pytest.raises(ValueError, match="out of bounds"):
-        sim = benchmarks.nonlinrouting(1, timestep, theta, \
-                                        nu, q0, s0, inflows)
+    with pytest.raises(ValueError, match="nonlinrouting"):
+        sim = benchmarks.nonlinrouting(1, timestep, theta,
+                                       nu, q0, s0, inflows)
 
 
 def test_gr4jprod_nsubdiv(allclose):

@@ -49,6 +49,7 @@ data/
 outputs/
 tests/snipets
 src/pyquasoare/c_pyquasoare.c
+src/pyquasoare/c_pyquasoare_benchmarks.c
 .gitattributes
 *.json
 *.txt

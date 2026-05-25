@@ -11,12 +11,18 @@ extensions = [
         "src/pyquasoare/c_pyquasoare.pyx",
         "src/pyquasoare/c_quasoare_utils.c",
         "src/pyquasoare/c_quasoare_core.c",
-        "src/pyquasoare/c_quasoare_steady.c",
+        "src/pyquasoare/c_quasoare_steady.c"
+        ],
+        include_dirs=[numpy.get_include()]),
+    Extension(name="c_pyquasoare_benchmarks",
+        sources=[
+        "src/pyquasoare/c_pyquasoare_benchmarks.pyx",
         "src/pyquasoare/c_nonlinrouting.c",
         "src/pyquasoare/c_gr4jprod.c",
         "src/pyquasoare/c_gradbench.c",
         ],
         include_dirs=[numpy.get_include()])
+
 ]
 
 setup(

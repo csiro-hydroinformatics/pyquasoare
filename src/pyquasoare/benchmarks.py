@@ -5,7 +5,7 @@ import numpy as np
 from pyquasoare import has_c_module
 
 if has_c_module():
-    import c_pyquasoare
+    import c_pyquasoare_benchmarks
 else:
     raise ImportError("Cannot run rezeq without C module."
                       + " Please compile C code")
@@ -47,11 +47,10 @@ def nonlinrouting_fluxes_noscaling(nu):
 def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyquasoare.nonlinrouting(nsubdiv, timestep, theta, nu,
+    ierr = c_pyquasoare_benchmarks.nonlinrouting(nsubdiv, timestep, theta, nu,
                                       q0, s0, inflows, outflows)
     if ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
+        raise ValueError(f"c_pyquasoare_benchmarks.nonlinrouting returns {ierr}.")
 
     return outflows
 
@@ -59,11 +58,10 @@ def nonlinrouting(nsubdiv, timestep, theta, nu, q0, s0, inflows):
 def quadrouting(timestep, theta, q0, s0, inflows):
     inflows = np.array(inflows).astype(np.float64)
     outflows = np.zeros_like(inflows)
-    ierr = c_pyquasoare.quadrouting(timestep, theta,
+    ierr = c_pyquasoare_benchmarks.quadrouting(timestep, theta,
                                     q0, s0, inflows, outflows)
     if ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.nonlinrouting returns {ierr} ({mess})")
+        raise ValueError(f"c_pyquasoare_benchmarks.nonlinrouting returns {ierr}.")
 
     return outflows
 
@@ -140,10 +138,9 @@ def gr4jprod(nsubdiv, X1, s0, inputs):
     # Outputs variables = S, PR, AE, PERC, PR, AE
     outputs = np.zeros((len(inputs), 6))
 
-    ierr = c_pyquasoare.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
+    ierr = c_pyquasoare_benchmarks.gr4jprod(nsubdiv, X1, s0, inputs, outputs)
 
     if ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.gr4jprod returns {ierr} ({mess})")
+        raise ValueError(f"c_pyquasoare_benchmarks.gr4jprod returns {ierr}")
 
     return outputs
