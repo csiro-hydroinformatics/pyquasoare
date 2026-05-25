@@ -128,10 +128,10 @@ def test_gradbench_rainfallrunoff_prod(siteid, gamma, timestep, allclose):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
-@pytest.mark.parametrize("demand", [-10., 0., 10.])
-def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, allclose):
-    pytest.skip("WIP")
-    x0, timestep, qin, pin, ein = get_data(siteid)
+@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, timestep, allclose):
+    x0, _, _, pin, ein = get_data(siteid)
 
     # run gradbench
     gamma_rr_prod = gamma
@@ -150,49 +150,110 @@ def test_gradbench_rainfallrunoff_route(siteid, gamma, demand, allclose):
     scalings = np.ones((nval, 3))
     scalings[:, 0] = qout_p / gamma_rr_route
     scalings[:, 1] = demand / gamma_rr_route
-    scalings[:, 2] = -1
+    scalings[:, 2] = -1 / timestep
     _, x_r, fx_r = models.quad_model(alphas, scalings, coefs, x0,
                                      timestep=timestep)
-    expected = -fx_r[:, 2] * gamma_rr_route
+    expected = qout_p * 0.1 - fx_r[:, 2] * gamma_rr_route / timestep
 
     assert allclose(states_r, x_r)
     assert allclose(qout_r, expected)
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("gamma", [1, 100, 10000])
-def test_gradbench_quad_routing_multi_reach(siteid, gamma, allclose):
-    pytest.skip("WIP")
-    model_id = 1
-    x0, timestep, qin, pin, ein = get_data(siteid)
-    nreaches = 5
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+@pytest.mark.parametrize("nreaches", [1, 2, 5])
+def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
+    nval = 1000
+    pin = np.empty((nval, nreaches))
+    ein = np.empty((nval, nreaches))
+    areas = 100 * np.ones(nreaches)
+    for isite, siteid in enumerate(data_reader.SITEIDS[:nreaches]):
+        x0, _, q, p, e = get_data(siteid)
+        pin[:nval, isite] = p[:nval]
+        ein[:nval, isite] = e[:nval]
 
     # run gradbench
-    gammas = np.array([gamma] * nreaches)
-    states, qout = gradbench.gradbench_quadrouting(timestep, qin, x0, gammas)
+    nval = len(pin)
+
+    gammas_rr_prod = np.array([gamma] * nreaches)
+    gammas_rr_route = np.array([gamma / 10] * nreaches)
+    gammas_ro_route = np.array([gamma / 20] * nreaches)
+    demands_rr_route = np.ones(nreaches) * demand
+
+    out = gradbench.gradbench_semidist(timestep, pin, ein, x0, areas,
+                                       gammas_rr_prod, gammas_rr_route,
+                                       gammas_ro_route, demands_rr_route)
+    states_rr_p, states_rr_r, states_ro_r, qout_rr_p, qout_rr_r, qout_ro_r = out
 
     # Run quasoare
-    amax = (1 + round(states.max() / 0.2)) * 0.2
-    alphas, coefs = get_coefs(model_id, amax)
+    amax = (1 + round(states_rr_p.max() / 0.2)) * 0.2
+    alphas_rr_p, coefs_rr_p = get_coefs(2, amax)
 
-    sexpected = np.zeros_like(states)
-    qexpected = np.zeros_like(qout)
+    amax = (1 + round(states_rr_r.max() / 0.2)) * 0.2
+    alphas_rr_r, coefs_rr_r = get_coefs(3, amax)
+
+    try:
+        amax = (1 + round(states_ro_r.max() / 0.2)) * 0.2
+    except:
+        amax = 1.
+    alphas_ro_r, coefs_ro_r = get_coefs(1, amax)
+
+    scalings = np.ones((nval, 3))
+    q_states_rr_p = np.empty((nval, nreaches))
+    q_states_rr_r = np.empty((nval, nreaches))
+    q_states_ro_r = np.empty((nval, nreaches))
+    q_qout_rr_p = np.empty((nval, nreaches))
+    q_qout_rr_r = np.empty((nval, nreaches))
+    q_qout_ro_r = np.empty((nval, nreaches))
+
     for i in range(nreaches):
-        qup = qin if i == 0 else qexpected[:, i - 1]
-        scalings = get_scalings(qup, qup * 0., qup * 0., gamma, model_id, 0.)
-        _, x1, fx = models.quad_model(alphas, scalings, coefs, x0,
-                                      timestep=timestep)
-        qexpected[:, i] = -fx[:, -1] * gamma
-        sexpected[:, i] = x1
+        # RR Production
+        scalings[:, 0] = pin[:, i] / gammas_rr_prod[i]
+        scalings[:, 1] = -ein[:, i] / gammas_rr_prod[i]
+        scalings[:, 2] = -1. / timestep
+        _, x, fx = models.quad_model(alphas_rr_p, scalings, coefs_rr_p,
+                                         x0, timestep=timestep)
+        qout = pin[:, i] - (fx[:, 0] + fx[:, 2]) * gammas_rr_prod[i] / timestep
+        q_states_rr_p[:, i] = x
+        q_qout_rr_p[:, i] = qout
 
-    assert allclose(states, sexpected)
-    assert allclose(qout, qexpected)
+        # RR routing
+        scalings[:, 0] = qout / gammas_rr_route[i]
+        scalings[:, 1] = demands_rr_route[i] / gammas_rr_route[i]
+        scalings[:, 2] = -1 / timestep
+        _, x, fx = models.quad_model(alphas_rr_r, scalings, coefs_rr_r,
+                                     x0, timestep=timestep)
+        qout = qout * 0.1 - fx[:, 2] * gammas_rr_route[i] / timestep
+        q_states_rr_r[:, i] = x
+        q_qout_rr_r[:, i] = qout
 
+        # Quad routing
+        qin = np.zeros(nval) if i == 0 else q_qout_ro_r[:, i - 1]
+        scalings[:, 0] = qin / gammas_ro_route[i]
+        scalings[:, 1] = 0.
+        scalings[:, 2] = -1. / timestep
+        _, x, fx = models.quad_model(alphas_ro_r, scalings, coefs_ro_r,
+                                     x0, timestep=timestep)
+
+        qout = -fx[:, -1] * gammas_ro_route[i] / timestep
+
+        q_states_ro_r[:, i] = x
+        fact = areas[i] * timestep / 86.4
+        q_qout_ro_r[:, i] = qout + q_qout_rr_r[:, i] * fact
+
+    assert allclose(states_rr_p, q_states_rr_p)
+    assert allclose(states_rr_r, q_states_rr_r)
+    assert allclose(states_ro_r, q_states_ro_r)
+
+    assert allclose(qout_rr_p, q_qout_rr_p)
+    assert allclose(qout_rr_r, q_qout_rr_r)
+    assert allclose(qout_ro_r, q_qout_ro_r)
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma", [1, 100, 10000])
 def test_gradbench_tangent(siteid, gamma, allclose):
-    return
+    pytest.skip("WIP")
     x0, timestep, qin = get_data(siteid)
     eps = 1e-6
 

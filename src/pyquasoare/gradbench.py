@@ -3,7 +3,7 @@ import numpy as np
 from pyquasoare import has_c_module
 
 if has_c_module():
-    import c_pyquasoare
+    import c_pyquasoare_benchmarks
 else:
     raise ImportError("Cannot run without C module."
                       + " Please compile C code")
@@ -20,11 +20,11 @@ def gradbench_quadrouting(timestep, qin, x0, gammas):
     states = np.empty((nval, nreaches))
     qout = np.empty((nval, nreaches))
 
-    ierr = c_pyquasoare.gradbench_quadrouting(timestep, x0,
-                                              gammas, qin,
-                                              states, qout)
+    ierr = c_pyquasoare_benchmarks.gradbench_quadrouting(timestep, x0,
+                                                         gammas, qin,
+                                                         states, qout)
     if ierr > 0:
-        raise ValueError(f"c_pyquasoare.gradbench_quadrouting returns {ierr}")
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_quadrouting returns {ierr}")
 
     return states, qout
 
@@ -44,22 +44,71 @@ def gradbench_rainfallrunoff(timestep, pin, ein, x0,
     qout_rr_prod = np.empty(nval)
     qout_rr_route = np.empty(nval)
 
-    ierr = c_pyquasoare.gradbench_rainfallrunoff(timestep,
-                                                 x0_rr_prod,
-                                                 x0_rr_route,
-                                                 gamma_rr_prod,
-                                                 gamma_rr_route,
-                                                 demand_rr_route,
-                                                 pin, ein,
-                                                 states_rr_prod,
-                                                 states_rr_route,
-                                                 qout_rr_prod,
-                                                 qout_rr_route)
+    ierr = c_pyquasoare_benchmarks.gradbench_rainfallrunoff(timestep,
+                                                            x0_rr_prod,
+                                                            x0_rr_route,
+                                                            gamma_rr_prod,
+                                                            gamma_rr_route,
+                                                            demand_rr_route,
+                                                            pin, ein,
+                                                            states_rr_prod,
+                                                            states_rr_route,
+                                                            qout_rr_prod,
+                                                            qout_rr_route)
     if ierr > 0:
-        raise ValueError(f"c_pyquasoare.gradbench_quadrouting returns {ierr}")
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_quadrouting returns {ierr}")
 
     return states_rr_prod, states_rr_route, \
         qout_rr_prod, qout_rr_route
+
+
+def gradbench_semidist(timestep, pin, ein, x0, areas,
+                       gammas_rr_prod, gammas_rr_route,
+                       gammas_ro_route, demands_rr_route):
+    timestep = np.float64(timestep)
+    areas = areas.astype(np.float64)
+    gammas_rr_prod = gammas_rr_prod.astype(np.float64)
+    gammas_rr_route = gammas_rr_route.astype(np.float64)
+    gammas_ro_route = gammas_ro_route.astype(np.float64)
+    demands_rr_route = demands_rr_route.astype(np.float64)
+    pin = np.ascontiguousarray(pin).astype(np.float64)
+    ein = np.ascontiguousarray(ein).astype(np.float64)
+
+    nreaches = areas.shape[0]
+
+    nval = pin.shape[0]
+    x0 = np.float64(x0)
+    x0_rr_prod = x0
+    x0_rr_route = x0
+    x0_ro_route = x0
+    states_rr_prod = np.empty((nval, nreaches))
+    states_rr_route = np.empty((nval, nreaches))
+    states_ro_route = np.empty((nval, nreaches))
+    qout_rr_prod =  np.empty((nval, nreaches))
+    qout_rr_route = np.empty((nval, nreaches))
+    qout_ro_route = np.empty((nval, nreaches))
+
+    ierr = c_pyquasoare_benchmarks.gradbench_semidist(timestep,
+                                                      x0_rr_prod,
+                                                      x0_rr_route,
+                                                      x0_ro_route,
+                                                      areas,
+                                                      gammas_rr_prod,
+                                                      gammas_rr_route,
+                                                      gammas_ro_route,
+                                                      demands_rr_route,
+                                                      pin, ein,
+                                                      states_rr_prod,
+                                                      states_rr_route,
+                                                      states_ro_route,
+                                                      qout_rr_prod,
+                                                      qout_rr_route,
+                                                      qout_ro_route)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_semidist returns {ierr}")
+
+    return states_rr_prod, states_rr_route, states_ro_route, \
+        qout_rr_prod, qout_rr_route, qout_ro_route
 
 
 #def gradbench_tangent(timestep, qin, x0, gammas, gammas_diff):
@@ -76,13 +125,13 @@ def gradbench_rainfallrunoff(timestep, pin, ein, x0,
 #    qout = np.empty((nval, nreaches))
 #    qout_diff = np.empty((nval, nreaches))
 #
-#    ierr = c_pyquasoare.gradbench_tangent(timestep, x0, gammas,
+#    ierr = c_pyquasoare_benchmarks.gradbench_tangent(timestep, x0, gammas,
 #                                      gammas_diff,
 #                                      qin,
 #                                      states, states_diff,
 #                                      qout, qout_diff)
 #
 #    if ierr > 0:
-#        raise ValueError(f"c_pyquasoare.gradbench_tangent returns {ierr}")
+#        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_tangent returns {ierr}")
 #
 #    return states, qout, states_diff, qout_diff

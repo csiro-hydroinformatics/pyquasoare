@@ -153,11 +153,11 @@ int rr_prod_runtimestep(double qstar1, double qstar2,
                        double timestep, double gamma,
                        double x0, double * state, double * flux) {
     /* Quasaore coefficients
-     * dx/dt = Q1* / G (1-x^2) - Q2* / G x(2-x) - 4^3/9^4/Δ x^2
+     * dx/dt = Q1* / G (1-x^2) - Q2* / G x(2-x) - 1/Δ  4^3/9^4 x^2
      *       = a x^2 + b x + c
      *
      * Output flux = Q1* - Q1 - Q2
-     * F = Q1* - Q1* (1 - intx2) + Γ/Δ  4^3/9^4 intx2
+     * F = Q1* - Q1* (1 - intx2/Δ) + Γ/Δ^2 4^3/9^4 intx2
      */
     double a = (qstar2 - qstar1) / gamma - 64. / 6561. / timestep;
     double b = -2 * qstar2 / gamma;
@@ -182,13 +182,13 @@ int rr_route_runtimestep(double qstar1, double qstar2,
                         double timestep, double gamma,
                         double x0, double * state, double * flux) {
     /* Quasaore coefficients
-     * dx/dt = Q1* / G 0.9 + Q2* / G x^2 - 1/4/Δ  x^2
+     * dx/dt = Q1* / G 0.9 + Q2* / G x^2 - 1/Δ 0.25 x^2
      *
-     * Output flux = Q1* - Q1 - Q2
-     * F = 0.1 Q1* + Γ/Δ/4 * intx2
+     * Output flux = Q1* - Q1 - Q3
+     * F = 0.1 Q1* + Γ/Δ 0.25 intx2 / Δ
      *
      */
-    double a = qstar2 / gamma - 1. / 4. / timestep;
+    double a = qstar2 / gamma - 0.25 / timestep;
     double b = 0.;
     double c = qstar1 / gamma * 0.9;
     double constants[4];
@@ -201,7 +201,7 @@ int rr_route_runtimestep(double qstar1, double qstar2,
 
     double integ[2];
     gb_integrate_x(a, b, c, constants, timestep, x0, x1, integ);
-    *flux = (qstar1 * 0.1 + gamma * integ[1] / 4 / timestep) / timestep;
+    *flux = qstar1 * 0.1 + gamma * 0.25 * integ[1] / timestep / timestep;
 
     return 0;
 }
@@ -286,7 +286,7 @@ int c_gradbench_rainfallrunoff(int nval,
 
         /* Set timestep for next iteration */
         x0_rr_prod = states_rr_prod[j];
-        x0_rr_route = states_rr_prod[j];
+        x0_rr_route = states_rr_route[j];
     }
 
     return 0;
@@ -295,7 +295,10 @@ int c_gradbench_rainfallrunoff(int nval,
 
 int c_gradbench_semidist(int nval, int nreaches,
                          double timestep,
-                         double x0,
+                         double x0_rr_prod,
+                         double x0_rr_route,
+                         double x0_ro_route,
+                         double * areas,
                          double * gammas_rr_prod,
                          double * gammas_rr_route,
                          double * gammas_ro_route,
@@ -311,14 +314,17 @@ int c_gradbench_semidist(int nval, int nreaches,
 
     int i, j, k;
     double qi, xini_rr_prod, xini_rr_route, xini_ro_route;
-    double qout[1];
+    double qout[1], conversion_factor;
 
     /* Loop through reaches */
     for(i = 0; i < nreaches; i++) {
 
-        xini_rr_prod = x0;
-        xini_rr_route = x0;
-        xini_ro_route = x0;
+        xini_rr_prod = x0_rr_prod;
+        xini_rr_route = x0_rr_route;
+        xini_ro_route = x0_ro_route;
+
+        /* Convert mm/timestep[days] -> m3/s */
+        conversion_factor = areas[i] * timestep / 86.4;
 
         /* Time series loop */
         for(j = 0; j < nval; j++) {
@@ -328,9 +334,9 @@ int c_gradbench_semidist(int nval, int nreaches,
             c_gradbench_rainfallrunoff(1, timestep,
                                        xini_rr_prod,
                                        xini_rr_route,
-                                       gammas_rr_prod[j],
-                                       gammas_rr_route[j],
-                                       demands_rr_route[j],
+                                       gammas_rr_prod[i],
+                                       gammas_rr_route[i],
+                                       demands_rr_route[i],
                                        &(pin[k]),
                                        &(ein[k]),
                                        &(states_rr_prod[k]),
@@ -342,18 +348,15 @@ int c_gradbench_semidist(int nval, int nreaches,
             xini_rr_route = states_rr_route[k];
 
             /* Routing model - the first reach is runoff only */
-            if(i > 0) {
-                qi = qout_rr_route[k - 1];
-                ro_route_runtimestep(qi, timestep,
-                                     gammas_ro_route[j - 1],
-                                     xini_ro_route,
-                                     &(states_ro_route[k]),
-                                     qout);
+            qi = i == 0 ? 0. : qout_ro_route[k - 1];
+            ro_route_runtimestep(qi, timestep,
+                                 gammas_ro_route[i],
+                                 xini_ro_route,
+                                 &(states_ro_route[k]),
+                                 qout);
 
-                xini_ro_route = states_ro_route[k];
-                qout_ro_route[k] = *qout + qout_rr_route[k];
-            }
-
+            xini_ro_route = states_ro_route[k];
+            qout_ro_route[k] = *qout + qout_rr_route[k] * conversion_factor;
         }
     }
 
