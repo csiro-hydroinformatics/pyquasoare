@@ -4,40 +4,40 @@
 #include "c_gradbench_quadrouting_d.h"
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
-int gb_notnull_c(double x) {
+int gb_ro_notnull_c(double x) {
     return (x < 0 || x > 0 ? 1 : 0);
 }
 
-int gb_isnull_c(double x) {
+int gb_ro_isnull_c(double x) {
     int result1;
-    result1 = gb_notnull_c(x);
+    result1 = gb_ro_notnull_c(x);
     return 1 - result1;
 }
 
 /*
-  Differentiation of gb_omega_fun in forward (tangent) mode:
-   variations   of useful results: gb_omega_fun
+  Differentiation of gb_ro_omega_fun in forward (tangent) mode:
+   variations   of useful results: gb_ro_omega_fun
    with respect to varying inputs: x
 */
-double gb_omega_fun_d(double x, double xd, double Delta, double *gb_omega_fun)
-{
+double gb_ro_omega_fun_d(double x, double xd, double Delta, double *
+        gb_ro_omega_fun) {
     if (Delta < 0.) {
-        *gb_omega_fun = tan(x);
+        *gb_ro_omega_fun = tan(x);
         return (1.0+tan(x)*tan(x))*xd;
     } else {
-        *gb_omega_fun = tanh(x);
+        *gb_ro_omega_fun = tanh(x);
         return (1.0-tanh(x)*tanh(x))*xd;
     }
 }
 
 /*
-  Differentiation of gb_constants in forward (tangent) mode:
+  Differentiation of gb_ro_constants in forward (tangent) mode:
    variations   of useful results: constants[0:4-1]
    with respect to varying inputs: c
    Plus diff mem management of: constants:in
 */
-int gb_constants_d(double a, double b, double c, double cd, double constants[4
-        ], double constantsd[4]) {
+int gb_ro_constants_d(double a, double b, double c, double cd, double 
+        constants[4], double constantsd[4]) {
     /* Delta (not very robust numerically, see c_quasoare_core for
      * a better formulation */
     double Delta = b*b - 4*a*c;
@@ -75,14 +75,14 @@ int gb_constants_d(double a, double b, double c, double cd, double constants[4
 }
 
 /*
-  Differentiation of gb_forward in forward (tangent) mode:
-   variations   of useful results: gb_forward
+  Differentiation of gb_ro_forward in forward (tangent) mode:
+   variations   of useful results: gb_ro_forward
    with respect to varying inputs: s0 constants[0:4-1] c
    Plus diff mem management of: constants:in
 */
-double gb_forward_d(double a, double b, double c, double cd, double constants[
-        4], double constantsd[4], double timestep, double s0, double s0d, 
-        double *gb_forward) {
+double gb_ro_forward_d(double a, double b, double c, double cd, double 
+        constants[4], double constantsd[4], double timestep, double s0, double
+        s0d, double *gb_ro_forward) {
     double s1 = 0;
     double s1d;
     double omega = 0.;
@@ -102,14 +102,14 @@ double gb_forward_d(double a, double b, double c, double cd, double constants[
     double temp;
     double temp0;
     double temp1;
-    result1 = gb_isnull_c(a);
-    result2 = gb_isnull_c(b);
+    result1 = gb_ro_isnull_c(a);
+    result2 = gb_ro_isnull_c(b);
     if (result1 && result2) {
         s1d = s0d + tau*cd;
         s1 = s0 + c*tau;
     } else {
-        result1 = gb_isnull_c(a);
-        result2 = gb_notnull_c(b);
+        result1 = gb_ro_isnull_c(a);
+        result2 = gb_ro_notnull_c(b);
         if (result1 && result2) {
             exparg = b*tau;
             if (exparg >= 0.0)
@@ -122,14 +122,14 @@ double gb_forward_d(double a, double b, double c, double cd, double constants[
             s1 = (fabs0 < 1e-12 ? (exparg+1)*s0 + tau*c : temp*(s0+c/b) - c/b)
             ;
         } else {
-            result1 = gb_isnull_c(Delta);
+            result1 = gb_ro_isnull_c(Delta);
             if (result1) {
                 temp = -(a*tau*(s0-sbar)) + 1;
                 temp0 = (s0-sbar)/temp;
                 s1d = sbard + (s0d-sbard+temp0*a*tau*(s0d-sbard))/temp;
                 s1 = sbar + temp0;
             } else {
-                omegad = gb_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
+                omegad = gb_ro_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
                 temp0 = omega/qD;
                 temp = -(a*(s0-sbar)*temp0) + 1.;
                 temp1 = (s0-sbar-signD*qD*omega/a)/temp;
@@ -140,7 +140,7 @@ double gb_forward_d(double a, double b, double c, double cd, double constants[
             }
         }
     }
-    *gb_forward = s1;
+    *gb_ro_forward = s1;
     return s1d;
 }
 
@@ -169,12 +169,12 @@ int ro_route_runtimestep_d(double qstar1, double qstar1d, double timestep,
     int ii1;
     for (ii1 = 0; ii1 < 4; ++ii1)
         constantsd[ii1] = 0.0;
-    gb_constants_d(a, b, c, cd, constants, constantsd);
+    gb_ro_constants_d(a, b, c, cd, constants, constantsd);
     /* Applies Quasaore solution */
     double x1;
     double x1d;
-    x1d = gb_forward_d(a, b, c, cd, constants, constantsd, timestep, x0, x0d, 
-                       &x1);
+    x1d = gb_ro_forward_d(a, b, c, cd, constants, constantsd, timestep, x0, 
+                          x0d, &x1);
     *stated = x1d;
     *state = x1;
     *fluxd = qstar1d - gamma*(x1d-x0d)/timestep - (x1-x0)*gammad/timestep;

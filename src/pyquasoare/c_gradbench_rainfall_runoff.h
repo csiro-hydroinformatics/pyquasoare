@@ -7,8 +7,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_gradbench_quadrouting.h"
-
 int rr_prod_runtimestep(double qstar1, double qstar2,
                        double timestep, double gamma,
                        double x0, double * state, double * flux);

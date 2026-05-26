@@ -22,7 +22,9 @@ extensions = [
         "src/pyquasoare/c_gradbench_quadrouting.c",
         "src/pyquasoare/c_gradbench_quadrouting_d.c",
         "src/pyquasoare/c_gradbench_rainfall_runoff.c",
+        "src/pyquasoare/c_gradbench_rainfall_runoff_d.c",
         "src/pyquasoare/c_gradbench_semidist.c",
+        "src/pyquasoare/c_gradbench_semidist_d.c"
         ],
         include_dirs=[numpy.get_include()])
 

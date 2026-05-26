@@ -198,6 +198,9 @@ def gradbench_rainfall_runoff(timestep, pin, ein, x0,
                              gamma_rr_prod, gamma_rr_route,
                              demand_rr_route):
     timestep = np.float64(timestep)
+    gamma_rr_prod = np.float64(gamma_rr_prod)
+    gamma_rr_route = np.float64(gamma_rr_route)
+    demand_rr_route = np.float64(demand_rr_route)
     pin = np.ascontiguousarray(pin).astype(np.float64)
     ein = np.ascontiguousarray(ein).astype(np.float64)
 
@@ -225,6 +228,62 @@ def gradbench_rainfall_runoff(timestep, pin, ein, x0,
 
     return states_rr_prod, states_rr_route, \
         qout_rr_prod, qout_rr_route
+
+
+def gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
+                                      gamma_rr_prod,
+                                      dgamma_rr_prod,
+                                      gamma_rr_route,
+                                      dgamma_rr_route,
+                                      demand_rr_route,
+                                      ddemand_rr_route):
+    timestep = np.float64(timestep)
+    gamma_rr_prod = np.float64(gamma_rr_prod)
+    dgamma_rr_prod = np.float64(dgamma_rr_prod)
+    gamma_rr_route = np.float64(gamma_rr_route)
+    dgamma_rr_route = np.float64(dgamma_rr_route)
+    demand_rr_route = np.float64(demand_rr_route)
+    ddemand_rr_route = np.float64(ddemand_rr_route)
+    pin = np.ascontiguousarray(pin).astype(np.float64)
+    ein = np.ascontiguousarray(ein).astype(np.float64)
+
+    nval = pin.shape[0]
+    x0_rr_prod = x0
+    x0_rr_route = x0
+    states_rr_prod = np.empty(nval)
+    dstates_rr_prod = np.empty(nval)
+    states_rr_route = np.empty(nval)
+    dstates_rr_route = np.empty(nval)
+    qout_rr_prod = np.empty(nval)
+    dqout_rr_prod = np.empty(nval)
+    qout_rr_route = np.empty(nval)
+    dqout_rr_route = np.empty(nval)
+
+    ierr = c_pyquasoare_benchmarks.gradbench_rainfall_runoff_d(timestep,
+                                                               x0_rr_prod,
+                                                               x0_rr_route,
+                                                               gamma_rr_prod,
+                                                               dgamma_rr_prod,
+                                                               gamma_rr_route,
+                                                               dgamma_rr_route,
+                                                               demand_rr_route,
+                                                               ddemand_rr_route,
+                                                               pin, ein,
+                                                               states_rr_prod,
+                                                               dstates_rr_prod,
+                                                               states_rr_route,
+                                                               dstates_rr_route,
+                                                               qout_rr_prod,
+                                                               dqout_rr_prod,
+                                                               qout_rr_route,
+                                                               dqout_rr_route)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_rainfall_runoff_d returns {ierr}")
+
+    return states_rr_prod, dstates_rr_prod, \
+        states_rr_route, dstates_rr_route, \
+        qout_rr_prod, dqout_rr_prod, \
+        qout_rr_route, dqout_rr_route
 
 
 def gradbench_semidist(timestep, pin, ein, x0, areas,
@@ -276,28 +335,89 @@ def gradbench_semidist(timestep, pin, ein, x0, areas,
         qout_rr_prod, qout_rr_route, qout_ro_route
 
 
-#def gradbench_tangent(timestep, qin, x0, gammas, gammas_diff):
-#    timestep = np.float64(timestep)
-#    x0 = np.float64(x0)
-#    gammas = np.ascontiguousarray(gammas).astype(np.float64)
-#    gammas_diff = np.ascontiguousarray(gammas_diff).astype(np.float64)
-#    qin = np.ascontiguousarray(qin).astype(np.float64)
-#
-#    nval = qin.shape[0]
-#    nreaches = len(gammas)
-#    states = np.empty((nval, nreaches))
-#    states_diff = np.empty((nval, nreaches))
-#    qout = np.empty((nval, nreaches))
-#    qout_diff = np.empty((nval, nreaches))
-#
-#    ierr = c_pyquasoare_benchmarks.gradbench_tangent(timestep, x0, gammas,
-#                                      gammas_diff,
-#                                      qin,
-#                                      states, states_diff,
-#                                      qout, qout_diff)
-#
-#    if ierr > 0:
-#        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_tangent returns {ierr}")
-#
-#    return states, qout, states_diff, qout_diff
+def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
+                               gammas_rr_prod,
+                               dgammas_rr_prod,
+                               gammas_rr_route,
+                               dgammas_rr_route,
+                               gammas_ro_route,
+                               dgammas_ro_route,
+                               demands_rr_route,
+                               ddemands_rr_route):
+    timestep = np.float64(timestep)
+    areas = areas.astype(np.float64)
+    gammas_rr_prod = gammas_rr_prod.astype(np.float64)
+    dgammas_rr_prod = dgammas_rr_prod.astype(np.float64)
+    gammas_rr_route = gammas_rr_route.astype(np.float64)
+    dgammas_rr_route = dgammas_rr_route.astype(np.float64)
+    gammas_ro_route = gammas_ro_route.astype(np.float64)
+    dgammas_ro_route = dgammas_ro_route.astype(np.float64)
+    demands_rr_route = demands_rr_route.astype(np.float64)
+    ddemands_rr_route = ddemands_rr_route.astype(np.float64)
+    pin = np.ascontiguousarray(pin).astype(np.float64)
+    ein = np.ascontiguousarray(ein).astype(np.float64)
+
+    nreaches = areas.shape[0]
+
+    nval = pin.shape[0]
+    x0 = np.float64(x0)
+    x0_rr_prod = x0
+    x0_rr_route = x0
+    x0_ro_route = x0
+    states_rr_prod = np.empty((nval, nreaches))
+    dstates_rr_prod = np.empty((nval, nreaches))
+    states_rr_route = np.empty((nval, nreaches))
+    dstates_rr_route = np.empty((nval, nreaches))
+    states_ro_route = np.empty((nval, nreaches))
+    dstates_ro_route = np.empty((nval, nreaches))
+    qout_rr_prod =  np.empty((nval, nreaches))
+    dqout_rr_prod =  np.empty((nval, nreaches))
+    qout_rr_route = np.empty((nval, nreaches))
+    dqout_rr_route = np.empty((nval, nreaches))
+    qout_ro_route = np.empty((nval, nreaches))
+    dqout_ro_route = np.empty((nval, nreaches))
+
+    ierr = c_pyquasoare_benchmarks.gradbench_semidist_d(timestep,
+                                                        x0_rr_prod,
+                                                        x0_rr_route,
+                                                        x0_ro_route,
+                                                        areas,
+                                                        gammas_rr_prod,
+                                                        dgammas_rr_prod,
+                                                        gammas_rr_route,
+                                                        dgammas_rr_route,
+                                                        gammas_ro_route,
+                                                        dgammas_ro_route,
+                                                        demands_rr_route,
+                                                        ddemands_rr_route,
+                                                        pin, ein,
+                                                        states_rr_prod,
+                                                        dstates_rr_prod,
+                                                        states_rr_route,
+                                                        dstates_rr_route,
+                                                        states_ro_route,
+                                                        dstates_ro_route,
+                                                        qout_rr_prod,
+                                                        dqout_rr_prod,
+                                                        qout_rr_route,
+                                                        dqout_rr_route,
+                                                        qout_ro_route,
+                                                        dqout_ro_route)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_semidist_d returns {ierr}")
+
+    return states_rr_prod, \
+        dstates_rr_prod, \
+        states_rr_route, \
+        dstates_rr_route, \
+        states_ro_route, \
+        dstates_ro_route, \
+        qout_rr_prod, \
+        dqout_rr_prod, \
+        qout_rr_route, \
+        dqout_rr_route, \
+        qout_ro_route, \
+        dqout_ro_route
+
+
 

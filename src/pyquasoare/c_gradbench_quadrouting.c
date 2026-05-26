@@ -1,22 +1,22 @@
 #include "c_gradbench_quadrouting.h"
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
-int gb_notnull(double x){
+int gb_ro_notnull(double x){
     return x < 0 || x > 0 ? 1 : 0;
 }
 
-int gb_isnull(double x){
-    return 1 - gb_notnull(x);
+int gb_ro_isnull(double x){
+    return 1 - gb_ro_notnull(x);
 }
 
-double gb_omega_fun(double x, double Delta){
+double gb_ro_omega_fun(double x, double Delta){
     if(Delta<0.)
         return tan(x);
     else
         return tanh(x);
 }
 
-int gb_constants(double a, double b, double c, double constants[4]) {
+int gb_ro_constants(double a, double b, double c, double constants[4]) {
 
     /* Delta (not very robust numerically, see c_quasoare_core for
      * a better formulation */
@@ -35,7 +35,7 @@ int gb_constants(double a, double b, double c, double constants[4]) {
     return 0;
 }
 
-double gb_forward(double a, double b, double c, double constants[4],
+double gb_ro_forward(double a, double b, double c, double constants[4],
                   double timestep, double s0){
     double s1 = 0;
     double omega = 0.;
@@ -47,20 +47,20 @@ double gb_forward(double a, double b, double c, double constants[4],
     double qD = constants[2];
     double sbar = constants[3];
 
-    if(gb_isnull(a) && gb_isnull(b)){
+    if(gb_ro_isnull(a) && gb_ro_isnull(b)){
         s1 = s0 + c * tau;
     }
-    else if((gb_isnull(a) && gb_notnull(b))){
+    else if((gb_ro_isnull(a) && gb_ro_notnull(b))){
         exparg = b * tau;
         s1 = fabs(exparg) < 1e-12 ? s0 * (1 + exparg) + c * tau :
                 -c / b + (s0 + c / b) * exp(exparg);
     }
     else{
-        if(gb_isnull(Delta)){
+        if(gb_ro_isnull(Delta)){
             s1 = sbar + (s0 - sbar) / (1 - a * tau * (s0 - sbar));
         }
         else {
-            omega = gb_omega_fun(qD*tau, Delta);
+            omega = gb_ro_omega_fun(qD*tau, Delta);
             s1 = sbar + (s0 - sbar - signD * qD / a * omega)
                         / (1. - a / qD * (s0 - sbar) * omega);
         }
@@ -69,7 +69,7 @@ double gb_forward(double a, double b, double c, double constants[4],
 }
 
 /* computes integral of x and x^2 over [0, Δ] */
-double gb_integrate_x(double a, double b, double c, double constants[4],
+double gb_ro_integrate_x(double a, double b, double c, double constants[4],
                       double timestep, double s0, double s1,
                       double integ[2])  {
     double tau = timestep;
@@ -83,20 +83,20 @@ double gb_integrate_x(double a, double b, double c, double constants[4],
 
     double integS, integS2, omega, term1, term2;
 
-    if (gb_isnull(a) && gb_isnull(b)) {
+    if (gb_ro_isnull(a) && gb_ro_isnull(b)) {
         integS = s0 * tau + c * tau2 / 2;
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
-    else if((gb_isnull(a) && gb_notnull(b))){
+    else if((gb_ro_isnull(a) && gb_ro_notnull(b))){
         integS = (s1 - s0 - c * tau) / b;
         integS2 = ((s1 * s1 - s0 * s0) / 2. - c * integS) / b;
     }
-    else if (gb_notnull(a)){
+    else if (gb_ro_notnull(a)){
         /* Integrate S only because S2 can be deducted from S */
-        if(gb_isnull(Delta))
+        if(gb_ro_isnull(Delta))
             integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
         else {
-            omega = gb_omega_fun(qD * tau, Delta);
+            omega = gb_ro_omega_fun(qD * tau, Delta);
 
             /* Special formula to avoid the case where omega == 1 */
             if(qD * tau > 10 && Delta > 0)
@@ -131,10 +131,10 @@ int ro_route_runtimestep(double qstar1, double timestep, double gamma,
     double b = 0;
     double c = qstar1 / gamma;
     double constants[4];
-    gb_constants(a, b, c, constants);
+    gb_ro_constants(a, b, c, constants);
 
     /* Applies Quasaore solution */
-    double x1 = gb_forward(a, b, c, constants, timestep, x0);
+    double x1 = gb_ro_forward(a, b, c, constants, timestep, x0);
 
     *state = x1;
     *flux = qstar1 - gamma / timestep * (x1 - x0);
