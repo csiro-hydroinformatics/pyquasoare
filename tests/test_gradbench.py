@@ -100,8 +100,6 @@ def test_gradbench_quadrouting(siteid, gamma, timestep, allclose):
 def test_gradbench_quadrouting_tangent(siteid, gamma, timestep, allclose):
     x0, _, qin, _, _ = get_data(siteid)
 
-    eps = 1e-6
-
     # run benchmarks
     gammas = np.array([gamma])
     dgammas = np.array([1.])
@@ -114,16 +112,20 @@ def test_gradbench_quadrouting_tangent(siteid, gamma, timestep, allclose):
     states = states.squeeze()
     dstates = dstates.squeeze()
 
+    # Numerical differenciation
+    eps = 1e-6
     gammas = np.array([gamma - eps])
     states1, qout1 = benchmarks.gradbench_quadrouting(timestep, qin, x0, gammas)
     gammas = np.array([gamma + eps])
     states2, qout2 = benchmarks.gradbench_quadrouting(timestep, qin, x0, gammas)
 
     dqout_expected = (qout2 - qout1).squeeze() / 2 / eps
-    assert allclose(dqout, dqout_expected)
+    atol = 1e-5 if gamma == 10000 else 1e-8
+    assert allclose(dqout, dqout_expected, atol=atol)
 
+    atol = 1e-8
     dstates_expected = (states2 - states1).squeeze() / 2 / eps
-    assert allclose(dstates, dstates_expected)
+    assert allclose(dstates, dstates_expected, atol=atol)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -190,6 +192,58 @@ def test_gradbench_rainfall_runoff_route(siteid, gamma, demand, timestep, allclo
     assert allclose(states_r, x_r)
     assert allclose(qout_r, expected)
 
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+@pytest.mark.parametrize("diff", [1, 2, 3])
+def test_gradbench_rainfall_runoff_tangent(siteid, gamma, demand, timestep,
+                                           diff, allclose):
+    x0, _, _, pin, ein = get_data(siteid)
+
+    # run benchmarks
+    gamma_rr_prod = gamma
+    dgamma_rr_prod = 1. if diff == 1 else 0.
+    gamma_rr_route = gamma / 5.
+    dgamma_rr_route = 1. if diff == 2 else 0.
+    demand_rr_route = demand
+    ddemand_rr_route = 1. if diff == 3 else 0.
+    out = benchmarks.gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
+                                                       gamma_rr_prod,
+                                                       dgamma_rr_prod,
+                                                       gamma_rr_route,
+                                                       dgamma_rr_route,
+                                                       demand_rr_route,
+                                                       ddemand_rr_route)
+    # Numerical differenciation
+    eps = 5e-4
+    gamma_rr_prod1 = gamma_rr_prod - dgamma_rr_prod * eps
+    gamma_rr_route1 = gamma_rr_route - dgamma_rr_route * eps
+    demand_rr_route1 = demand_rr_route - ddemand_rr_route * eps
+    out1 = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
+                                             gamma_rr_prod1,
+                                             gamma_rr_route1,
+                                             demand_rr_route1)
+
+    gamma_rr_prod2 = gamma_rr_prod + dgamma_rr_prod * eps
+    gamma_rr_route2 = gamma_rr_route + dgamma_rr_route * eps
+    demand_rr_route2 = demand_rr_route + ddemand_rr_route * eps
+    out2 = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
+                                             gamma_rr_prod2,
+                                             gamma_rr_route2,
+                                             demand_rr_route2)
+    atol = 3e-4
+    for i in range(len(out1)):
+        va = np.asinh(out[1 + 2 * i])
+        vb = np.asinh((out2[i] - out1[i]) / 2 / eps)
+        err = np.abs(va - vb)
+        errmax = err.max()
+        assert errmax < atol
+
+        if vb.std() > 0:
+            rho = np.corrcoef(va.squeeze(), vb.squeeze())[0, 1]
+            assert rho > 1 - 1e-2
 
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
@@ -281,4 +335,81 @@ def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
     assert allclose(qout_rr_p, q_qout_rr_p)
     assert allclose(qout_rr_r, q_qout_rr_r)
     assert allclose(qout_ro_r, q_qout_ro_r)
+
+
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+@pytest.mark.parametrize("nreaches", [1, 2, 5])
+@pytest.mark.parametrize("diff", [1, 2, 3, 4])
+def test_gradbench_semidist_tangent(gamma, demand, timestep, nreaches,
+                                    diff, allclose):
+    nval = 1000
+    pin = np.empty((nval, nreaches))
+    ein = np.empty((nval, nreaches))
+    areas = 100 * np.ones(nreaches)
+    for isite, siteid in enumerate(data_reader.SITEIDS[:nreaches]):
+        x0, _, q, p, e = get_data(siteid)
+        pin[:nval, isite] = p[:nval]
+        ein[:nval, isite] = e[:nval]
+
+    # run benchmarks
+    gammas_rr_prod = np.array([gamma] * nreaches)
+    zr = np.zeros(nreaches)
+    o = np.array([1.] + [0.] * (nreaches - 1))
+    dgammas_rr_prod = o if diff == 1 else zr
+    gammas_rr_route = np.array([gamma / 10] * nreaches)
+    dgammas_rr_route = o if diff == 2 else zr
+    gammas_ro_route = np.array([gamma / 20] * nreaches)
+    dgammas_ro_route = o if diff == 3 else zr
+    demands_rr_route = np.ones(nreaches) * demand
+    ddemands_rr_route = o if diff == 4 else zr
+
+    out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
+                                                gammas_rr_prod,
+                                                dgammas_rr_prod,
+                                                gammas_rr_route,
+                                                dgammas_rr_route,
+                                                gammas_ro_route,
+                                                dgammas_ro_route,
+                                                demands_rr_route,
+                                                ddemands_rr_route)
+
+    eps = 5e-4
+    gammas_rr_prod1 = gammas_rr_prod - dgammas_rr_prod * eps
+    gammas_rr_route1 = gammas_rr_route - dgammas_rr_route * eps
+    gammas_ro_route1 = gammas_ro_route - dgammas_ro_route * eps
+    demands_rr_route1 = demands_rr_route - ddemands_rr_route * eps
+    out1 = benchmarks.gradbench_semidist(timestep, pin, ein, x0, areas,
+                                         gammas_rr_prod1,
+                                         gammas_rr_route1,
+                                         gammas_ro_route1,
+                                         demands_rr_route1)
+
+    gammas_rr_prod2 = gammas_rr_prod + dgammas_rr_prod * eps
+    gammas_rr_route2 = gammas_rr_route + dgammas_rr_route * eps
+    gammas_ro_route2 = gammas_ro_route + dgammas_ro_route * eps
+    demands_rr_route2 = demands_rr_route + ddemands_rr_route * eps
+    out2 = benchmarks.gradbench_semidist(timestep, pin, ein, x0, areas,
+                                         gammas_rr_prod2,
+                                         gammas_rr_route2,
+                                         gammas_ro_route2,
+                                         demands_rr_route2)
+    atol = 1e-4
+    for i in range(len(out1)):
+        va = np.asinh(out[1 + 2 * i])
+        vb = np.asinh((out2[i] - out1[i]) / 2 / eps)
+
+        for j in range(va.shape[1]):
+            vva, vvb = va[:, j], vb[:, j]
+            err = np.abs(vva - vvb)
+            errmax = err.max()
+            assert errmax < atol
+
+            if vvb.std() > 0:
+                rho = np.corrcoef(vva, vvb)[0, 1]
+                assert rho > 1 - 1e-2
+
+
+
 

@@ -48,6 +48,15 @@ cdef extern from 'c_gradbench_rainfall_runoff.h':
                                     double * qout_rr_prod,
                                     double * qout_rr_route)
 
+cdef extern from 'c_gradbench_rainfall_runoff_d.h':
+    int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
+        , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, double
+        gamma_rr_route, double gamma_rr_routed, double demand_rr_route, double
+        demand_rr_routed, double *pin, double *ein, double *states_rr_prod, double
+        *states_rr_prodd, double *states_rr_route, double *states_rr_routed,
+        double *qout_rr_prod, double *qout_rr_prodd, double *qout_rr_route, double
+        *qout_rr_routed);
+
 cdef extern from 'c_gradbench_semidist.h':
     int c_gradbench_semidist(int nval, int nreaches,
                              double timestep,
@@ -67,6 +76,18 @@ cdef extern from 'c_gradbench_semidist.h':
                              double * qout_rr_prod,
                              double * qout_rr_route,
                              double * qout_ro_route)
+
+cdef extern from 'c_gradbench_semidist_d.h':
+    int c_gradbench_semidist_d(int nval, int nreaches, double timestep, double
+        x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double
+        *gammas_rr_prod, double *gammas_rr_prodd, double *gammas_rr_route, double
+        *gammas_rr_routed, double *gammas_ro_route, double *gammas_ro_routed,
+        double *demands_rr_route, double *demands_rr_routed, double *pin, double *
+        ein, double *states_rr_prod, double *states_rr_prodd, double *
+        states_rr_route, double *states_rr_routed, double *states_ro_route, double
+        *states_ro_routed, double *qout_rr_prod, double *qout_rr_prodd, double *
+        qout_rr_route, double *qout_rr_routed, double *qout_ro_route, double *
+        qout_ro_routed);
 
 
 def __cinit__(self):
@@ -243,6 +264,76 @@ def gradbench_rainfall_runoff(double timestep,
                                        <double*> np.PyArray_DATA(qout_rr_route))
 
 
+def gradbench_rainfall_runoff_d(double timestep,
+                                double x0_rr_prod,
+                                double x0_rr_route,
+                                double gamma_rr_prod,
+                                double gamma_rr_prodd,
+                                double gamma_rr_route,
+                                double gamma_rr_routed,
+                                double demand_rr_route,
+                                double demand_rr_routed,
+                                np.ndarray[double, ndim=1, mode='c'] pin not None,
+                                np.ndarray[double, ndim=1, mode='c'] ein not None,
+                                np.ndarray[double, ndim=1, mode='c'] states_rr_prod not None,
+                                np.ndarray[double, ndim=1, mode='c'] states_rr_prodd not None,
+                                np.ndarray[double, ndim=1, mode='c'] states_rr_route not None,
+                                np.ndarray[double, ndim=1, mode='c'] states_rr_routed not None,
+                                np.ndarray[double, ndim=1, mode='c'] qout_rr_prod not None,
+                                np.ndarray[double, ndim=1, mode='c'] qout_rr_prodd not None,
+                                np.ndarray[double, ndim=1, mode='c'] qout_rr_route not None,
+                                np.ndarray[double, ndim=1, mode='c'] qout_rr_routed not None):
+
+    cdef int nval = pin.shape[0]
+
+    if ein.shape[0] != nval:
+        raise ValueError("ein.shape[0] != pin.shape[0]")
+
+    if states_rr_prod.shape[0] != nval:
+        raise ValueError("states_rr_prod.shape[0] != pin.shape[0]")
+
+    if states_rr_prodd.shape[0] != nval:
+        raise ValueError("states_rr_prodd.shape[0] != pin.shape[0]")
+
+    if states_rr_route.shape[0] != nval:
+        raise ValueError("states_rr_route.shape[0] != pin.shape[0]")
+
+    if states_rr_routed.shape[0] != nval:
+        raise ValueError("states_rr_routed.shape[0] != pin.shape[0]")
+
+    if qout_rr_prod.shape[0] != nval:
+        raise ValueError("qout_rr_prod.shape[0] != pin.shape[0]")
+
+    if qout_rr_prodd.shape[0] != nval:
+        raise ValueError("qout_rr_prodd.shape[0] != pin.shape[0]")
+
+    if qout_rr_route.shape[0] != nval:
+        raise ValueError("qout_rr_route.shape[0] != pin.shape[0]")
+
+    if qout_rr_routed.shape[0] != nval:
+        raise ValueError("qout_rr_routed.shape[0] != pin.shape[0]")
+
+    return c_gradbench_rainfall_runoff_d(nval, timestep,
+                                         x0_rr_prod,
+                                         x0_rr_route,
+                                         gamma_rr_prod,
+                                         gamma_rr_prodd,
+                                         gamma_rr_route,
+                                         gamma_rr_routed,
+                                         demand_rr_route,
+                                         demand_rr_routed,
+                                         <double*> np.PyArray_DATA(pin),
+                                         <double*> np.PyArray_DATA(ein),
+                                         <double*> np.PyArray_DATA(states_rr_prod),
+                                         <double*> np.PyArray_DATA(states_rr_prodd),
+                                         <double*> np.PyArray_DATA(states_rr_route),
+                                         <double*> np.PyArray_DATA(states_rr_routed),
+                                         <double*> np.PyArray_DATA(qout_rr_prod),
+                                         <double*> np.PyArray_DATA(qout_rr_prodd),
+                                         <double*> np.PyArray_DATA(qout_rr_route),
+                                         <double*> np.PyArray_DATA(qout_rr_routed))
+
+
 def gradbench_semidist(double timestep,
                        double x0_rr_prod,
                        double x0_rr_route,
@@ -263,6 +354,9 @@ def gradbench_semidist(double timestep,
 
     cdef int nval = pin.shape[0]
     cdef int nreaches = areas.shape[0]
+
+    if gammas_rr_prod.shape[0] != nreaches:
+        raise ValueError("gammas_rr_prod.shape[0] != areas.shape[0]")
 
     if gammas_rr_route.shape[0] != nreaches:
         raise ValueError("gammas_rr_route.shape[0] != areas.shape[0]")
@@ -337,3 +431,165 @@ def gradbench_semidist(double timestep,
                                 <double*> np.PyArray_DATA(qout_ro_route))
 
 
+def gradbench_semidist_d(double timestep,
+                         double x0_rr_prod,
+                         double x0_rr_route,
+                         double x0_ro_route,
+                         np.ndarray[double, ndim=1, mode='c'] areas not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_rr_prod not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_rr_prodd not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_rr_route not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_rr_routed not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_ro_route not None,
+                         np.ndarray[double, ndim=1, mode='c'] gammas_ro_routed not None,
+                         np.ndarray[double, ndim=1, mode='c'] demands_rr_route not None,
+                         np.ndarray[double, ndim=1, mode='c'] demands_rr_routed not None,
+                         np.ndarray[double, ndim=2, mode='c'] pin not None,
+                         np.ndarray[double, ndim=2, mode='c'] ein not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_rr_prod not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_rr_prodd not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_rr_route not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_rr_routed not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_ro_route not None,
+                         np.ndarray[double, ndim=2, mode='c'] states_ro_routed not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_rr_prod not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_rr_prodd not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_rr_route not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_rr_routed not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_ro_route not None,
+                         np.ndarray[double, ndim=2, mode='c'] qout_ro_routed not None):
+    cdef int nval = pin.shape[0]
+    cdef int nreaches = areas.shape[0]
+
+    if gammas_rr_prod.shape[0] != nreaches:
+        raise ValueError("gammas_rr_prod.shape[0] != areas.shape[0]")
+
+    if gammas_rr_prodd.shape[0] != nreaches:
+        raise ValueError("gammas_rr_prodd.shape[0] != areas.shape[0]")
+
+    if gammas_rr_route.shape[0] != nreaches:
+        raise ValueError("gammas_rr_route.shape[0] != areas.shape[0]")
+
+    if gammas_rr_routed.shape[0] != nreaches:
+        raise ValueError("gammas_rr_routed.shape[0] != areas.shape[0]")
+
+    if demands_rr_route.shape[0] != nreaches:
+        raise ValueError("demands_rr_route.shape[0] != areas.shape[0]")
+
+    if demands_rr_routed.shape[0] != nreaches:
+        raise ValueError("demands_rr_routed.shape[0] != areas.shape[0]")
+
+    if gammas_ro_route.shape[0] != nreaches:
+        raise ValueError("gammas_ro_route.shape[0] != areas.shape[0]")
+
+    if gammas_ro_routed.shape[0] != nreaches:
+        raise ValueError("gammas_ro_route.shape[0] != areas.shape[0]")
+
+    if pin.shape[1] != nreaches:
+        raise ValueError("pin.shape[1] != areas.shape[0]")
+
+    if ein.shape[0] != nval:
+        raise ValueError("ein.shape[0] != pin.shape[0]")
+
+    if ein.shape[1] != nreaches:
+        raise ValueError("ein.shape[1] != areas.shape[0]")
+
+    if states_rr_prod.shape[0] != nval:
+        raise ValueError("states_rr_prod.shape[0] != pin.shape[0]")
+
+    if states_rr_prodd.shape[0] != nval:
+        raise ValueError("states_rr_prodd.shape[0] != pin.shape[0]")
+
+    if states_rr_prod.shape[1] != nreaches:
+        raise ValueError("states_rr_prod.shape[1] != areas.shape[0]")
+
+    if states_rr_prodd.shape[1] != nreaches:
+        raise ValueError("states_rr_prodd.shape[1] != areas.shape[0]")
+
+    if states_rr_route.shape[0] != nval:
+        raise ValueError("states_rr_route.shape[0] != pin.shape[0]")
+
+    if states_rr_routed.shape[0] != nval:
+        raise ValueError("states_rr_routed.shape[0] != pin.shape[0]")
+
+    if states_rr_route.shape[1] != nreaches:
+        raise ValueError("states_rr_route.shape[1] != areas.shape[0]")
+
+    if states_rr_routed.shape[1] != nreaches:
+        raise ValueError("states_rr_routed.shape[1] != areas.shape[0]")
+
+    if states_ro_route.shape[0] != nval:
+        raise ValueError("states_ro_route.shape[0] != pin.shape[0]")
+
+    if states_ro_routed.shape[0] != nval:
+        raise ValueError("states_ro_routed.shape[0] != pin.shape[0]")
+
+    if states_ro_route.shape[1] != nreaches:
+        raise ValueError("states_rr_route.shape[1] != areas.shape[0]")
+
+    if states_ro_routed.shape[1] != nreaches:
+        raise ValueError("states_rr_routed.shape[1] != areas.shape[0]")
+
+    if qout_rr_prod.shape[0] != nval:
+        raise ValueError("qout_rr_prod.shape[0] != pin.shape[0]")
+
+    if qout_rr_prodd.shape[0] != nval:
+        raise ValueError("qout_rr_prodd.shape[0] != pin.shape[0]")
+
+    if qout_rr_prod.shape[1] != nreaches:
+        raise ValueError("qout_rr_prod.shape[1] != areas.shape[0]")
+
+    if qout_rr_prodd.shape[1] != nreaches:
+        raise ValueError("qout_rr_prodd.shape[1] != areas.shape[0]")
+
+    if qout_rr_route.shape[0] != nval:
+        raise ValueError("qout_rr_route.shape[0] != pin.shape[0]")
+
+    if qout_rr_routed.shape[0] != nval:
+        raise ValueError("qout_rr_routed.shape[0] != pin.shape[0]")
+
+    if qout_rr_route.shape[1] != nreaches:
+        raise ValueError("qout_rr_route.shape[1] != areas.shape[0]")
+
+    if qout_rr_routed.shape[1] != nreaches:
+        raise ValueError("qout_rr_routed.shape[1] != areas.shape[0]")
+
+    if qout_ro_route.shape[0] != nval:
+        raise ValueError("qout_ro_route.shape[0] != pin.shape[0]")
+
+    if qout_ro_routed.shape[0] != nval:
+        raise ValueError("qout_ro_routed.shape[0] != pin.shape[0]")
+
+    if qout_ro_route.shape[1] != nreaches:
+        raise ValueError("qout_ro_route.shape[1] != areas.shape[0]")
+
+    if qout_ro_routed.shape[1] != nreaches:
+        raise ValueError("qout_ro_routed.shape[1] != areas.shape[0]")
+
+    return c_gradbench_semidist_d(nval, nreaches, timestep,
+                                  x0_rr_prod,
+                                  x0_rr_route,
+                                  x0_ro_route,
+                                  <double*> np.PyArray_DATA(areas),
+                                  <double*> np.PyArray_DATA(gammas_rr_prod),
+                                  <double*> np.PyArray_DATA(gammas_rr_prodd),
+                                  <double*> np.PyArray_DATA(gammas_rr_route),
+                                  <double*> np.PyArray_DATA(gammas_rr_routed),
+                                  <double*> np.PyArray_DATA(gammas_ro_route),
+                                  <double*> np.PyArray_DATA(gammas_ro_routed),
+                                  <double*> np.PyArray_DATA(demands_rr_route),
+                                  <double*> np.PyArray_DATA(demands_rr_routed),
+                                  <double*> np.PyArray_DATA(pin),
+                                  <double*> np.PyArray_DATA(ein),
+                                  <double*> np.PyArray_DATA(states_rr_prod),
+                                  <double*> np.PyArray_DATA(states_rr_prodd),
+                                  <double*> np.PyArray_DATA(states_rr_route),
+                                  <double*> np.PyArray_DATA(states_rr_routed),
+                                  <double*> np.PyArray_DATA(states_ro_route),
+                                  <double*> np.PyArray_DATA(states_ro_routed),
+                                  <double*> np.PyArray_DATA(qout_rr_prod),
+                                  <double*> np.PyArray_DATA(qout_rr_prodd),
+                                  <double*> np.PyArray_DATA(qout_rr_route),
+                                  <double*> np.PyArray_DATA(qout_rr_routed),
+                                  <double*> np.PyArray_DATA(qout_ro_route),
+                                  <double*> np.PyArray_DATA(qout_ro_routed))
