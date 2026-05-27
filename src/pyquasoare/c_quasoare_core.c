@@ -146,7 +146,7 @@ int c_quad_coefficients_smooth(double beta0, double beta1,
 double c_quad_delta_t_max(double a, double b, double c,
                           double Delta, double qD, double sbar,
                           double s0){
-    double delta_tmax=0.;
+    double delta_tmax = 0.;
     double tmp;
 
     if(isnull(a)){
@@ -171,10 +171,10 @@ double c_quad_delta_t_max(double a, double b, double c,
 /* Solution of dS/dt = f*(s) */
 double c_quad_forward(double a, double b, double c, double Delta, double qD,
                             double sbar, double t0, double s0, double t){
-    double s1=c_get_nan();
-    double omega=0.;
-    double exparg=0;
-    double tau=t-t0;
+    double s1 = c_get_nan();
+    double omega = 0.;
+    double exparg = 0;
+    double tau = t - t0;
     double signD = Delta < 0 ? -1. : 1.;
 
     /* Obtain the maximum time for which integration remains valid */
@@ -229,14 +229,14 @@ double c_quad_inverse(double a, double b, double c, double Delta, double qD,
 
 
 /* Increment fluxes by integrating f*(s) */
-int c_quad_fluxes(int nfluxes,
-                  double * aj_vector,
-                  double * bj_vector,
-                  double * cj_vector,
-                  double Aj, double Bj, double Cj,
-                  double Delta, double qD, double sbar,
-                  double t0, double t1, double s0, double s1,
-                  double * fluxes){
+int c_quad_fluxes_increment(int nfluxes,
+                            double * aj_vector,
+                            double * bj_vector,
+                            double * cj_vector,
+                            double Aj, double Bj, double Cj,
+                            double Delta, double qD, double sbar,
+                            double t0, double t1, double s0, double s1,
+                            double * fluxes){
     int i;
     double tau = t1 - t0;
     double tau2 = tau * tau;
@@ -320,6 +320,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
     int idx, i, nit=0, jalpha_next=0, err_flux;
+    int ncoefs = 3;
     double Aj = 0., Bj = 0., Cj = 0.;
     double a=0., b=0., c=0.;
     double coefs_tangent[3];
@@ -329,9 +330,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
     double alpha_min=alphas[0];
     double alpha_max=alphas[nalphas-1];
 
-    double a_vect[QUASOARE_NFLUXES_MAX];
-    double b_vect[QUASOARE_NFLUXES_MAX];
-    double c_vect[QUASOARE_NFLUXES_MAX];
+    double aj_vect[QUASOARE_NFLUXES_MAX];
+    double bj_vect[QUASOARE_NFLUXES_MAX];
+    double cj_vect[QUASOARE_NFLUXES_MAX];
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -346,10 +347,13 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int extrapolating = 0;
     int extrapolating_low = 0;
     int extrapolating_high = 0;
-    double s_low=0, s_high=0;
-    double t_final = t0+timestep;
-    double t_start=t0, t_end=t0;
-    double s_start=s0, s_end=s0;
+    double s_low = 0;
+    double s_high = 0;
+    double t_final = t0 + timestep;
+    double t_start = t0;
+    double t_end = t0;
+    double s_start = s0;
+    double s_end = s0;
 
     if(nfluxes>=QUASOARE_NFLUXES_MAX)
         return QUASOARE_NFLUXES_TOO_LARGE;
@@ -388,7 +392,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
              * matching gradient at boundary.
              */
             if(extrapolating_low){
-                idx = (nalphas - 1) * 3 * i;
+                idx = (nalphas - 1) * ncoefs * i;
                 a = coefs_noscaling[idx] * scl;
                 b = coefs_noscaling[idx + 1] * scl;
                 c = coefs_noscaling[idx + 2] * scl;
@@ -399,7 +403,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 c = coefs_tangent[2];
             }
             else if(extrapolating_high){
-                idx = (nalphas - 1) * 3 * i + 3 * (nalphas - 2);
+                idx = (nalphas - 1) * ncoefs * i + ncoefs * (nalphas - 2);
                 a = coefs_noscaling[idx] * scl;
                 b = coefs_noscaling[idx + 1] * scl;
                 c = coefs_noscaling[idx + 2] * scl;
@@ -410,16 +414,16 @@ int c_quad_integrate(int nalphas, int nfluxes,
                 c = coefs_tangent[2];
             }
             else {
-                idx = (nalphas - 1) * 3 * i + 3 * jalpha;
+                idx = (nalphas - 1) * ncoefs * i + ncoefs * jalpha;
                 a = coefs_noscaling[idx] * scl;
                 b = coefs_noscaling[idx + 1] * scl;
                 c = coefs_noscaling[idx + 2] * scl;
             }
 
             /* Store flux coefficents */
-            a_vect[i] = a;
-            b_vect[i] = b;
-            c_vect[i] = c;
+            aj_vect[i] = a;
+            bj_vect[i] = b;
+            cj_vect[i] = c;
 
             /* Add coefficients to obtain approximation of reservoir equation
              * function */
@@ -501,10 +505,10 @@ int c_quad_integrate(int nalphas, int nfluxes,
         }
 
         /* Increment fluxes during the last interval */
-        err_flux = c_quad_fluxes(nfluxes,
-                                 a_vect, b_vect, c_vect,
-                                 Aj, Bj, Cj, Delta, qD, sbar,
-                                 t_start, t_end, s_start, s_end, fluxes);
+        err_flux = c_quad_fluxes_increment(nfluxes,
+                                           aj_vect, bj_vect, cj_vect,
+                                           Aj, Bj, Cj, Delta, qD, sbar,
+                                           t_start, t_end, s_start, s_end, fluxes);
         if(err_flux>0)
             return err_flux;
 

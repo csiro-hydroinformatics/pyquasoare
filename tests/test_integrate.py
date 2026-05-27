@@ -360,20 +360,20 @@ def test_increment_fluxes(allclose, generate_samples):
         cl = np.concatenate([cvect, np.zeros(n)])
         fluxes = np.zeros(3)
         with pytest.raises(ValueError):
-            integrate.quad_fluxes(al, bl, cl,
+            integrate.quad_fluxes_increment(al, bl, cl,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Check error if sum of coefs is not matched
         with pytest.raises(ValueError):
             cvect2 = cvect.copy()
             cvect2[0] += 10
-            integrate.quad_fluxes(avect, bvect, cvect2,
+            integrate.quad_fluxes_increment(avect, bvect, cvect2,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
 
         # Compute fluxes analytically
         fluxes = np.zeros(3)
-        integrate.quad_fluxes(avect, bvect, cvect,
+        integrate.quad_fluxes_increment(avect, bvect, cvect,
                         aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
 
         # Test mass balance
@@ -402,7 +402,7 @@ def test_increment_fluxes(allclose, generate_samples):
 
         # Compare against slow
         fluxes_slow = np.zeros(3)
-        slow.quad_fluxes(avect, bvect, cvect,
+        slow.quad_fluxes_increment(avect, bvect, cvect,
                          aoj, boj, coj, Delta, qD, sbar,
                          t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
@@ -649,71 +649,67 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
                     +f" / niter={niter_num}")
 
 
-def test_reservoir_equation_gr4j(allclose):
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("X1", [50, 200, 1000])
+def test_reservoir_equation_gr4j(siteid, X1, allclose):
     nalphas = 20
     alphas = np.linspace(0., 1.2, nalphas)
     start, end = "2017-01", "2022-12-31"
     nsubdiv = 10000
     nu = 0.01
-    X1s = [50, 200, 1000]
     LOGGER.info("")
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
-    # Loop over sites
-    for isite, siteid in enumerate(data_reader.SITEIDS):
-        # Get climate data
-        df = data_reader.get_data(siteid, "daily")
-        df = df.loc[start:end]
-        nval = len(df)
-        inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    # Get climate data
+    df = data_reader.get_data(siteid, "daily")
+    df = df.loc[start:end]
+    nval = len(df)
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
 
-        for X1 in X1s:
-            # Run approximate solution + exclude PR and AE
-            s0 = X1/2
-            expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)[:, :-2]
+    # Run approximate solution + exclude PR and AE
+    s0 = X1 / 2
+    expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)[:, :-2]
 
-            # Initialise scaling vector
-            scalings = np.ones(3)
+    # Initialise scaling vector
+    scalings = np.ones(3)
 
-            # Initialise production store level
-            s_start = s0/X1
+    # Initialise production store level
+    s_start = s0/X1
 
-            # Run solution based on quadratic function
-            sims = np.zeros_like(expected)
-            for t in range(nval):
-                P, E = inputs[t]
+    # Run solution based on quadratic function
+    sims = np.zeros_like(expected)
+    for t in range(nval):
+        P, E = inputs[t]
 
-                # Apply interception to inputs
-                pi = max(0, P-E)/X1
-                ei = max(0, E-P)/X1
-                scalings[:2] = pi, ei
+        # Apply interception to inputs
+        pi = max(0, P - E) / X1
+        ei = max(0, E - P) / X1
+        scalings[:2] = pi, ei
 
-                # Integate equation
-                n, s_end, fx = integrate.quad_integrate(alphas, scalings,
-                                                        coefs, 0.,
-                                                        s_start, 1.)
-                sims[t, 0] = s_end*X1
-                sims[t, 1] = fx[0]*X1
-                sims[t, 2] = -fx[1]*X1
-                sims[t, 3] = -fx[2]*X1
-                s_start = s_end
+        # Integate equation
+        n, s_end, fx = integrate.quad_integrate(alphas, scalings,
+                                                coefs, 0.,
+                                                s_start, 1.)
+        sims[t, 0] = s_end*X1
+        sims[t, 1] = fx[0]*X1
+        sims[t, 2] = -fx[1]*X1
+        sims[t, 3] = -fx[2]*X1
+        s_start = s_end
 
-            errmax = np.abs(sims-expected).max()
-            mess = f"approx vs gr4jprod /site {isite+1}/x1={X1:4.0f}:"\
-                        +f" errmax={errmax:3.3e}"
-            LOGGER.info(mess)
-            atol = 1e-3
-            rtol = 1e-4
-
-            assert np.allclose(expected, sims, atol=atol, rtol=rtol)
+    errmax = np.abs(sims-expected).max()
+    mess = f"approx vs gr4jprod /site {siteid}/x1={X1:4.0f}:"\
+                +f" errmax={errmax:3.3e}"
+    LOGGER.info(mess)
+    atol = 1e-3
+    rtol = 1e-4
+    assert np.allclose(expected, sims, atol=atol, rtol=rtol)
 
 
-
-def test_reservoir_interception(allclose):
-    siteid = "203900"
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+def test_reservoir_interception(siteid, allclose):
     df = data_reader.get_data(siteid, "daily")
     P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
     Pclip = np.maximum(P - E, 0.)

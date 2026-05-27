@@ -149,6 +149,9 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
+    else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
+        strncpy(message, "Negative values of flux function", len);
+
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
 

@@ -188,7 +188,7 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     return np.nan
 
 
-def quad_fluxes(aj_vector, bj_vector, cj_vector,
+def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
                 Aj, Bj, Cj, Delta, qD, sbar,
                 t0, t1, s0, s1, fluxes):
     tau = t1-t0
@@ -395,7 +395,7 @@ def quad_integrate(alphas, scalings, coefs,
                   + f" / s={s_start:3.3e} > {s_end:3.3e}")
 
         # Increment fluxes during the last interval
-        quad_fluxes(a_vect, b_vect, c_vect,
+        quad_fluxes_increment(a_vect, b_vect, c_vect,
                     Aj, Bj, Cj, Delta, qD, sbar,
                     t_start, t_end, s_start, s_end, fluxes)
 
