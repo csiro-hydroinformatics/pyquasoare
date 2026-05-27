@@ -237,9 +237,9 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     quad_forward : Integrate ODE forward.
     """
 
-    ierr = c_pyquasoare.quad_fluxes(aj_vector, bj_vector, cj_vector,
-                                    Aj, Bj, Cj, Delta, qD, sbar,
-                                    t0, t1, s0, s1, fluxes)
+    ierr = c_pyquasoare.quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
+                                              Aj, Bj, Cj, Delta, qD, sbar,
+                                              t0, t1, s0, s1, fluxes)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.quad_fluxes returns {ierr} ({mess})")
