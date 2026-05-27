@@ -19,9 +19,18 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
                errors="ignore",
                fluxes=None, niter=None, s1=None):
     """ Integrate the approximate reservoir equation with initial initial
-    condition s0 over a series of P timesteps.
+    condition s0 over a series of P timesteps. The reservoir is
+    characterised by the following differential equation:
 
-    The piecewise quadratic approximations of flux functions are defined by
+    ds/dt = ∑i Q[i] * fi(s)
+
+    where Q[i] are scaling factors and fi are flux functions.
+    The output integrated fluxes are defined as
+
+    F[i] = Q[i] × integral( fi(x), t=0 .. Δ)
+
+    The flux functions fi are approximated by quadratic approximations
+    that are defined by
     - interpolation nodes alphas
     - interpolation coefficients a_matrix_noscaling, b_matrix_noscaling,
         c_matrix_noscaling.
