@@ -150,7 +150,13 @@ int c_get_error_message(int err_code, char message[100]){
         strncpy(message, "Algorithm did not converge", len);
 
     else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
-        strncpy(message, "Negative values of flux function", len);
+        strncpy(message, "Negative value of flux function", len);
+
+    else if(err_code == QUASOARE_NEGATIVE_POTENTIAL_FLUX)
+        strncpy(message, "Negative value of potential flux", len);
+
+    else if(err_code == QUASOARE_NEGATIVE_CAPACITY)
+        strncpy(message, "Negative value of reservoir capacity", len);
 
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
