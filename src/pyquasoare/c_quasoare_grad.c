@@ -55,7 +55,7 @@ int c_lin_fluxes_increment(double timestep,
     double mij, sij;
     double integS = c_get_nan();
     double dflux;
-    double qst;
+    double qi;
 
     if(t1<t0)
         return QUASOARE_TIME_TOOLOW;
@@ -74,16 +74,16 @@ int c_lin_fluxes_increment(double timestep,
         mij = mj_vector[i];
         sij = sj_vector[i];
 
-        qst = c_lin_get_qstar(Qstars, gamma, timestep, i);
-        dflux = qst * (sij * integS + mij * tau) / timestep;
+        qi = c_lin_get_qstar(Qstars, gamma, timestep, i) / timestep;
+        dflux = qi * (sij * integS + mij * tau);
         fluxes[i] += dflux;
 
         if(i <= 1)
-            fluxes[i + 3] += qst - dflux;
+            fluxes[i + 3] += qi * tau - dflux;
     }
 
     /* Total outflow = bypasss (counted negatively) + outflow */
-    fluxes[5] = - fluxes[3] + fluxes[4];
+    fluxes[5] = fluxes[2] - fluxes[3];
 
     return 0;
 }
@@ -140,8 +140,21 @@ int c_lin_integrate(int nalphas,
     double x_start = x0;
     double x_end = x0;
 
+    double qis[3] = {
+        c_lin_get_qstar(Qstars, gamma, timestep, 0) / gamma,
+        c_lin_get_qstar(Qstars, gamma, timestep, 1) / gamma,
+        c_lin_get_qstar(Qstars, gamma, timestep, 2) / gamma
+    };
+
     for(i=0; i<nfluxes; i++)
         fluxes[i] = 0.;
+
+    /* Check data */
+    if(Qstars[0] < 0)
+        return QUASOARE_NEGATIVE_POTENTIAL_FLUX;
+
+    if(gamma < 0)
+        return QUASOARE_NEGATIVE_CAPACITY;
 
     /* Time loop */
     while (t_end < t_final * (1 - QUASOARE_EPS) && nit < niter_max) {
@@ -156,7 +169,7 @@ int c_lin_integrate(int nalphas,
 
         /* Get band limits */
         alpha0 = extrapolating_low ? -1 * c_get_inf() : alphas[jalpha];
-        alpha1 = extrapolating_high ? c_get_inf() : alphas[jalpha+1];
+        alpha1 = extrapolating_high ? c_get_inf() : alphas[jalpha + 1];
 
         /* Sum coefficients accross fluxes */
         M = 0.; S = 0.;
@@ -185,9 +198,8 @@ int c_lin_integrate(int nalphas,
 
             /* Add coefficients to obtain approximation of reservoir equation
              * function */
-            qi = c_lin_get_qstar(Qstars, gamma, timestep, i) / gamma;
-            M += mij * qi;
-            S += sij * qi;
+            M += mij * qis[i];
+            S += sij * qis[i];
         }
 
         /* Check coefficients */

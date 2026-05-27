@@ -1,14 +1,22 @@
 import warnings
 import numpy as np
 
-from pyquasoare import has_c_module
+from pyquasoare import has_c_module, approx
+from pyquasoare.models import ERRORS
+
 if has_c_module():
     import c_pyquasoare
 else:
     raise ImportError("Cannot run quasoare without C module."
                       + " Please compile C code")
 
-ERRORS = ["ignore", "raise", "warn"]
+def lin_coefficient_matrix(funs, alphas):
+    if len(funs) != 3:
+        raise ValueError(f"Expected 3 flux functions, got {len(funs)}.")
+    coefs = approx.quad_coefficient_matrix(funs, alphas,
+                                           approx_opt=0)
+    return np.ascontiguousarray(coefs[:, :, 1:])
+
 
 
 def lin_reservoir(alphas, timestep, gamma,
@@ -92,55 +100,16 @@ def lin_reservoir(alphas, timestep, gamma,
     approx.quad_coefficient_matrix : Obtain interpolation coefficients.
     integrate.quad_forward : Integrate ODE forward.
     integrate.quad_integrate : Integrate ODE forward.
-
-    Examples
-    --------
-    >>> from pyquasoare import approx, integrate, models
-    >>> # Two fluxes : fixed inflow and outflow defined as a power function
-    >>> funs = [lambda x: np.ones_like(x), lambda x: -x**6/2]
-    >>> # 10 interpolation nodes
-    >>> alphas = np.linspace(0., 1.2, 10)
-    >>> # Get interpolation coefficients for each band and each flux
-    >>> coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
-    >>> # Define a simulation with 10 time steps
-    >>> P = 10
-    >>> # The inflow is a step response equal to 0 excel for the 3rd time step
-    >>> inflows = np.zeros(P)
-    >>> inflows[2] = 100.
-    >>> sc = np.column_stack([inflows, np.ones(P)])
-    >>> # Run the model
-    >>> s0 = 0.
-    >>> timestep = 1.
-    >>> niter, s1, fx = quad_model(alphas, sc, coefs, s0, timestep)
-    >>> # ODE solution
-    >>> s1
-    array([ 0.        ,  0.        , 14.63001824,  0.92614791,  0.75904346,
-            0.68854374,  0.64494538,  0.61378862,  0.59006276,  0.57111566])
-    >>> # Flux totals
-    >>> fx
-    array([[ 0.00000000e+00,  0.00000000e+00],
-           [ 0.00000000e+00,  0.00000000e+00],
-           [ 1.00000000e+02, -8.53699818e+01],
-           [ 0.00000000e+00, -1.37038703e+01],
-           [ 0.00000000e+00, -1.67104449e-01],
-           [ 0.00000000e+00, -7.04997259e-02],
-           [ 0.00000000e+00, -4.35983531e-02],
-           [ 0.00000000e+00, -3.11567661e-02],
-           [ 0.00000000e+00, -2.37258597e-02],
-           [ 0.00000000e+00, -1.89470944e-02]])
-    >>> # Check mass balance
-    >>> fx.sum(axis=0)[1]+s0-s1[-1]
-    np.float64(-100.0)
     """
     if errors not in ERRORS:
         txt = "/".join(ERRORS)
         errmsg = f"Expected errors in {txt}, got {errors}."
         raise ValueError(errmsg)
 
-    nval = flux_scalings.shape[0]
+    nval = Qstars.shape[0]
 
     if fluxes is None:
-        fluxes = np.zeros(flux_scalings.shape, dtype=np.float64)
+        fluxes = np.zeros((nval, 6), dtype=np.float64)
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
     if x1 is None:
@@ -151,7 +120,7 @@ def lin_reservoir(alphas, timestep, gamma,
     ierr = c_pyquasoare.lin_reservoir(ierrors, timestep, gamma,
                                       x0, xmin, xmax,
                                       alphas,
-                                      qstars,
+                                      Qstars,
                                       coefs_linear,
                                       niter,
                                       x1,
@@ -167,4 +136,4 @@ def lin_reservoir(alphas, timestep, gamma,
             mess = f"{nerr} errors when running c_pyquasoare.lin_model"
             warnings.warn(mess)
 
-    return niter, s1, fluxes
+    return niter, x1, fluxes

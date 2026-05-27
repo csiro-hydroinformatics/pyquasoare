@@ -536,7 +536,7 @@ def lin_reservoir(int errors, double timestep, double gamma,
     if coefs_linear.shape[1] != nalphas - 1:
         raise ValueError("coefs_linear.shape[1] != nalphas - 1")
 
-    if coefs_linear.shape[2] != 3:
+    if coefs_linear.shape[2] != 2:
         raise ValueError("coefs_linear.shape[2] != 2")
 
     if x1.shape[0] != nval:
