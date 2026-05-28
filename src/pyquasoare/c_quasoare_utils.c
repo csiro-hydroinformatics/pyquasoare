@@ -152,8 +152,8 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
         strncpy(message, "Negative value of flux function", len);
 
-    else if(err_code == QUASOARE_NEGATIVE_POTENTIAL_FLUX)
-        strncpy(message, "Negative value of potential flux", len);
+    else if(err_code == QUASOARE_NEGATIVE_POTENTIAL_INFLOW_FLUX)
+        strncpy(message, "Negative value of potential inflow flux", len);
 
     else if(err_code == QUASOARE_NEGATIVE_CAPACITY)
         strncpy(message, "Negative value of reservoir capacity", len);

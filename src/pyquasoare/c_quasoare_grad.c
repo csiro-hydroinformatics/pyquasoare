@@ -78,12 +78,18 @@ int c_lin_fluxes_increment(double timestep,
         dflux = qi * (sij * integS + mij * tau);
         fluxes[i] += dflux;
 
+        /* Careful here,
+         * Flux bypass is negative because it's leaving the reservoir
+         * Demand shortfall is positive if potential demand is negative
+         * because it's demand supposed to enter the reservoir. For a
+         * downstream reservoir, its sign has to be inverse.
+         */
         if(i <= 1)
-            fluxes[i + 3] += qi * tau - dflux;
+            fluxes[i + 3] += dflux - qi * tau;
     }
 
-    /* Total outflow = bypasss (counted negatively) + outflow */
-    fluxes[5] = fluxes[2] - fluxes[3];
+    /* Total outflow = bypasss + outflow */
+    fluxes[5] = fluxes[2] + fluxes[3];
 
     return 0;
 }
@@ -93,8 +99,8 @@ int c_lin_fluxes_increment(double timestep,
 int c_lin_integrate(int nalphas,
                     double * alphas,
                     double timestep,
-                    double gamma,
                     double Qstars[2],
+                    double gamma,
                     double * coefs_linear,
                     double t0,
                     double x0,
@@ -109,10 +115,9 @@ int c_lin_integrate(int nalphas,
 
     double M = 0., S = 0.;
     double mij = 0., sij = 0.;
-    double qi;
     double funval = 0.;
     double funval_prev = 0.;
-    double alpha0, alpha1, scl;
+    double alpha0, alpha1;
     double alpha_min = alphas[0];
     double alpha_max = alphas[nalphas-1];
 
@@ -151,7 +156,7 @@ int c_lin_integrate(int nalphas,
 
     /* Check data */
     if(Qstars[0] < 0)
-        return QUASOARE_NEGATIVE_POTENTIAL_FLUX;
+        return QUASOARE_NEGATIVE_POTENTIAL_INFLOW_FLUX;
 
     if(gamma < 0)
         return QUASOARE_NEGATIVE_CAPACITY;
@@ -315,7 +320,8 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
     for(t = 0; t < nval; t++) {
         /* Integrate ode */
         ierr = c_lin_integrate(nalphas, alphas, timestep,
-                               gamma, &(Qstars[ninputs * t]),
+                               &(Qstars[ninputs * t]),
+                               gamma,
                                coefs_linear,
                                0., store,
                                &(niter[t]),
@@ -343,6 +349,122 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
         /* Impose constraint */
         store = store < xmin ? xmin : store > xmax ? xmax : store;
         x1[t] = store;
+    }
+
+    return 0;
+}
+
+
+int c_lin_model(int nreservoirs, int nalphas, int nval,
+                double timestep, double x0,
+                double * Qstars,
+                double * Qstars_mapping,
+                double * alphas,
+                double * gammas,
+                double * coefs_linear,
+                double * x1,
+                double * fluxes) {
+
+    int ierr, t, i, j, l, q, p, ka, kq, kc, kx, kf, ko, kw;
+
+    int nfluxes_output = 6;
+    int nfluxes_input = 2;
+    int nfluxes_function = 3;
+    int ncoefs = 2;
+
+    /* we do not store the number of iterations
+     * This is a dummy variable */
+    int niter[1];
+
+    double store;
+    double gamma;
+    double w;
+    double Qst[2];
+
+    /* timestep loop */
+    for(t = 0; t < nval; t++) {
+
+        /* loop through reservoirs */
+        for(i = 0; i < nreservoirs; i++) {
+
+            /* Get reservoir capacity */
+            gamma = gammas[i];
+
+            /* Data indexes */
+            kq = (nreservoirs * t + i) * nfluxes_input;
+            kc = nfluxes_function * (nalphas - 1) * ncoefs * i;
+            kx = nreservoirs * t + i;
+            kf = (nreservoirs * t + i) * nfluxes_output;
+            ka = nalphas * i;
+
+            /* Initial condition */
+            if(t == 0)
+                store = x0;
+            else
+                store = x1[kx - nreservoirs];
+
+            /* Input data */
+            Qst[0] = Qstars[kq];
+            Qst[1] = Qstars[kq + 1];
+
+            /* potential flux mapping if it is nan.
+             * Otherwise, we consider it as input data.
+             * q = 0 -> qstar1 (inflow)
+             * q = 1 -> qstar2 (demand)
+             * */
+            for(q = 0; q < nfluxes_input; q++) {
+
+                if(isnan(Qst[q])) {
+                    /* Don't forget to intialise input !*/
+                    Qst[q] = 0;
+
+                    for(l = 0; l < nreservoirs; l++) {
+                        /* No need to check mapping for itself */
+                        if(l == i)
+                            continue;
+
+                        for(p = 0; p < nfluxes_output; p++) {
+
+                            /* Check mapping */
+                            //kw = nreservoirs * nfluxes_output * nfluxes_input * i
+                            //     + nreservoirs * nfluxes_output * q
+                            //     + nfluxes_output * l + p;
+                            kw = p + nfluxes_output * (l + nreservoirs * (q + nfluxes_input * i));
+                            w = Qstars_mapping[kw];
+                            if(!isnan(w)) {
+                                /* Here, upstream reservoir is contributing
+                                 * hence we get the output and map it to the
+                                 * current reservoir input.
+                                 * */
+                                ko = (nreservoirs * t + l) * nfluxes_output + p;
+                                Qst[q] += w * fluxes[ko];
+                            }
+
+                        }
+
+                    }
+                }
+            }
+
+            /* Integrate ode */
+            ierr = c_lin_integrate(nalphas,
+                                   &(alphas[ka]),
+                                   timestep,
+                                   Qst,
+                                   gamma,
+                                   &(coefs_linear[kc]),
+                                   0.,
+                                   store,
+                                   niter,
+                                   &(x1[kx]),
+                                   &(fluxes[kf]));
+
+            /* Basic error management */
+            if(ierr > 0)
+                return ierr;
+        }
+
+
     }
 
     return 0;

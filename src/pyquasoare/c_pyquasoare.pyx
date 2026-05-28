@@ -93,8 +93,8 @@ cdef extern from 'c_quasoare_grad.h':
     int c_lin_integrate(int nalphas,
                         double * alphas,
                         double timestep,
-                        double gamma,
                         double Qstars[2],
+                        double gamma,
                         double * coefs_linear,
                         double t0,
                         double x0,
@@ -109,6 +109,17 @@ cdef extern from 'c_quasoare_grad.h':
                         double * Qstars,
                         double * coefs_linear,
                         int * niter, double * x1, double * fluxes);
+
+    int c_lin_model(int nreservoirs, int nalphas, int nval,
+                    double timestep, double x0,
+                    double * Qstars,
+                    double * Qstars_mapping,
+                    double * alphas,
+                    double * gammas,
+                    double * coefs_linear,
+                    double * x1,
+                    double * fluxes);
+
 
 def __cinit__(self):
     pass
@@ -471,8 +482,9 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
 
 
 def lin_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
-                  double timestep, double gamma,
+                  double timestep,
                   np.ndarray[double, ndim=1, mode='c'] qstars not None,
+                  double gamma,
                   np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
                   double t0, double x0,
                   np.ndarray[int, ndim=1, mode='c'] niter not None,
@@ -505,8 +517,9 @@ def lin_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
     # Run C code
     return c_lin_integrate(nalphas,
                            <double*> np.PyArray_DATA(alphas),
-                           timestep, gamma,
+                           timestep,
                            <double*> np.PyArray_DATA(qstars),
+                           gamma,
                            <double*> np.PyArray_DATA(coefs_linear),
                            t0, x0,
                            <int*> np.PyArray_DATA(niter),
@@ -562,4 +575,65 @@ def lin_reservoir(int errors, double timestep, double gamma,
                            <double*> np.PyArray_DATA(x1),
                            <double*> np.PyArray_DATA(fluxes))
 
+
+def lin_model(double timestep, double x0,
+              np.ndarray[double, ndim=2, mode='c'] alphas not None,
+              np.ndarray[double, ndim=2, mode='c'] qstars not None,
+              np.ndarray[double, ndim=2, mode='c'] qstars_mapping not None,
+              np.ndarray[double, ndim=1, mode='c'] gammas not None,
+              np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
+              np.ndarray[double, ndim=2, mode='c'] x1 not None,
+              np.ndarray[double, ndim=2, mode='c'] fluxes not None):
+
+    # Check dimensions
+    cdef int nreservoirs = alphas.shape[0]
+    cdef int nalphas = alphas.shape[1]
+    cdef int nval = qstars.shape[0]
+
+    if gammas.shape[0] != nreservoirs:
+        raise ValueError("gammas.shape[0] != nreservoirs")
+
+    if qstars.shape[1] != 2 * nreservoirs:
+        raise ValueError("qstars.shape[1] != 2 * nreservoirs")
+
+    if qstars_mapping.shape[0] != 2 * nreservoirs:
+        raise ValueError("qstars_mapping.shape[0] != 2 * nreservoirs")
+
+    if qstars_mapping.shape[1] != 6 * nreservoirs:
+        raise ValueError("qstars_mapping.shape[1] != 6 * nreservoirs")
+
+    if coefs_linear.shape[0] != nreservoirs:
+        raise ValueError("coefs_linear.shape[0] != nreservoirs")
+
+    if coefs_linear.shape[1] != 3:
+        raise ValueError("coefs_linear.shape[1] != 3")
+
+    if coefs_linear.shape[2] != nalphas - 1:
+        raise ValueError("coefs_linear.shape[2] != nalphas - 1")
+
+    if coefs_linear.shape[3] != 2:
+        raise ValueError("coefs_linear.shape[3] != 2")
+
+    if x1.shape[0] != nval:
+        raise ValueError("x1.shape[0] != nval")
+
+    if x1.shape[1] != nreservoirs:
+        raise ValueError("x1.shape[1] != nreservoirs")
+
+    if fluxes.shape[0] != nval:
+        raise ValueError("fluxes.shape[0] != nval")
+
+    if fluxes.shape[1] != 6 * nreservoirs:
+        raise ValueError("fluxes.shape[0] != 6 * nreservoirs")
+
+    # Run C code
+    return c_lin_model(nreservoirs, nalphas, nval,
+                       timestep, x0,
+                       <double*> np.PyArray_DATA(qstars),
+                       <double*> np.PyArray_DATA(qstars_mapping),
+                       <double*> np.PyArray_DATA(alphas),
+                       <double*> np.PyArray_DATA(gammas),
+                       <double*> np.PyArray_DATA(coefs_linear),
+                       <double*> np.PyArray_DATA(x1),
+                       <double*> np.PyArray_DATA(fluxes))
 

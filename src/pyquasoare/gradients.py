@@ -1,14 +1,19 @@
 import warnings
+from collections import namedtuple
 import numpy as np
 
 from pyquasoare import has_c_module, approx
 from pyquasoare.models import ERRORS
+
+NPOTENTIAL_FLUXES = 2
+NOUTPUT_FLUXES = 6
 
 if has_c_module():
     import c_pyquasoare
 else:
     raise ImportError("Cannot run quasoare without C module."
                       + " Please compile C code")
+
 
 def lin_coefficient_matrix(funs, alphas):
     if len(funs) != 3:
@@ -18,11 +23,82 @@ def lin_coefficient_matrix(funs, alphas):
     return np.ascontiguousarray(coefs[:, :, 1:])
 
 
+class Network():
+    def __init__(self, nreservoirs):
+        self.nreservoirs = nreservoirs
+        self.links = []
 
-def lin_reservoir(alphas, timestep, gamma,
-                  Qstars, coefs_linear, x0,
-                  xmin=-np.inf,
-                  xmax=np.inf,
+    @property
+    def Qstars_mapping(self):
+        nin = NPOTENTIAL_FLUXES
+        nout = NOUTPUT_FLUXES
+        nres = self.nreservoirs
+
+        qstm = np.empty((nres * nin, nres * nout))
+        qstm.fill(np.nan)
+
+        for lk in self.links:
+            i = nin * lk.downstream_reservoir_id + lk.downstream_input_id
+            j = nout * lk.upstream_reservoir_id + lk.upstream_output_id
+            qstm[i, j] = lk.weight
+
+        return qstm
+
+
+    def add_link(self, upstream_reservoir_id, upstream_output_id,
+                 downstream_reservoir_id, downstream_input_id,
+                 weight):
+        nres = self.nreservoirs
+
+        # Check data
+        upid = int(upstream_reservoir_id)
+        if upid >= nres or upid < 0:
+            errmsg = "Expected upstream reservoir id in"\
+                     + f" [0, {nres}-1], got {upid}"
+            raise ValueError(errmsg)
+
+        upoid = int(upstream_output_id)
+        if upoid >= NOUTPUT_FLUXES or upoid < 0:
+            errmsg = "Expected upstream reservoir output id in"\
+                     + f" [0, {NOUTPUT_FLUXES}-1], got {upoid}"
+            raise ValueError(errmsg)
+
+        downid = int(downstream_reservoir_id)
+        if downid >= nres or downid < 0:
+            errmsg = "Expected downstream reservoir id in"\
+                     + f" [0, {nres}-1], got {downid}"
+            raise ValueError(errmsg)
+
+        downiid = int(downstream_input_id)
+        if downiid >= NPOTENTIAL_FLUXES or downiid < 0:
+            errmsg = "Expected downstream reservoir input id in"\
+                     + f" [0, {NPOTENTIAL_FLUXES}-1], got {downiid}"
+            raise ValueError(errmsg)
+
+        if downid == upid:
+            errmsg = "Expected downstream reservoir id to "\
+                     + " different from upstream reservoir id"
+            raise ValueError(errmsg)
+
+        # Create link
+        Link = namedtuple("Link", [
+                            "upstream_reservoir_id",
+                            "upstream_output_id",
+                            "downstream_reservoir_id",
+                            "downstream_input_id",
+                            "weight"])
+        lk = Link(upid, upoid, downid, downiid, weight)
+        self.links.append(lk)
+
+        # .. check non-cyclic
+
+
+
+
+
+def lin_reservoir(alphas, timestep,
+                  Qstars, gamma, coefs_linear,
+                  x0, xmin=-np.inf, xmax=np.inf,
                   errors="ignore",
                   fluxes=None, niter=None, x1=None):
     """ Integrate the approximate reservoir equation with initial initial
@@ -59,6 +135,8 @@ def lin_reservoir(alphas, timestep, gamma,
     Qstars : np.ndarray
         Timeseries of the 2 potential fluxes.
         This is a 2D array of dimension [N X 2] with N the number of timesteps.
+    gamma : float
+        Reservoir capacity
     coefs_linear: np.ndarray
         Linear interpolation coefficients for the 3 flux functions and each
         interpolation band. This is a 3D array of size [3 x M-1 x 2].
@@ -137,3 +215,27 @@ def lin_reservoir(alphas, timestep, gamma,
             warnings.warn(mess)
 
     return niter, x1, fluxes
+
+
+def lin_model(alphas, timestep,
+              Qstars, Qstars_mapping,
+              gammas, coefs_linear, x0,
+              fluxes=None, x1=None):
+    nreservoirs = alphas.shape[0]
+    nval = Qstars.shape[0]
+
+    if fluxes is None:
+        fluxes = np.zeros((nval, 6 * nreservoirs), dtype=np.float64)
+    if x1 is None:
+        x1 = np.zeros((nval, nreservoirs), dtype=np.float64)
+
+    ierr = c_pyquasoare.lin_model(timestep, x0, alphas,
+                                  Qstars, Qstars_mapping,
+                                  gammas,
+                                  coefs_linear,
+                                  x1, fluxes)
+    if ierr > 0:
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare.lin_model returns {ierr} ({mess})")
+
+    return x1, fluxes

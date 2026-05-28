@@ -26,19 +26,17 @@ int c_lin_fluxes_increment(double timestep,
                            double x0, double x1,
                            double fluxes[6]);
 
-
 int c_lin_integrate(int nalphas,
                     double * alphas,
                     double timestep,
-                    double gamma,
                     double Qstars[2],
+                    double gamma,
                     double * coefs_linear,
                     double t0,
                     double x0,
                     int *niter,
                     double * x1,
                     double fluxes[6]);
-
 
 int c_lin_reservoir(int nalphas, int nval, int errors,
                     double timestep, double gamma,
@@ -47,4 +45,16 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
                     double * Qstars,
                     double * coefs_linear,
                     int * niter, double * x1, double * fluxes);
+
+
+int c_lin_model(int nreservoirs, int nalphas, int nval,
+                double timestep, double x0,
+                double * Qstars,
+                double * Qstars_mapping,
+                double * alphas,
+                double * gammas,
+                double * coefs_linear,
+                double * x1,
+                double * fluxes);
+
 #endif
