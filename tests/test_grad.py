@@ -13,7 +13,7 @@ import scipy.integrate as sci_integrate
 
 from hydrodiy.io import iutils, csv
 
-from pyquasoare import integrate, models, gradients, approx
+from pyquasoare import integrate, models, gradients, approx, steady
 import c_pyquasoare
 
 import data_reader
@@ -33,13 +33,13 @@ def indicator(x, xmin, xmax):
 
 RESERVOIR_FUNCTIONS = {
     "gr4jprod": [
-        lambda x: 1 - x**2,
-        lambda x: x * (2 - x),
+        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: np.minimum(x, 1) * (2 - np.minimum(x, 1)),
         lambda x: 4**3/9**4 * x**5
         ],
     "gr4jprodquad": [
-        lambda x: 1 - x**2,
-        lambda x: x * (2 - x),
+        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: np.minimum(x, 1) * (2 - np.minimum(x, 1)),
         lambda x: 4**3/9**4 * x**2
         ],
     "gr4jroute": [
@@ -63,12 +63,12 @@ RESERVOIR_FUNCTIONS = {
         lambda x: x**6
         ],
     "xinanjiang": [
-        lambda x: (1 - x)**0.2,
+        lambda x: (1 - np.minimum(x, 1.))**0.2,
         lambda x: indicator(x, 0., np.inf),
         lambda x: fixed(x, 0.)
         ],
     "intercept": [
-        lambda x: indicator(x, -np.inf, 1.),
+        lambda x: indicator(x, 0., 1.),
         lambda x: indicator(x, 0., np.inf),
         lambda x: fixed(x, 0.)
         ],
@@ -78,6 +78,26 @@ RESERVOIR_FUNCTIONS = {
         lambda x: x**6
         ],
 }
+
+def test_network():
+    netw = gradients.Network(3)
+    netw.add_link_total_outflow(0, 1)
+    netw.add_link_total_outflow(1, 2)
+    assert netw.upstream_reservoirs(2) == {0, 1}
+
+    # This is cyclical -> error
+    with pytest.raises(ValueError, match="cyclical"):
+        netw.add_link_total_outflow(2, 0)
+
+    netw = gradients.Network(3)
+    netw.add_link_bypass_shortfall(0, 1)
+    netw.add_link_bypass_shortfall(1, 2)
+    assert netw.upstream_reservoirs(2) == {0, 1}
+
+    # This is cyclical -> error
+    with pytest.raises(ValueError, match="cyclical"):
+        netw.add_link_bypass_shortfall(2, 0)
+
 
 
 @pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
@@ -137,8 +157,9 @@ def test_lin_integrate(siteid, reservoir, gamma, timestep, allclose):
     Qstars[:, 1] *= -1 # PET = negative demand
     nval = len(Qstars)
 
-    # Get coefs
-    alphas = np.linspace(0, 1, 50)
+    # Get coefs - quad coefs with option = 0 (linear)
+    nalphas = 20
+    alphas = np.linspace(0, 1, nalphas)
     funs = RESERVOIR_FUNCTIONS[reservoir]
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
@@ -187,18 +208,26 @@ def test_lin_reservoir(siteid, reservoir, gamma, timestep, allclose):
     Qstars = np.ascontiguousarray(Qstars)
     nval = len(Qstars)
 
-    # Get coefs
-    alphas = np.linspace(0, 1, 50)
+    scalings = np.ones((nval, 3))
+    scalings[:, :2] = Qstars / gamma
+    scalings[:, 2] = - 1. / timestep
+
+    # Get coefs - quad coefs with option = 0 (linear)
+    nalphas = 20
+    alphas = np.linspace(0, 1, nalphas)
     funs = RESERVOIR_FUNCTIONS[reservoir]
+    coefs = approx.quad_coefficient_matrix(funs, alphas,
+                                           approx_opt=0)
+    stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
+    amax = max(1.1, np.nanmax(stdy))
+    alphas = np.linspace(0, amax, nalphas)
+
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
 
     # Quadratic
     x0 = 0.5
-    scalings = np.ones((nval, 3))
-    scalings[:, :2] = Qstars / gamma
-    scalings[:, 2] = - 1. / timestep
     n1, x1, fx1 = models.quad_model(alphas, scalings, coefs,
                                     x0, timestep)
     fx1 *= gamma / timestep
@@ -206,19 +235,19 @@ def test_lin_reservoir(siteid, reservoir, gamma, timestep, allclose):
     # Lin
     n2, x2, fx2 = gradients.lin_reservoir(alphas, timestep,
                                           Qstars, gamma, coefs_lin, x0)
-
     fx1 = np.column_stack([fx1,
                            -Qstars[:, 0] + fx1[:, 0],
                            -Qstars[:, 1] + fx1[:, 1],
                            -Qstars[:, 0] + fx1[:, 0] + fx1[:, 2]])
+    assert allclose(x1, x2)
     assert allclose(fx1, fx2)
 
     # Sanity check
     if not re.search("rout(e|ing)", reservoir):
-        assert all((x2 >= 0) & (x2 <= 1))
+        assert all((x2 >= 0) & (x2 <= 1.05))
 
     # Mass balance
-    dSa = np.diff(x1) * gamma
+    dSa = np.diff(x2) * gamma
     dSb = timestep * fx2[1:, :3].sum(axis=1)
     assert allclose(dSa, dSb)
 
@@ -243,10 +272,8 @@ def test_lin_gr4j(siteid, timestep, allclose):
     nres = Qstars.shape[1] // nin
 
     netw = gradients.Network(nres)
-    netw.add_link(0, 3, 1, 0, -1) # bypass from intercept -> inflow to prod
-    netw.add_link(0, 4, 1, 1, -1) # shortfall form intercept -> demand to prod
-    netw.add_link(1, 5, 2, 0, -1) # total outflow from prod -> inflow to route
-    Qstars_mapping = netw.Qstars_mapping
+    netw.add_link_bypass_shortfall(0, 1) # Intercept -> Prod
+    netw.add_link_total_outflow(1, 2) # Prod -> Route
 
     # Get params
     # Intercept = 1mm
@@ -273,7 +300,7 @@ def test_lin_gr4j(siteid, timestep, allclose):
     # initialisation
     x0 = 0.5
 
-    # Two step run
+    # 3 steps run
     qst = np.ascontiguousarray(Qstars[:, :2])
     _, x1i, fluxesi = gradients.lin_reservoir(a1, timestep,
                                               qst, gammas[0],
@@ -292,7 +319,7 @@ def test_lin_gr4j(siteid, timestep, allclose):
 
     # Model run
     x1, fluxes = gradients.lin_model(alphas, timestep,
-                                     Qstars, Qstars_mapping,
+                                     Qstars, netw.Qstars_mapping,
                                      gammas, coefs_lin, x0)
 
     assert allclose(x1i, x1[:, 0])
