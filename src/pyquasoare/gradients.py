@@ -114,7 +114,7 @@ class Network():
         self.links.append(lk)
 
         # check non-cyclic
-        uids = self.upstream_reservoirs(downid)
+        self.upstream_reservoirs(downid)
 
     def add_link_total_outflow(self, upstream_reservoir_id,
                                downstream_reservoir_id):
