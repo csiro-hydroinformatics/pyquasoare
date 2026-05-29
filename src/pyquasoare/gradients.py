@@ -22,6 +22,14 @@ def lin_coefficient_matrix(funs, alphas):
                                            approx_opt=0)
     return np.ascontiguousarray(coefs[:, :, 1:])
 
+NetworkLink = namedtuple("Link",
+                         [
+                         "upstream_reservoir_id",
+                         "upstream_output_id",
+                         "downstream_reservoir_id",
+                         "downstream_input_id",
+                         "weight"
+                         ])
 
 class Network():
     def __init__(self, nreservoirs):
@@ -44,6 +52,27 @@ class Network():
 
         return qstm
 
+    def upstream_reservoirs(self, reservoir_id):
+        # Recursive function
+        def add_upids(rid, upids):
+            upids.append(rid)
+            for lk in self.links:
+                if lk.downstream_reservoir_id == rid:
+                    upid = lk.upstream_reservoir_id
+
+                    if len(upids) > 0:
+                        if upid == upids[0]:
+                            errmsg = "Reservoir receives"\
+                                     + " inputs from itself. This is"\
+                                     + " cyclical reservoir connection."
+                            raise ValueError(errmsg)
+
+                    # Move upstream
+                    upids = add_upids(upid, upids)
+
+            return upids
+
+        return set(add_upids(reservoir_id, [])[1:])
 
     def add_link(self, upstream_reservoir_id, upstream_output_id,
                  downstream_reservoir_id, downstream_input_id,
@@ -81,19 +110,28 @@ class Network():
             raise ValueError(errmsg)
 
         # Create link
-        Link = namedtuple("Link", [
-                            "upstream_reservoir_id",
-                            "upstream_output_id",
-                            "downstream_reservoir_id",
-                            "downstream_input_id",
-                            "weight"])
-        lk = Link(upid, upoid, downid, downiid, weight)
+        lk = NetworkLink(upid, upoid, downid, downiid, weight)
         self.links.append(lk)
 
-        # .. check non-cyclic
+        # check non-cyclic
+        uids = self.upstream_reservoirs(downid)
 
+    def add_link_total_outflow(self, upstream_reservoir_id,
+                               downstream_reservoir_id):
+        """ Links total outflow from upstream to inflow for downstream.
+        """
+        self.add_link(upstream_reservoir_id, 5,
+                      downstream_reservoir_id, 0, -1.)
 
-
+    def add_link_bypass_shortfall(self, upstream_reservoir_id,
+                                  downstream_reservoir_id):
+        """ Links upstram inflow bypass to downstream inflow and
+        upstream demand shortfall to downstream demand.
+        """
+        self.add_link(upstream_reservoir_id, 3,
+                      downstream_reservoir_id, 0, -1.)
+        self.add_link(upstream_reservoir_id, 4,
+                      downstream_reservoir_id, 1, -1.)
 
 
 def lin_reservoir(alphas, timestep,
