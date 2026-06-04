@@ -1,6 +1,7 @@
 #include "c_quasoare_grad.h"
 
 /* Solution of dS/dt = f*(s) */
+
 double c_grad_forward(double M, double S, double t0, double x0, double t){
     double x1 = c_get_nan();
     double tau = t - t0;
@@ -96,17 +97,22 @@ int c_grad_fluxes_increment(double timestep,
 
 
 /* Integrate reservoir equation over 1 time step and compute associated fluxes */
-int c_grad_integrate(int nalphas,
-                    double * alphas,
-                    double timestep,
-                    double Qstars[2],
-                    double gamma,
-                    double * coefs_linear,
-                    double t0,
-                    double x0,
-                    int *niter,
-                    double * x1,
-                    double fluxes[6]) {
+int c_grad_integrate(int nalphas, int nvariables,
+                     double * alphas,
+                     double timestep,
+                     double Qstars[2],
+                     double gamma,
+                     double * coefs_linear,
+                     double t0,
+                     double x0,
+                     int current_reservoir_id;
+                     int *variables_reservoir_id;
+                     int *variables_type_id;
+                     int *niter,
+                     double * x1,
+                     double fluxes[6]
+                     double *xi0,
+                     double *xi1) {
 
     int idx, i, nit=0, jalpha_next=0, err_flux;
     int nfluxes_primary = 3;
@@ -123,6 +129,11 @@ int c_grad_integrate(int nalphas,
 
     double mj_vect[3];
     double sj_vect[3];
+
+    /* Variables related to gradients */
+    int reservoir_id;
+    int type_id;
+    double w, R, dR, dS, delta, xi_nu;
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -151,8 +162,11 @@ int c_grad_integrate(int nalphas,
         c_grad_get_qstar(Qstars, gamma, timestep, 2) / gamma
     };
 
-    for(i=0; i<nfluxes; i++)
+    for(i = 0; i < nfluxes; i++)
         fluxes[i] = 0.;
+
+    for(i = 0; i < nreservoirs * nvariables; i++)
+        xi1[i] = xi0[i];
 
     /* Check data */
     if(Qstars[0] < 0)
@@ -277,6 +291,23 @@ int c_grad_integrate(int nalphas,
                                           fluxes);
         if(err_flux>0)
             return err_flux;
+
+        /* Computation of sensitivities */
+        delta = t_end - t_start;
+        w = exp(S * delta);
+        R = M / S;
+        for(i = 0; i < nvariables; i++) {
+            reservoir_id = variables_reservoir_id[i];
+            type_id = variables_type_id[i];
+
+            /* variable belongs to another reservoir */
+            if(current_reservoir_id != reservoir_id) {
+                dR = 0;
+                dS = 0;
+            }
+
+            xi1[i] = w * (xi1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
+        }
 
         /* Loop for next band */
         funval_prev = M + S * x_end;
