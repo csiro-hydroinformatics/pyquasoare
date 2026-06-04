@@ -10,13 +10,13 @@
 #include "c_quasoare_utils.h"
 #include "c_quasoare_core.h"
 
-double c_lin_forward(double M, double S, double t0, double x0, double t);
+double c_grad_forward(double M, double S, double t0, double x0, double t);
 
 
-double c_lin_inverse(double M, double S, double x0, double x1);
+double c_grad_inverse(double M, double S, double x0, double x1);
 
 
-int c_lin_fluxes_increment(double timestep,
+int c_grad_fluxes_increment(double timestep,
                            double gamma,
                            double Qstars[2],
                            double mj_vector[3],
@@ -26,7 +26,7 @@ int c_lin_fluxes_increment(double timestep,
                            double x0, double x1,
                            double fluxes[6]);
 
-int c_lin_integrate(int nalphas,
+int c_grad_integrate(int nalphas,
                     double * alphas,
                     double timestep,
                     double Qstars[2],
@@ -38,7 +38,7 @@ int c_lin_integrate(int nalphas,
                     double * x1,
                     double fluxes[6]);
 
-int c_lin_reservoir(int nalphas, int nval, int errors,
+int c_grad_reservoir(int nalphas, int nval, int errors,
                     double timestep, double gamma,
                     double x0, double xmin, double xmax,
                     double * alphas,
@@ -47,7 +47,7 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
                     int * niter, double * x1, double * fluxes);
 
 
-int c_lin_model(int nreservoirs, int nalphas, int nval,
+int c_grad_model(int nreservoirs, int nalphas, int nval,
                 double timestep, double x0,
                 double * Qstars,
                 double * Qstars_mapping,

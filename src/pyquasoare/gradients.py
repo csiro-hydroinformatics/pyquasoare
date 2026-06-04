@@ -134,7 +134,7 @@ class Network():
                       downstream_reservoir_id, 1, -1.)
 
 
-def lin_reservoir(alphas, timestep,
+def grad_reservoir(alphas, timestep,
                   Qstars, gamma, coefs_linear,
                   x0, xmin=-np.inf, xmax=np.inf,
                   errors="ignore",
@@ -233,14 +233,14 @@ def lin_reservoir(alphas, timestep,
 
     ierrors = np.int32(ERRORS.index(errors))
 
-    ierr = c_pyquasoare.lin_reservoir(ierrors, timestep, gamma,
-                                      x0, xmin, xmax,
-                                      alphas,
-                                      Qstars,
-                                      coefs_linear,
-                                      niter,
-                                      x1,
-                                      fluxes)
+    ierr = c_pyquasoare.grad_reservoir(ierrors, timestep, gamma,
+                                       x0, xmin, xmax,
+                                       alphas,
+                                       Qstars,
+                                       coefs_linear,
+                                       niter,
+                                       x1,
+                                       fluxes)
 
     if errors == "raise" and ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
@@ -255,7 +255,7 @@ def lin_reservoir(alphas, timestep,
     return niter, x1, fluxes
 
 
-def lin_model(alphas, timestep,
+def grad_model(alphas, timestep,
               Qstars, Qstars_mapping,
               gammas, coefs_linear, x0,
               fluxes=None, x1=None):
@@ -267,11 +267,11 @@ def lin_model(alphas, timestep,
     if x1 is None:
         x1 = np.zeros((nval, nreservoirs), dtype=np.float64)
 
-    ierr = c_pyquasoare.lin_model(timestep, x0, alphas,
-                                  Qstars, Qstars_mapping,
-                                  gammas,
-                                  coefs_linear,
-                                  x1, fluxes)
+    ierr = c_pyquasoare.grad_model(timestep, x0, alphas,
+                                   Qstars, Qstars_mapping,
+                                   gammas,
+                                   coefs_linear,
+                                   x1, fluxes)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.lin_model returns {ierr} ({mess})")
