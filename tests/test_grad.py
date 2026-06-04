@@ -113,7 +113,7 @@ def test_lin_coefficient_matrix(reservoir, allclose):
 
 
 
-def test_lin_integrate_error():
+def test_grad_integrate_error():
     # Lin
     n = np.zeros(1, dtype=np.int32)
     x = np.zeros(1, dtype=np.float64)
@@ -131,7 +131,7 @@ def test_lin_integrate_error():
     x_start = 0.5
 
     qst = -np.ones(2)
-    ierr = c_pyquasoare.lin_integrate(alphas, timestep, qst,
+    ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
                                       gamma, coefs_lin,
                                       0, x_start,
                                       n, x, fx)
@@ -139,7 +139,7 @@ def test_lin_integrate_error():
 
     qst = np.ones(2)
     coefs_lin[0] *= -1
-    ierr = c_pyquasoare.lin_integrate(alphas, timestep, qst,
+    ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
                                       gamma, coefs_lin,
                                       0, x_start,
                                       n, x, fx)
@@ -150,7 +150,7 @@ def test_lin_integrate_error():
 @pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("timestep", [0.1, 1])
-def test_lin_integrate(siteid, reservoir, gamma, timestep, allclose):
+def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
     # Get data
     df = data_reader.get_data(siteid, "daily").iloc[:100]
     Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -183,7 +183,7 @@ def test_lin_integrate(siteid, reservoir, gamma, timestep, allclose):
         x2 = np.zeros(1, dtype=np.float64)
         fx2 = np.zeros(6, dtype=np.float64)
         qst = np.ascontiguousarray(Qstars[i])
-        ierr = c_pyquasoare.lin_integrate(alphas, timestep, qst,
+        ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
                                           gamma, coefs_lin,
                                           0, x_start,
                                           n2, x2, fx2)
@@ -200,7 +200,7 @@ def test_lin_integrate(siteid, reservoir, gamma, timestep, allclose):
 @pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
 @pytest.mark.parametrize("gamma", [1, 10, 100, 1000])
 @pytest.mark.parametrize("timestep", [0.1, 1])
-def test_lin_reservoir(siteid, reservoir, gamma, timestep, allclose):
+def test_grad_reservoir(siteid, reservoir, gamma, timestep, allclose):
     # Get data
     df = data_reader.get_data(siteid, "daily")
     Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -233,7 +233,7 @@ def test_lin_reservoir(siteid, reservoir, gamma, timestep, allclose):
     fx1 *= gamma / timestep
 
     # Lin
-    n2, x2, fx2 = gradients.lin_reservoir(alphas, timestep,
+    n2, x2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                           Qstars, gamma, coefs_lin, x0)
     fx1 = np.column_stack([fx1,
                            -Qstars[:, 0] + fx1[:, 0],
@@ -254,7 +254,7 @@ def test_lin_reservoir(siteid, reservoir, gamma, timestep, allclose):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", [0.1, 1])
-def test_lin_gr4j(siteid, timestep, allclose):
+def test_grad_gr4j(siteid, timestep, allclose):
     demand = -0.2
 
     # Get data
@@ -287,38 +287,38 @@ def test_lin_gr4j(siteid, timestep, allclose):
     alphas = np.vstack([a1, a1, a2])
 
     fint = RESERVOIR_FUNCTIONS["intercept"]
-    coefs_lin_int = gradients.lin_coefficient_matrix(fint, a1)
+    coefs_grad_int = gradients.lin_coefficient_matrix(fint, a1)
 
     fprod = RESERVOIR_FUNCTIONS["gr4jprod"]
-    coefs_lin_prod = gradients.lin_coefficient_matrix(fprod, a1)
+    coefs_grad_prod = gradients.lin_coefficient_matrix(fprod, a1)
 
     froute = RESERVOIR_FUNCTIONS["gr4jroute"]
-    coefs_lin_route = gradients.lin_coefficient_matrix(froute, a2)
+    coefs_grad_route = gradients.lin_coefficient_matrix(froute, a2)
 
-    coefs_lin = np.array([coefs_lin_int, coefs_lin_prod, coefs_lin_route])
+    coefs_lin = np.array([coefs_grad_int, coefs_grad_prod, coefs_grad_route])
 
     # initialisation
     x0 = 0.5
 
     # 3 steps run
     qst = np.ascontiguousarray(Qstars[:, :2])
-    _, x1i, fluxesi = gradients.lin_reservoir(a1, timestep,
+    _, x1i, fluxesi = gradients.grad_reservoir(a1, timestep,
                                               qst, gammas[0],
-                                              coefs_lin_int, x0)
+                                              coefs_grad_int, x0)
     qst[:, 0] = -fluxesi[:, 3]
     qst[:, 1] = -fluxesi[:, 4]
-    _, x1p, fluxesp = gradients.lin_reservoir(a1, timestep,
+    _, x1p, fluxesp = gradients.grad_reservoir(a1, timestep,
                                               qst, gammas[1],
-                                              coefs_lin_prod, x0)
+                                              coefs_grad_prod, x0)
 
     qst[:, 0] = -fluxesp[:, 5]
     qst[:, 1] = demand
-    _, x1r, fluxesr = gradients.lin_reservoir(a2, timestep,
+    _, x1r, fluxesr = gradients.grad_reservoir(a2, timestep,
                                               qst, gammas[2],
-                                              coefs_lin_route, x0)
+                                              coefs_grad_route, x0)
 
     # Model run
-    x1, fluxes = gradients.lin_model(alphas, timestep,
+    x1, fluxes = gradients.grad_model(alphas, timestep,
                                      Qstars, netw.Qstars_mapping,
                                      gammas, coefs_lin, x0)
 

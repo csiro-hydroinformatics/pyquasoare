@@ -90,7 +90,7 @@ cdef extern from 'c_quasoare_steady.h':
                                double * steady);
 
 cdef extern from 'c_quasoare_grad.h':
-    int c_lin_integrate(int nalphas,
+    int c_grad_integrate(int nalphas,
                         double * alphas,
                         double timestep,
                         double Qstars[2],
@@ -102,7 +102,7 @@ cdef extern from 'c_quasoare_grad.h':
                         double * x1,
                         double fluxes[6]);
 
-    int c_lin_reservoir(int nalphas, int nval, int errors,
+    int c_grad_reservoir(int nalphas, int nval, int errors,
                         double timestep, double gamma,
                         double x0, double xmin, double xmax,
                         double * alphas,
@@ -110,7 +110,7 @@ cdef extern from 'c_quasoare_grad.h':
                         double * coefs_linear,
                         int * niter, double * x1, double * fluxes);
 
-    int c_lin_model(int nreservoirs, int nalphas, int nval,
+    int c_grad_model(int nreservoirs, int nalphas, int nval,
                     double timestep, double x0,
                     double * Qstars,
                     double * Qstars_mapping,
@@ -481,7 +481,7 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
                                 <double*> np.PyArray_DATA(fluxes))
 
 
-def lin_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
+def grad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
                   double timestep,
                   np.ndarray[double, ndim=1, mode='c'] qstars not None,
                   double gamma,
@@ -515,7 +515,7 @@ def lin_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
         raise ValueError("fluxes.shape[0] != 6")
 
     # Run C code
-    return c_lin_integrate(nalphas,
+    return c_grad_integrate(nalphas,
                            <double*> np.PyArray_DATA(alphas),
                            timestep,
                            <double*> np.PyArray_DATA(qstars),
@@ -527,7 +527,7 @@ def lin_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
                            <double*> np.PyArray_DATA(fluxes))
 
 
-def lin_reservoir(int errors, double timestep, double gamma,
+def grad_reservoir(int errors, double timestep, double gamma,
                   double x0, double xmin, double xmax,
                   np.ndarray[double, ndim=1, mode='c'] alphas not None,
                   np.ndarray[double, ndim=2, mode='c'] qstars not None,
@@ -565,7 +565,7 @@ def lin_reservoir(int errors, double timestep, double gamma,
         raise ValueError("fluxes.shape[0] != 6")
 
     # Run C code
-    return c_lin_reservoir(nalphas, nval, errors,
+    return c_grad_reservoir(nalphas, nval, errors,
                            timestep, gamma,
                            x0, xmin, xmax,
                            <double*> np.PyArray_DATA(alphas),
@@ -576,7 +576,7 @@ def lin_reservoir(int errors, double timestep, double gamma,
                            <double*> np.PyArray_DATA(fluxes))
 
 
-def lin_model(double timestep, double x0,
+def grad_model(double timestep, double x0,
               np.ndarray[double, ndim=2, mode='c'] alphas not None,
               np.ndarray[double, ndim=2, mode='c'] qstars not None,
               np.ndarray[double, ndim=2, mode='c'] qstars_mapping not None,
@@ -627,7 +627,7 @@ def lin_model(double timestep, double x0,
         raise ValueError("fluxes.shape[0] != 6 * nreservoirs")
 
     # Run C code
-    return c_lin_model(nreservoirs, nalphas, nval,
+    return c_grad_model(nreservoirs, nalphas, nval,
                        timestep, x0,
                        <double*> np.PyArray_DATA(qstars),
                        <double*> np.PyArray_DATA(qstars_mapping),

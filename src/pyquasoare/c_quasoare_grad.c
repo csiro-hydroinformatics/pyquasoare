@@ -1,7 +1,7 @@
 #include "c_quasoare_grad.h"
 
 /* Solution of dS/dt = f*(s) */
-double c_lin_forward(double M, double S, double t0, double x0, double t){
+double c_grad_forward(double M, double S, double t0, double x0, double t){
     double x1 = c_get_nan();
     double tau = t - t0;
     double exparg;
@@ -22,7 +22,7 @@ double c_lin_forward(double M, double S, double t0, double x0, double t){
 
 
 /* Primitive of 1/f*(s) */
-double c_lin_inverse(double M, double S, double x0, double x1){
+double c_grad_inverse(double M, double S, double x0, double x1){
     if(isnull(S)){
         return (x1 - x0) / M;
     }
@@ -32,13 +32,13 @@ double c_lin_inverse(double M, double S, double x0, double x1){
 }
 
 
-double c_lin_get_qstar(double Qstars[2], double gamma, double timestep, int i) {
+double c_grad_get_qstar(double Qstars[2], double gamma, double timestep, int i) {
     return i < 2 ? Qstars[i] : -gamma / timestep;
 }
 
 
 /* Increment fluxes by integrating f*(x) */
-int c_lin_fluxes_increment(double timestep,
+int c_grad_fluxes_increment(double timestep,
                            double gamma,
                            double Qstars[2],
                            double mj_vector[3],
@@ -74,7 +74,7 @@ int c_lin_fluxes_increment(double timestep,
         mij = mj_vector[i];
         sij = sj_vector[i];
 
-        qi = c_lin_get_qstar(Qstars, gamma, timestep, i) / timestep;
+        qi = c_grad_get_qstar(Qstars, gamma, timestep, i) / timestep;
         dflux = qi * (sij * integS + mij * tau);
         fluxes[i] += dflux;
 
@@ -96,7 +96,7 @@ int c_lin_fluxes_increment(double timestep,
 
 
 /* Integrate reservoir equation over 1 time step and compute associated fluxes */
-int c_lin_integrate(int nalphas,
+int c_grad_integrate(int nalphas,
                     double * alphas,
                     double timestep,
                     double Qstars[2],
@@ -146,9 +146,9 @@ int c_lin_integrate(int nalphas,
     double x_end = x0;
 
     double qis[3] = {
-        c_lin_get_qstar(Qstars, gamma, timestep, 0) / gamma,
-        c_lin_get_qstar(Qstars, gamma, timestep, 1) / gamma,
-        c_lin_get_qstar(Qstars, gamma, timestep, 2) / gamma
+        c_grad_get_qstar(Qstars, gamma, timestep, 0) / gamma,
+        c_grad_get_qstar(Qstars, gamma, timestep, 1) / gamma,
+        c_grad_get_qstar(Qstars, gamma, timestep, 2) / gamma
     };
 
     for(i=0; i<nfluxes; i++)
@@ -228,7 +228,7 @@ int c_lin_integrate(int nalphas,
         if(fabs(funval) < QUASOARE_EPS)
             x_end = x_start;
         else
-            x_end = c_lin_forward(M, S, t_start, x_start, t_final);
+            x_end = c_grad_forward(M, S, t_start, x_start, t_final);
 
         /* complete or move band if needed */
         if(x_end >= alpha0 && x_end <= alpha1) {
@@ -266,12 +266,12 @@ int c_lin_integrate(int nalphas,
             }
 
             /* Increment time */
-            t_end = t_start + c_lin_inverse(M, S, x_start, x_end);
+            t_end = t_start + c_grad_inverse(M, S, x_start, x_end);
             t_end = t_end < t_final && fabs(funval) > QUASOARE_EPS ? t_end : t_final;
         }
 
         /* Increment fluxes during the last interval */
-        err_flux = c_lin_fluxes_increment(timestep, gamma, Qstars,
+        err_flux = c_grad_fluxes_increment(timestep, gamma, Qstars,
                                           mj_vect, sj_vect,
                                           M, S, t_start, t_end, x_start, x_end,
                                           fluxes);
@@ -304,7 +304,7 @@ int c_lin_integrate(int nalphas,
     return 0;
 }
 
-int c_lin_reservoir(int nalphas, int nval, int errors,
+int c_grad_reservoir(int nalphas, int nval, int errors,
                     double timestep, double gamma,
                     double x0, double xmin, double xmax,
                     double * alphas,
@@ -319,7 +319,7 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
 
     for(t = 0; t < nval; t++) {
         /* Integrate ode */
-        ierr = c_lin_integrate(nalphas, alphas, timestep,
+        ierr = c_grad_integrate(nalphas, alphas, timestep,
                                &(Qstars[ninputs * t]),
                                gamma,
                                coefs_linear,
@@ -355,7 +355,7 @@ int c_lin_reservoir(int nalphas, int nval, int errors,
 }
 
 
-int c_lin_model(int nreservoirs, int nalphas, int nval,
+int c_grad_model(int nreservoirs, int nalphas, int nval,
                 double timestep, double x0,
                 double * Qstars,
                 double * Qstars_mapping,
@@ -447,7 +447,7 @@ int c_lin_model(int nreservoirs, int nalphas, int nval,
             }
 
             /* Integrate ode */
-            ierr = c_lin_integrate(nalphas,
+            ierr = c_grad_integrate(nalphas,
                                    &(alphas[ka]),
                                    timestep,
                                    Qst,
