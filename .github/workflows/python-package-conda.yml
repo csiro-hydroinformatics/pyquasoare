@@ -50,13 +50,13 @@ jobs:
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
 
       - name: Upload pytest test log files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-logs
           path: tests/*.log
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-coverage
           path: htmlcov/*.*
