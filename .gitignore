@@ -50,6 +50,7 @@ outputs/
 tests/snipets
 src/pyquasoare/c_pyquasoare.c
 src/pyquasoare/c_pyquasoare_benchmarks.c
+src/pyquasoare/c_pyquasoare_grad.c
 .gitattributes
 *.json
 *.txt
