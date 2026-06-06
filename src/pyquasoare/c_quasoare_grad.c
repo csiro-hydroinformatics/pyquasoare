@@ -108,6 +108,7 @@ int c_grad_integrate(int nalphas, int nvariables,
                      double *dx0,
                      int current_reservoir_id,
                      int *variables_reservoir_id,
+                     int *variables_type_id,
                      int *niter,
                      double * x1,
                      double * dx1,
@@ -131,7 +132,7 @@ int c_grad_integrate(int nalphas, int nvariables,
     double sj_vect[3];
 
     /* Variables related to gradients */
-    int reservoir_id;
+    int reservoir_id, type_id;
     double w, R, dR, dS, dM, delta;
 
     /* Max number of iteration
@@ -297,15 +298,18 @@ int c_grad_integrate(int nalphas, int nvariables,
         R = M / S;
         for(i = 0; i < nvariables; i++) {
             reservoir_id = variables_reservoir_id[i];
+            type_id = variables_type_id[i];
 
             /* variable belongs to another reservoir */
             if(current_reservoir_id != reservoir_id) {
                 dS = 0;
                 dM = 0;
             } else {
-                /* Gradient against capacity of the reservoir */
-                dM = -(Qstars[0] * mj_vect[0] + Qstars[1] * mj_vect[1]) / gamma_sq;
-                dS = -(Qstars[0] * sj_vect[0] + Qstars[1] * sj_vect[1]) / gamma_sq;
+                if(type_id == 0) {
+                    /* Gradient against capacity of the reservoir */
+                    dM = -(Qstars[0] * mj_vect[0] + Qstars[1] * mj_vect[1]) / gamma_sq;
+                    dS = -(Qstars[0] * sj_vect[0] + Qstars[1] * sj_vect[1]) / gamma_sq;
+                }
             }
             dR = (dM - R * dS) / S;
             dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
@@ -337,11 +341,15 @@ int c_grad_integrate(int nalphas, int nvariables,
     return 0;
 }
 
-int c_grad_reservoir(int nalphas, int nval,
+int c_grad_reservoir(int nalphas, int nval, int nvariables,
                     int errors,
                     double timestep, double gamma,
                     double xmin, double xmax,
                     double x0,
+                    double * dx0,
+                    int current_reservoir_id,
+                    int *variables_reservoir_id,
+                    int *variables_type_id,
                     double * alphas,
                     double * Qstars,
                     double * coefs_linear,
@@ -349,16 +357,12 @@ int c_grad_reservoir(int nalphas, int nval,
                     double * x1,
                     double * dx1,
                     double * fluxes) {
-    int ierr, t, j;
+    int ierr, t, i;
     int ninputs = 2;
     int nfluxes = 6;
     double store = x0;
 
     /* Only one reservoir and one variable (its capacity) here */
-    int nvariables = 1;
-    double dx0[1] = {0.};
-    int current_reservoir_id = 0;
-    int variables_reservoir_id[1] = {0};
 
     for(t = 0; t < nval; t++) {
         /* Integrate ode */
@@ -371,6 +375,7 @@ int c_grad_reservoir(int nalphas, int nval,
                                dx0,
                                current_reservoir_id,
                                variables_reservoir_id,
+                               variables_type_id,
                                &(niter[t]),
                                &(x1[t]),
                                &(dx1[t]),
@@ -386,14 +391,15 @@ int c_grad_reservoir(int nalphas, int nval,
 
                 x1[t] = store;
 
-                for(j = 0; j < nfluxes; j++)
-                    fluxes[nfluxes * t + j] = c_get_nan();
+                for(i = 0; i < nfluxes; i++)
+                    fluxes[nfluxes * t + i] = c_get_nan();
             }
         }
 
         /* Loop initial state */
         store = x1[t];
-        dx0[0] = dx1[t];
+        for(i = 0; i < nvariables; i++)
+            dx0[i] = dx1[nvariables * t + i];
 
         /* Impose constraint */
         store = store < xmin ? xmin : store > xmax ? xmax : store;
@@ -410,6 +416,7 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
                  double x0,
                  double * dx0,
                  int *variables_reservoir_id,
+                 int *variables_type_id,
                  double * Qstars,
                  double * Qstars_mapping,
                  double * alphas,
@@ -519,6 +526,7 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
                                     dx0,
                                     current_reservoir_id,
                                     variables_reservoir_id,
+                                    variables_type_id,
                                     niter,
                                     &(x1[kx]),
                                     &(dx1[kdx]),

@@ -68,7 +68,7 @@ RESERVOIR_FUNCTIONS = {
         lambda x: fixed(x, 0.)
         ],
     "intercept": [
-        lambda x: indicator(x, 0., 1.),
+        lambda x: indicator(x, -np.inf, 1.),
         lambda x: indicator(x, 0., np.inf),
         lambda x: fixed(x, 0.)
         ],
@@ -112,7 +112,6 @@ def test_lin_coefficient_matrix(reservoir, allclose):
         assert allclose(y1, y2)
 
 
-
 def test_grad_integrate_error():
     # Lin
     n = np.zeros(1, dtype=np.int32)
@@ -135,10 +134,11 @@ def test_grad_integrate_error():
 
     rid = 0
     vrid = np.array([0] * nvars, dtype=np.int32)
+    vtid = np.array([0] * nvars, dtype=np.int32)
     qst = -np.ones(2)
     ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
                                             gamma, coefs_lin,
-                                            0, x_start, dx0, vrid,
+                                            0, x_start, dx0, vrid, vtid,
                                             n, x, dx, fx)
     assert ierr == 112
 
@@ -146,7 +146,7 @@ def test_grad_integrate_error():
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
                                             gamma, coefs_lin,
-                                            0, x_start, dx0, vrid,
+                                            0, x_start, dx0, vrid, vtid,
                                             n, x, dx, fx)
     assert ierr == 111
 
@@ -156,8 +156,6 @@ def test_grad_integrate_error():
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("timestep", [0.1, 1])
 def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
-    return
-
     # Get data
     df = data_reader.get_data(siteid, "daily").iloc[:100]
     Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -173,8 +171,24 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
     coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
 
     # Loop and integrate
+    rid = 0
+    vrid = np.zeros(1, dtype=np.int32)
+    vtid = np.zeros(1, dtype=np.int32)
     x_start = 0.5
+    dx0 = np.zeros(1)
     scalings = np.zeros(3)
+    n2 = np.zeros(1, dtype=np.int32)
+    x2 = np.zeros(1, dtype=np.float64)
+    x2p = np.zeros(1, dtype=np.float64)
+    x2m = np.zeros(1, dtype=np.float64)
+    dx2 = np.zeros(1, dtype=np.float64)
+    fx2 = np.zeros(6, dtype=np.float64)
+    eps = 1e-6
+
+    comp = lambda x: np.sign(x) * np.log(np.abs(x))
+
+    res = np.zeros((nval, 2))
+
     for i in range(nval):
         # Quad interpol
         scalings[0] = Qstars[i, 0] / gamma
@@ -186,21 +200,40 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
         fx1 *= gamma / timestep
 
         # Lin
-        n2 = np.zeros(1, dtype=np.int32)
-        x2 = np.zeros(1, dtype=np.float64)
-        fx2 = np.zeros(6, dtype=np.float64)
         qst = np.ascontiguousarray(Qstars[i])
-        ierr = c_pyquasoare_grad.grad_integrate(alphas, timestep, qst,
-                                          gamma, coefs_lin,
-                                          0, x_start,
-                                          n2, x2, fx2)
+        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                                gamma, coefs_lin,
+                                                0, x_start, dx0, vrid, vtid,
+                                                n2, x2, dx2, fx2)
         assert allclose(x1, x2[0])
         assert allclose(fx1, fx2[:3])
 
         fxa = np.array([fx1[0] - qst[0], fx1[1] - qst[1], fx1[0] - qst[0] + fx1[2]])
         assert allclose(fxa, fx2[3:])
 
+        # Check gradients
+        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                                gamma - eps, coefs_lin,
+                                                0, x_start, dx0, vrid, vtid,
+                                                n2, x2m, dx2, fx2)
+        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                                gamma + eps, coefs_lin,
+                                                0, x_start, dx0, vrid, vtid,
+                                                n2, x2p, dx2, fx2)
+        expected = (x2p - x2m) / 2 / eps
+        err = comp(expected[0]) - comp(dx2[0])
+        #assert abs(err < 1e-4)
+        res[i, :] = dx2[0]
+        res[i, 1] = expected[0]
+
+        # Loop
         x_start = x1
+        dx0 = dx2
+
+    #import matplotlib.pyplot as plt
+    #plt.plot(res)
+    #plt.show()
+    #import pdb; pdb.set_trace()
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)

@@ -136,7 +136,10 @@ class Network():
 
 def grad_reservoir(alphas, timestep,
                   Qstars, gamma, coefs_linear,
-                  x0, xmin=-np.inf, xmax=np.inf,
+                  x0, dx0, variables_type_id,
+                  current_reservoir_id=0,
+                  variables_reservoir_id=None,
+                  xmin=-np.inf, xmax=np.inf,
                   errors="ignore",
                   fluxes=None, niter=None, x1=None, dx1=None):
     """ Integrate the approximate reservoir equation with initial initial
@@ -182,6 +185,10 @@ def grad_reservoir(alphas, timestep,
         to the two linear interpolation terms.
     x0 : float
         Initial condition
+    dx0 : np.array
+        Initial derivative condition
+    variables_type_id : np.array
+        Type of independent variables
     xmin : float
         Minimal store value.
     xmax : float
@@ -226,7 +233,11 @@ def grad_reservoir(alphas, timestep,
         raise ValueError(errmsg)
 
     nval = Qstars.shape[0]
+    nvariables = len(dx0)
 
+    if variables_reservoir_id is None:
+        variables_reservoir_id = current_reservoir_id \
+            * np.ones(nvariables, dtype=np.int32)
     if fluxes is None:
         fluxes = np.zeros((nval, 6), dtype=np.float64)
     if niter is None:
@@ -240,6 +251,10 @@ def grad_reservoir(alphas, timestep,
 
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors, timestep, gamma,
                                             xmin, xmax, x0,
+                                            dx0,
+                                            current_reservoir_id,
+                                            variables_reservoir_id,
+                                            variables_type_id,
                                             alphas,
                                             Qstars,
                                             coefs_linear,
