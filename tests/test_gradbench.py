@@ -37,6 +37,14 @@ def get_data(siteid):
 
 
 def get_coefs(model_id, amax):
+    # lin routing
+    if model_id == 0:
+        fluxes = [
+            lambda x: np.ones_like(x),
+            lambda x: np.zeros_like(x),
+            lambda x: x
+            ]
+
     # quad routing
     if model_id == 1:
         fluxes = [
@@ -63,6 +71,69 @@ def get_coefs(model_id, amax):
 
     alphas = np.linspace(0, amax, 3)
     return alphas, approx.quad_coefficient_matrix(fluxes, alphas, 2)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("theta", [0.1, 1, 10])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_linrouting(siteid, theta, timestep, allclose):
+    x0, _, qin, _, _ = get_data(siteid)
+
+    # run benchmarks
+    thetas = np.array([theta])
+    states, qout = benchmarks.gradbench_linrouting(timestep, qin, x0, thetas)
+    qout = qout.squeeze()
+    states = states.squeeze()
+
+    # Run quasoare
+    amax = (1 + round(states.max() / 0.2)) * 0.2
+    alphas, coefs = get_coefs(0, amax)
+    nval = len(qin)
+    scalings = np.ones((nval, 3))
+    scalings[:, 0] = qin
+    scalings[:, 1] = 0.
+    scalings[:, 2] = - 1. / theta / timestep
+
+    _, x1, fx = models.quad_model(alphas, scalings, coefs, x0,
+                                  timestep=timestep)
+    expected = -fx[:, -1] / timestep
+
+    assert allclose(states, x1)
+    assert allclose(qout, expected)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("theta", [0.1, 1, 10])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_gradbench_linrouting_tangent(siteid, theta, timestep, allclose):
+    x0, _, qin, _, _ = get_data(siteid)
+
+    # run benchmarks
+    thetas = np.array([theta])
+    dthetas = np.array([1.])
+    out = benchmarks.gradbench_linrouting_tangent(timestep, qin, x0,
+                                                  thetas, dthetas)
+    states, dstates, qout, dqout = out
+
+    qout = qout.squeeze()
+    dqout = dqout.squeeze()
+    states = states.squeeze()
+    dstates = dstates.squeeze()
+
+    # Numerical differenciation
+    eps = 1e-6
+    thetas = np.array([theta - eps])
+    states1, qout1 = benchmarks.gradbench_linrouting(timestep, qin, x0, thetas)
+    thetas = np.array([theta + eps])
+    states2, qout2 = benchmarks.gradbench_linrouting(timestep, qin, x0, thetas)
+
+    dqout_expected = (qout2 - qout1).squeeze() / 2 / eps
+    atol = 1e-8
+    assert allclose(dqout, dqout_expected, atol=atol)
+
+    atol = 1e-8
+    dstates_expected = (states2 - states1).squeeze() / 2 / eps
+    assert allclose(dstates, dstates_expected, atol=atol)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)

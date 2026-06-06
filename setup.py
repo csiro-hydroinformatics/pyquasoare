@@ -11,8 +11,14 @@ extensions = [
         "src/pyquasoare/c_pyquasoare.pyx",
         "src/pyquasoare/c_quasoare_utils.c",
         "src/pyquasoare/c_quasoare_core.c",
-        "src/pyquasoare/c_quasoare_steady.c",
-        "src/pyquasoare/c_quasoare_grad.c"
+        "src/pyquasoare/c_quasoare_steady.c"
+        ],
+        include_dirs=[numpy.get_include()]),
+    Extension(name="c_pyquasoare_grad",
+        sources=[
+        "src/pyquasoare/c_pyquasoare_grad.pyx",
+        "src/pyquasoare/c_quasoare_grad.c",
+        "src/pyquasoare/c_quasoare_utils.c"
         ],
         include_dirs=[numpy.get_include()]),
     Extension(name="c_pyquasoare_benchmarks",
@@ -20,6 +26,8 @@ extensions = [
         "src/pyquasoare/c_pyquasoare_benchmarks.pyx",
         "src/pyquasoare/c_nonlinrouting.c",
         "src/pyquasoare/c_gr4jprod.c",
+        "src/pyquasoare/c_gradbench_linrouting.c",
+        "src/pyquasoare/c_gradbench_linrouting_d.c",
         "src/pyquasoare/c_gradbench_quadrouting.c",
         "src/pyquasoare/c_gradbench_quadrouting_d.c",
         "src/pyquasoare/c_gradbench_rainfall_runoff.c",
@@ -28,7 +36,6 @@ extensions = [
         "src/pyquasoare/c_gradbench_semidist_d.c"
         ],
         include_dirs=[numpy.get_include()])
-
 ]
 
 setup(
