@@ -12,7 +12,6 @@
 
 double c_grad_forward(double M, double S, double t0, double x0, double t);
 
-
 double c_grad_inverse(double M, double S, double x0, double x1);
 
 
@@ -26,35 +25,48 @@ int c_grad_fluxes_increment(double timestep,
                            double x0, double x1,
                            double fluxes[6]);
 
-int c_grad_integrate(int nalphas,
-                    double * alphas,
-                    double timestep,
-                    double Qstars[2],
-                    double gamma,
-                    double * coefs_linear,
-                    double t0,
-                    double x0,
-                    int *niter,
-                    double * x1,
-                    double fluxes[6]);
+int c_grad_integrate(int nalphas, int nvariables,
+                     double * alphas,
+                     double timestep,
+                     double Qstars[2],
+                     double gamma,
+                     double * coefs_linear,
+                     double t0,
+                     double x0,
+                     double *dx0,
+                     int current_reservoir_id,
+                     int *variables_reservoir_id,
+                     int *niter,
+                     double * x1,
+                     double *dx1,
+                     double fluxes[6]);
 
-int c_grad_reservoir(int nalphas, int nval, int errors,
+int c_grad_reservoir(int nalphas, int nval,
+                    int errors,
                     double timestep, double gamma,
-                    double x0, double xmin, double xmax,
+                    double xmin, double xmax,
+                    double x0,
                     double * alphas,
                     double * Qstars,
                     double * coefs_linear,
-                    int * niter, double * x1, double * fluxes);
-
+                    int * niter,
+                    double * x1,
+                    double * dx1,
+                    double * fluxes);
 
 int c_grad_model(int nreservoirs, int nalphas, int nval,
-                double timestep, double x0,
-                double * Qstars,
-                double * Qstars_mapping,
-                double * alphas,
-                double * gammas,
-                double * coefs_linear,
-                double * x1,
-                double * fluxes);
+                 int nvariables,
+                 double timestep,
+                 double x0,
+                 double * dx0,
+                 int *variables_reservoir_id,
+                 double * Qstars,
+                 double * Qstars_mapping,
+                 double * alphas,
+                 double * gammas,
+                 double * coefs_linear,
+                 double * x1,
+                 double * dx1,
+                 double * fluxes);
 
 #endif

@@ -9,7 +9,7 @@ NPOTENTIAL_FLUXES = 2
 NOUTPUT_FLUXES = 6
 
 if has_c_module():
-    import c_pyquasoare
+    import c_pyquasoare_grad
 else:
     raise ImportError("Cannot run quasoare without C module."
                       + " Please compile C code")
@@ -138,7 +138,7 @@ def grad_reservoir(alphas, timestep,
                   Qstars, gamma, coefs_linear,
                   x0, xmin=-np.inf, xmax=np.inf,
                   errors="ignore",
-                  fluxes=None, niter=None, x1=None):
+                  fluxes=None, niter=None, x1=None, dx1=None):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
     characterised by the following differential equation:
@@ -192,7 +192,7 @@ def grad_reservoir(alphas, timestep,
         - if 'ignore', then skip over error during time step integration
         - if 'raise', throw a ValueError.
         - if 'warn', throw a warning.
-    niter, s1, fluxes : np.ndarray
+    fluxes, niter, x1, dx1 : np.ndarray
         Arrays used by for computation "in place", i.e.
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
@@ -205,6 +205,9 @@ def grad_reservoir(alphas, timestep,
         Vector of length P (one number for each timestep).
     x1 : np.ndarray
         Final value of x at the end of each timestep.
+        Vector of length P.
+    dx1 : np.ndarray
+        Derivative of x1 against capacity Γ at the end of each timestep.
         Vector of length P.
     fluxes : np.ndarray
         Value of the 6 integrated output fluxes for each timestep.
@@ -230,50 +233,65 @@ def grad_reservoir(alphas, timestep,
         niter = np.zeros(nval, dtype=np.int32)
     if x1 is None:
         x1 = np.zeros(nval, dtype=np.float64)
+    if dx1 is None:
+        dx1 = np.zeros(nval, dtype=np.float64)
 
     ierrors = np.int32(ERRORS.index(errors))
 
-    ierr = c_pyquasoare.grad_reservoir(ierrors, timestep, gamma,
-                                       x0, xmin, xmax,
-                                       alphas,
-                                       Qstars,
-                                       coefs_linear,
-                                       niter,
-                                       x1,
-                                       fluxes)
+    ierr = c_pyquasoare_grad.grad_reservoir(ierrors, timestep, gamma,
+                                            xmin, xmax, x0,
+                                            alphas,
+                                            Qstars,
+                                            coefs_linear,
+                                            niter,
+                                            x1,
+                                            dx1,
+                                            fluxes)
 
     if errors == "raise" and ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.lin_model returns {ierr} ({mess})")
+        mess = c_pyquasoare_grad.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare_grad.grad_reservoir returns {ierr} ({mess})")
 
     if errors == "warn":
         if np.any(niter < 0):
             nerr = (niter < 0).sum()
-            mess = f"{nerr} errors when running c_pyquasoare.lin_model"
+            mess = f"{nerr} errors when running c_pyquasoare_grad.grad_reservoir"
             warnings.warn(mess)
 
     return niter, x1, fluxes
 
 
 def grad_model(alphas, timestep,
-              Qstars, Qstars_mapping,
-              gammas, coefs_linear, x0,
-              fluxes=None, x1=None):
+               Qstars, Qstars_mapping,
+               gammas, coefs_linear, x0,
+               variables_reservoir_id=None,
+               fluxes=None, x1=None, dx1=None):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
+
+    if variables_reservoir_id is None:
+        variables_reservoir_id = np.arange(nreservoirs, dtype=np.int32)
+    nvariables = variables_reservoir_id.shape[0]
+
+    dx0 = np.zeros(nvariables, dtype=np.float64)
 
     if fluxes is None:
         fluxes = np.zeros((nval, 6 * nreservoirs), dtype=np.float64)
     if x1 is None:
         x1 = np.zeros((nval, nreservoirs), dtype=np.float64)
+    if dx1 is None:
+        dx1 = np.zeros((nval, nreservoirs, nvariables), dtype=np.float64)
 
-    ierr = c_pyquasoare.grad_model(timestep, x0, alphas,
-                                   Qstars, Qstars_mapping,
-                                   gammas,
-                                   coefs_linear,
-                                   x1, fluxes)
+    ierr = c_pyquasoare_grad.grad_model(timestep, x0,
+                                        dx0,
+                                        variables_reservoir_id,
+                                        alphas,
+                                        Qstars, Qstars_mapping,
+                                        gammas,
+                                        coefs_linear,
+                                        x1, fluxes)
     if ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.lin_model returns {ierr} ({mess})")
+        mess = c_pyquasoare_grad.get_error_message(ierr).decode()
+        raise ValueError(f"c_pyquasoare_grad.grad_model returns {ierr} ({mess})")
 
     return x1, fluxes

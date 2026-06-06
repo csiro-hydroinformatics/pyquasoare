@@ -105,14 +105,13 @@ int c_grad_integrate(int nalphas, int nvariables,
                      double * coefs_linear,
                      double t0,
                      double x0,
-                     int current_reservoir_id;
-                     int *variables_reservoir_id;
-                     int *variables_type_id;
+                     double *dx0,
+                     int current_reservoir_id,
+                     int *variables_reservoir_id,
                      int *niter,
                      double * x1,
-                     double fluxes[6]
-                     double *xi0,
-                     double *xi1) {
+                     double * dx1,
+                     double fluxes[6]) {
 
     int idx, i, nit=0, jalpha_next=0, err_flux;
     int nfluxes_primary = 3;
@@ -127,13 +126,13 @@ int c_grad_integrate(int nalphas, int nvariables,
     double alpha_min = alphas[0];
     double alpha_max = alphas[nalphas-1];
 
+    double gamma_sq = gamma * gamma;
     double mj_vect[3];
     double sj_vect[3];
 
     /* Variables related to gradients */
     int reservoir_id;
-    int type_id;
-    double w, R, dR, dS, delta, xi_nu;
+    double w, R, dR, dS, dM, delta;
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -165,8 +164,8 @@ int c_grad_integrate(int nalphas, int nvariables,
     for(i = 0; i < nfluxes; i++)
         fluxes[i] = 0.;
 
-    for(i = 0; i < nreservoirs * nvariables; i++)
-        xi1[i] = xi0[i];
+    for(i = 0; i < nvariables; i++)
+        dx1[i] = dx0[i];
 
     /* Check data */
     if(Qstars[0] < 0)
@@ -298,15 +297,18 @@ int c_grad_integrate(int nalphas, int nvariables,
         R = M / S;
         for(i = 0; i < nvariables; i++) {
             reservoir_id = variables_reservoir_id[i];
-            type_id = variables_type_id[i];
 
             /* variable belongs to another reservoir */
             if(current_reservoir_id != reservoir_id) {
-                dR = 0;
                 dS = 0;
+                dM = 0;
+            } else {
+                /* Gradient against capacity of the reservoir */
+                dM = -(Qstars[0] * mj_vect[0] + Qstars[1] * mj_vect[1]) / gamma_sq;
+                dS = -(Qstars[0] * sj_vect[0] + Qstars[1] * sj_vect[1]) / gamma_sq;
             }
-
-            xi1[i] = w * (xi1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
+            dR = (dM - R * dS) / S;
+            dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
         }
 
         /* Loop for next band */
@@ -335,28 +337,43 @@ int c_grad_integrate(int nalphas, int nvariables,
     return 0;
 }
 
-int c_grad_reservoir(int nalphas, int nval, int errors,
+int c_grad_reservoir(int nalphas, int nval,
+                    int errors,
                     double timestep, double gamma,
-                    double x0, double xmin, double xmax,
+                    double xmin, double xmax,
+                    double x0,
                     double * alphas,
                     double * Qstars,
                     double * coefs_linear,
-                    int * niter, double * x1, double * fluxes) {
-
+                    int * niter,
+                    double * x1,
+                    double * dx1,
+                    double * fluxes) {
     int ierr, t, j;
     int ninputs = 2;
     int nfluxes = 6;
     double store = x0;
 
+    /* Only one reservoir and one variable (its capacity) here */
+    int nvariables = 1;
+    double dx0[1] = {0.};
+    int current_reservoir_id = 0;
+    int variables_reservoir_id[1] = {0};
+
     for(t = 0; t < nval; t++) {
         /* Integrate ode */
-        ierr = c_grad_integrate(nalphas, alphas, timestep,
+        ierr = c_grad_integrate(nalphas, nvariables,
+                               alphas, timestep,
                                &(Qstars[ninputs * t]),
                                gamma,
                                coefs_linear,
                                0., store,
+                               dx0,
+                               current_reservoir_id,
+                               variables_reservoir_id,
                                &(niter[t]),
                                &(x1[t]),
+                               &(dx1[t]),
                                &(fluxes[nfluxes * t]));
 
         /* Manage errors */
@@ -376,6 +393,7 @@ int c_grad_reservoir(int nalphas, int nval, int errors,
 
         /* Loop initial state */
         store = x1[t];
+        dx0[0] = dx1[t];
 
         /* Impose constraint */
         store = store < xmin ? xmin : store > xmax ? xmax : store;
@@ -387,21 +405,28 @@ int c_grad_reservoir(int nalphas, int nval, int errors,
 
 
 int c_grad_model(int nreservoirs, int nalphas, int nval,
-                double timestep, double x0,
-                double * Qstars,
-                double * Qstars_mapping,
-                double * alphas,
-                double * gammas,
-                double * coefs_linear,
-                double * x1,
-                double * fluxes) {
+                 int nvariables,
+                 double timestep,
+                 double x0,
+                 double * dx0,
+                 int *variables_reservoir_id,
+                 double * Qstars,
+                 double * Qstars_mapping,
+                 double * alphas,
+                 double * gammas,
+                 double * coefs_linear,
+                 double * x1,
+                 double * dx1,
+                 double * fluxes) {
 
-    int ierr, t, i, j, l, q, p, ka, kq, kc, kx, kf, ko, kw;
+    int ierr, t, i, j, l, q, p, ka, kq, kc, kx, kf, ko, kw, kdx, kdxp;
 
     int nfluxes_output = 6;
     int nfluxes_input = 2;
     int nfluxes_function = 3;
     int ncoefs = 2;
+
+    int current_reservoir_id;
 
     /* we do not store the number of iterations
      * This is a dummy variable */
@@ -417,6 +442,7 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
 
         /* loop through reservoirs */
         for(i = 0; i < nreservoirs; i++) {
+            current_reservoir_id = i;
 
             /* Get reservoir capacity */
             gamma = gammas[i];
@@ -427,12 +453,16 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
             kx = nreservoirs * t + i;
             kf = (nreservoirs * t + i) * nfluxes_output;
             ka = nalphas * i;
+            kdx = (nreservoirs * t + i) * nvariables;
+            kdxp = (nreservoirs * (t - 1) + i) * nvariables;
 
             /* Initial condition */
             if(t == 0)
                 store = x0;
-            else
+            else {
                 store = x1[kx - nreservoirs];
+                dx0 = &(dx1[kdxp]); // A bit scary .. overwrite data
+            }
 
             /* Input data */
             Qst[0] = Qstars[kq];
@@ -478,24 +508,27 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
             }
 
             /* Integrate ode */
-            ierr = c_grad_integrate(nalphas,
-                                   &(alphas[ka]),
-                                   timestep,
-                                   Qst,
-                                   gamma,
-                                   &(coefs_linear[kc]),
-                                   0.,
-                                   store,
-                                   niter,
-                                   &(x1[kx]),
-                                   &(fluxes[kf]));
+            ierr = c_grad_integrate(nalphas, nvariables,
+                                    &(alphas[ka]),
+                                    timestep,
+                                    Qst,
+                                    gamma,
+                                    &(coefs_linear[kc]),
+                                    0.,
+                                    store,
+                                    dx0,
+                                    current_reservoir_id,
+                                    variables_reservoir_id,
+                                    niter,
+                                    &(x1[kx]),
+                                    &(dx1[kdx]),
+                                    &(fluxes[kf]));
 
             /* Basic error management */
             if(ierr > 0)
                 return ierr;
+
         }
-
-
     }
 
     return 0;

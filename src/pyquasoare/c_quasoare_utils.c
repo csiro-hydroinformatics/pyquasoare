@@ -158,6 +158,9 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_NEGATIVE_CAPACITY)
         strncpy(message, "Negative value of reservoir capacity", len);
 
+    else if(err_code == QUASOARE_GRAD_ONLY_ONE_VARIABLE_ALLOWED)
+        strncpy(message, "Only one gradient variable allowed", len);
+
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
 

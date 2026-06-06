@@ -146,6 +146,54 @@ def gr4jprod(nsubdiv, X1, s0, inputs):
     return outputs
 
 
+def gradbench_linrouting(timestep, qin, x0, thetas):
+    timestep = np.float64(timestep)
+    thetas = np.ascontiguousarray(thetas).astype(np.float64)
+    qin = np.ascontiguousarray(qin).astype(np.float64)
+
+    nval = qin.shape[0]
+    nreaches = len(thetas)
+    x0 = np.array([x0] * nreaches)
+    states = np.empty((nval, nreaches))
+    qout = np.empty((nval, nreaches))
+
+    ierr = c_pyquasoare_benchmarks.gradbench_linrouting(timestep, x0,
+                                                        thetas, qin,
+                                                        states, qout)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_linrouting returns {ierr}")
+
+    return states, qout
+
+
+def gradbench_linrouting_tangent(timestep, qin, x0, thetas, dthetas):
+    timestep = np.float64(timestep)
+    thetas = np.ascontiguousarray(thetas).astype(np.float64)
+    dthetas = np.ascontiguousarray(dthetas).astype(np.float64)
+    qin = np.ascontiguousarray(qin).astype(np.float64)
+
+    nval = qin.shape[0]
+    nreaches = len(thetas)
+    x0 = np.array([x0] * nreaches)
+    states = np.empty((nval, nreaches))
+    dstates = np.empty((nval, nreaches))
+    qout = np.empty((nval, nreaches))
+    dqout = np.empty((nval, nreaches))
+
+    ierr = c_pyquasoare_benchmarks.gradbench_linrouting_d(timestep, x0,
+                                                          thetas,
+                                                          dthetas,
+                                                          qin,
+                                                          states,
+                                                          dstates,
+                                                          qout,
+                                                          dqout)
+    if ierr > 0:
+        raise ValueError(f"c_pyquasoare_benchmarks.gradbench_linrouting_d returns {ierr}")
+
+    return states, dstates, qout, dqout
+
+
 def gradbench_quadrouting(timestep, qin, x0, gammas):
     timestep = np.float64(timestep)
     gammas = np.ascontiguousarray(gammas).astype(np.float64)
