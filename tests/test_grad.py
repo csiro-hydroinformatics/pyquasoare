@@ -14,7 +14,7 @@ import scipy.integrate as sci_integrate
 from hydrodiy.io import iutils, csv
 
 from pyquasoare import integrate, models, gradients, approx, steady
-import c_pyquasoare
+import c_pyquasoare_grad
 
 import data_reader
 
@@ -117,6 +117,8 @@ def test_grad_integrate_error():
     # Lin
     n = np.zeros(1, dtype=np.int32)
     x = np.zeros(1, dtype=np.float64)
+    nvars = 2
+    dx = np.zeros(nvars, dtype=np.float64)
     fx = np.zeros(6, dtype=np.float64)
 
     funs = [
@@ -129,20 +131,23 @@ def test_grad_integrate_error():
     timestep = 1.
     gamma = 100.
     x_start = 0.5
+    dx0 = np.zeros(nvars)
 
+    rid = 0
+    vrid = np.array([0] * nvars, dtype=np.int32)
     qst = -np.ones(2)
-    ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
-                                       gamma, coefs_lin,
-                                       0, x_start,
-                                       n, x, fx)
+    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                            gamma, coefs_lin,
+                                            0, x_start, dx0, vrid,
+                                            n, x, dx, fx)
     assert ierr == 112
 
     qst = np.ones(2)
     coefs_lin[0] *= -1
-    ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
-                                       gamma, coefs_lin,
-                                       0, x_start,
-                                       n, x, fx)
+    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                            gamma, coefs_lin,
+                                            0, x_start, dx0, vrid,
+                                            n, x, dx, fx)
     assert ierr == 111
 
 
@@ -185,7 +190,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
         x2 = np.zeros(1, dtype=np.float64)
         fx2 = np.zeros(6, dtype=np.float64)
         qst = np.ascontiguousarray(Qstars[i])
-        ierr = c_pyquasoare.grad_integrate(alphas, timestep, qst,
+        ierr = c_pyquasoare_grad.grad_integrate(alphas, timestep, qst,
                                           gamma, coefs_lin,
                                           0, x_start,
                                           n2, x2, fx2)
