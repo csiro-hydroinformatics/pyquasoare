@@ -17,23 +17,28 @@ cdef extern from 'c_quasoare_grad.h':
                          double *dx0,
                          int current_reservoir_id,
                          int *variables_reservoir_id,
+                         int *variables_type_id,
                          int *niter,
-                         double *x1,
-                         double *dx1,
-                         double fluxes[6]);
-
-    int c_grad_reservoir(int nalphas, int nval,
-                         int errors,
-                         double timestep, double gamma,
-                         double xmin, double xmax,
-                         double x0,
-                         double * alphas,
-                         double * Qstars,
-                         double * coefs_linear,
-                         int * niter,
                          double * x1,
                          double * dx1,
-                         double * fluxes);
+                         double fluxes[6]);
+
+    int c_grad_reservoir(int nalphas, int nval, int nvariables,
+                        int errors,
+                        double timestep, double gamma,
+                        double xmin, double xmax,
+                        double x0,
+                        double * dx0,
+                        int current_reservoir_id,
+                        int *variables_reservoir_id,
+                        int *variables_type_id,
+                        double * alphas,
+                        double * Qstars,
+                        double * coefs_linear,
+                        int * niter,
+                        double * x1,
+                        double * dx1,
+                        double * fluxes);
 
     int c_grad_model(int nreservoirs, int nalphas, int nval,
                      int nvariables,
@@ -41,6 +46,7 @@ cdef extern from 'c_quasoare_grad.h':
                      double x0,
                      double * dx0,
                      int *variables_reservoir_id,
+                     int *variables_type_id,
                      double * Qstars,
                      double * Qstars_mapping,
                      double * alphas,
@@ -63,6 +69,7 @@ def grad_integrate(int current_reservoir_id,
                    double t0, double x0,
                    np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                    np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
+                   np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                    np.ndarray[int, ndim=1, mode='c'] niter not None,
                    np.ndarray[double, ndim=1, mode='c'] x1 not None,
                    np.ndarray[double, ndim=1, mode='c'] dx1 not None,
@@ -87,6 +94,9 @@ def grad_integrate(int current_reservoir_id,
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
 
+    if variables_type_id.shape[0] != nvariables:
+        raise ValueError("variables_type_id.shape[0] != nvariables")
+
     if niter.shape[0] != 1:
         raise ValueError("niter.shape[0] != 1")
 
@@ -110,6 +120,7 @@ def grad_integrate(int current_reservoir_id,
                            <double*> np.PyArray_DATA(dx0),
                            current_reservoir_id,
                            <int*> np.PyArray_DATA(variables_reservoir_id),
+                           <int*> np.PyArray_DATA(variables_type_id),
                            <int*> np.PyArray_DATA(niter),
                            <double*> np.PyArray_DATA(x1),
                            <double*> np.PyArray_DATA(dx1),
@@ -118,6 +129,10 @@ def grad_integrate(int current_reservoir_id,
 
 def grad_reservoir(int errors, double timestep, double gamma,
                    double xmin, double xmax, double x0,
+                   np.ndarray[double, ndim=1, mode='c'] dx0 not None,
+                   int current_reservoir_id,
+                   np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
+                   np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    np.ndarray[double, ndim=2, mode='c'] qstars not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
@@ -129,6 +144,13 @@ def grad_reservoir(int errors, double timestep, double gamma,
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
     cdef int nval = qstars.shape[0]
+    cdef int nvariables = dx0.shape[0]
+
+    if variables_reservoir_id.shape[0] != nvariables:
+        raise ValueError("variables_reservoir_id.shape[0] != nvariables")
+
+    if variables_type_id.shape[0] != nvariables:
+        raise ValueError("variables_type_id.shape[0] != nvariables")
 
     if qstars.shape[1] != 2:
         raise ValueError("qstars.shape[1] != 2")
@@ -158,9 +180,13 @@ def grad_reservoir(int errors, double timestep, double gamma,
         raise ValueError("fluxes.shape[0] != 6")
 
     # Run C code
-    return c_grad_reservoir(nalphas, nval, errors,
+    return c_grad_reservoir(nalphas, nval, nvariables, errors,
                             timestep, gamma,
                             xmin, xmax, x0,
+                            <double*> np.PyArray_DATA(dx0),
+                            current_reservoir_id,
+                            <int*> np.PyArray_DATA(variables_reservoir_id),
+                            <int*> np.PyArray_DATA(variables_type_id),
                             <double*> np.PyArray_DATA(alphas),
                             <double*> np.PyArray_DATA(qstars),
                             <double*> np.PyArray_DATA(coefs_linear),
@@ -173,6 +199,7 @@ def grad_reservoir(int errors, double timestep, double gamma,
 def grad_model(double timestep, double x0,
                np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
+               np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
                np.ndarray[double, ndim=2, mode='c'] qstars not None,
                np.ndarray[double, ndim=2, mode='c'] qstars_mapping not None,
@@ -193,6 +220,9 @@ def grad_model(double timestep, double x0,
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
+
+    if variables_type_id.shape[0] != nvariables:
+        raise ValueError("variables_type_id.shape[0] != nvariables")
 
     if qstars.shape[1] != 2 * nreservoirs:
         raise ValueError("qstars.shape[1] != 2 * nreservoirs")
@@ -241,6 +271,7 @@ def grad_model(double timestep, double x0,
                        timestep, x0,
                        <double*> np.PyArray_DATA(dx0),
                        <int*> np.PyArray_DATA(variables_reservoir_id),
+                       <int*> np.PyArray_DATA(variables_type_id),
                        <double*> np.PyArray_DATA(qstars),
                        <double*> np.PyArray_DATA(qstars_mapping),
                        <double*> np.PyArray_DATA(alphas),
