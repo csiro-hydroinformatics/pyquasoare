@@ -3,7 +3,7 @@ from collections import namedtuple
 import numpy as np
 
 from pyquasoare import has_c_module, approx
-from pyquasoare.models import ERRORS
+from pyquasoare.models import ERRORS, error_management
 
 NPOTENTIAL_FLUXES = 2
 NOUTPUT_FLUXES = 6
@@ -262,16 +262,8 @@ def grad_reservoir(alphas, timestep,
                                             x1,
                                             dx1,
                                             fluxes)
-
-    if errors == "raise" and ierr > 0:
-        mess = c_pyquasoare_grad.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare_grad.grad_reservoir returns {ierr} ({mess})")
-
-    if errors == "warn":
-        if np.any(niter < 0):
-            nerr = (niter < 0).sum()
-            mess = f"{nerr} errors when running c_pyquasoare_grad.grad_reservoir"
-            warnings.warn(mess)
+    name = "c_pyquasoare_grad.grad_reservoir"
+    error_management(errors, ierr, name)
 
     return niter, x1, dx1, fluxes
 
@@ -280,7 +272,8 @@ def grad_model(alphas, timestep,
                Qstars, Qstars_mapping,
                gammas, coefs_linear, x0,
                variables_reservoir_id=None,
-               fluxes=None, x1=None, dx1=None):
+               fluxes=None, x1=None, dx1=None,
+               errors="ignore"):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
 
@@ -305,8 +298,7 @@ def grad_model(alphas, timestep,
                                         gammas,
                                         coefs_linear,
                                         x1, fluxes)
-    if ierr > 0:
-        mess = c_pyquasoare_grad.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare_grad.grad_model returns {ierr} ({mess})")
+    name = "c_pyquasoare_grad.grad_model"
+    error_management(errors, ierr, name)
 
     return x1, fluxes

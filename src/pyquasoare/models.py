@@ -11,6 +11,15 @@ else:
 ERRORS = ["ignore", "raise", "warn"]
 
 
+def error_management(errors, ierr, name):
+    mess = c_pyquasoare.get_error_message(ierr).decode()
+    if errors == "raise" and ierr > 0:
+        raise ValueError(f"{name} returns {ierr} ({mess}).")
+
+    if errors == "warn":
+        mess = f"{name} raises warning {ierr} ({mess})."
+        warnings.warn(mess)
+
 def quad_model(alphas, flux_scalings, coefs_noscaling,
                s0, timestep,
                smin=-np.inf,
@@ -156,15 +165,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
                                    perturb, coefs_noscaling,
                                    s0, smin, smax,
                                    timestep, niter, s1, fluxes)
-
-    if errors == "raise" and ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.quad_model returns {ierr} ({mess})")
-
-    if errors == "warn":
-        if np.any(niter < 0):
-            nerr = (niter < 0).sum()
-            mess = f"{nerr} errors when running c_pyquasoare.quad_model"
-            warnings.warn(mess)
+    name = "c_pyquasoare.quad_model"
+    error_management(errors, ierr, name)
 
     return niter, s1, fluxes
