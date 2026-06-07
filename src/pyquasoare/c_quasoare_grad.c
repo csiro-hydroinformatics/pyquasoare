@@ -2,6 +2,11 @@
 
 /* Solution of dS/dt = f*(s) */
 
+double wfun(double delta, double S) {
+    double x = delta * S;
+    return x > 460.51 ? 1e200 : x < -460.51 ? 1e-200 : exp(x);
+}
+
 double c_grad_forward(double M, double S, double t0, double x0, double t){
     double x1 = c_get_nan();
     double tau = t - t0;
@@ -16,7 +21,7 @@ double c_grad_forward(double M, double S, double t0, double x0, double t){
     else {
         exparg = S * tau;
         x1 = fabs(exparg) < QUASOARE_EPS ? x0 * (1 + exparg) + M * tau
-            : -M / S +(x0 + M / S) * exp(exparg);
+            : -M / S +(x0 + M / S) * wfun(tau, S);
     }
     return x1;
 }
@@ -133,7 +138,7 @@ int c_grad_integrate(int nalphas, int nvariables,
 
     /* Variables related to gradients */
     int reservoir_id, type_id;
-    double w, R, dR, dS, dM, delta;
+    double w, R, dR, dS, dM, tau;
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -293,8 +298,8 @@ int c_grad_integrate(int nalphas, int nvariables,
             return err_flux;
 
         /* Computation of sensitivities */
-        delta = t_end - t_start;
-        w = exp(S * delta);
+        tau = t_end - t_start;
+        w = wfun(tau, S);
         R = M / S;
         for(i = 0; i < nvariables; i++) {
             reservoir_id = variables_reservoir_id[i];
@@ -319,9 +324,14 @@ int c_grad_integrate(int nalphas, int nvariables,
 
             if(notnull(S)) {
                 dR = (dM - R * dS) / S;
-                dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
+                dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * tau * dS);
             } else {
-                dx1[i] += dM * delta;
+                dx1[i] += dM * tau;
+            }
+            if(isnan(dx1[i])) {
+                fprintf(stdout, "i=%d M=%3.3e S=%3.3e w=%3.3e tau=%3.3e R=%3.3e x0=%3.3e\n",
+                        i, M, S, w, tau, R, x0);
+                return QUASOARE_GRAD_IS_NAN;
             }
         }
 
@@ -350,6 +360,7 @@ int c_grad_integrate(int nalphas, int nvariables,
 
     return 0;
 }
+
 
 int c_grad_reservoir(int nalphas, int nval, int nvariables,
                     int errors,

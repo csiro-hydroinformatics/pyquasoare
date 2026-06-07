@@ -30,7 +30,7 @@ def fixed(x, x0):
 def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
-def comp_fun(x, eps=1e-10):
+def comp_fun(x, eps=1e-5):
     return np.sign(x) * np.log(np.abs(x) + eps)
 
 RESERVOIR_FUNCTIONS = {
@@ -66,7 +66,7 @@ RESERVOIR_FUNCTIONS = {
         ],
     "xinanjiang": [
         lambda x: (1 - np.minimum(x, 1.))**0.2,
-        lambda x: indicator(x, 0., np.inf),
+        lambda x: x,
         lambda x: fixed(x, 0.)
         ],
     "intercept": [
@@ -256,12 +256,14 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, allclose):
 
     # Lin
     dx0 = np.zeros(1)
-    vtid = np.zeros(1, dtype=np.int32)
+    vtid = 1 + np.zeros(1, dtype=np.int32)
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                           Qstars, gamma, coefs_lin,
-                                          x0, dx0, vtid)
+                                          x0, dx0, vtid,
+                                          errors="raise")
     assert allclose(x1, x2)
     assert allclose(fx1, fx2)
+    assert all(~np.isnan(x2))
     assert all(~np.isnan(dx2))
 
     # Sanity check
@@ -299,7 +301,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, allclose):
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                                 Qstars, gamma, coefs_lin,
                                                 x0, dx0, vtid)
-    eps = 1e-2
+    eps = 5e-3
     dx0 = np.zeros(1)
     _, x2m, _, _ = gradients.grad_reservoir(alphas, timestep,
                                             Qstars, gamma - eps, coefs_lin,
@@ -312,14 +314,9 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, allclose):
     corr = np.corrcoef(dx2, expected)[0, 1]
     assert corr > 0.999
 
-    #err = np.abs(comp_fun(dx2) - comp_fun(expected))
-    #atol = 1e-4
-    #assert err.max() < atol
-
-    #import matplotlib.pyplot as plt
-    #plt.plot(dx2, expected, ".")
-    #plt.show()
-    #import pdb; pdb.set_trace()
+    atol = 1e-3
+    rtol = 1e-3
+    assert allclose(dx2, expected, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
