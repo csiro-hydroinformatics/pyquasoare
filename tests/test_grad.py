@@ -30,6 +30,8 @@ def fixed(x, x0):
 def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
+def comp_fun(x, eps=1e-10):
+    return np.sign(x) * np.log(np.abs(x) + eps)
 
 RESERVOIR_FUNCTIONS = {
     "gr4jprod": [
@@ -73,9 +75,9 @@ RESERVOIR_FUNCTIONS = {
         lambda x: fixed(x, 0.)
         ],
     "muskingumrouting": [
-        lambda x: indicator(x, 0., np.inf),
+        lambda x: indicator(x, 0., np.inf) / (1 - 0.3),
         lambda x: fixed(x, 0.),
-        lambda x: x**6
+        lambda x: x * 1. / 2.5 / (1 - 0.3)
         ],
 }
 
@@ -176,6 +178,8 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
     vtid = np.zeros(1, dtype=np.int32)
     x_start = 0.5
     dx0 = np.zeros(1)
+    dx0m = np.zeros(1)
+    dx0p = np.zeros(1)
     scalings = np.zeros(3)
     n2 = np.zeros(1, dtype=np.int32)
     x2 = np.zeros(1, dtype=np.float64)
@@ -184,8 +188,6 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
     dx2 = np.zeros(1, dtype=np.float64)
     fx2 = np.zeros(6, dtype=np.float64)
     eps = 1e-6
-
-    comp = lambda x: np.sign(x) * np.log(np.abs(x))
 
     res = np.zeros((nval, 2))
 
@@ -211,38 +213,12 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
         fxa = np.array([fx1[0] - qst[0], fx1[1] - qst[1], fx1[0] - qst[0] + fx1[2]])
         assert allclose(fxa, fx2[3:])
 
-        # Check gradients
-        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                                gamma - eps, coefs_lin,
-                                                0, x_start, dx0, vrid, vtid,
-                                                n2, x2m, dx2, fx2)
-        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                                gamma + eps, coefs_lin,
-                                                0, x_start, dx0, vrid, vtid,
-                                                n2, x2p, dx2, fx2)
-        expected = (x2p - x2m) / 2 / eps
-        err = comp(expected[0]) - comp(dx2[0])
-        #assert abs(err < 1e-4)
-        res[i, :] = dx2[0]
-        res[i, 1] = expected[0]
-
-        # Loop
-        x_start = x1
-        dx0 = dx2
-
-    #import matplotlib.pyplot as plt
-    #plt.plot(res)
-    #plt.show()
-    #import pdb; pdb.set_trace()
-
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
 @pytest.mark.parametrize("gamma", [1, 10, 100, 1000])
 @pytest.mark.parametrize("timestep", [0.1, 1])
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, allclose):
-    return
-
     # Get data
     df = data_reader.get_data(siteid, "daily")
     Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -273,16 +249,20 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, allclose):
     n1, x1, fx1 = models.quad_model(alphas, scalings, coefs,
                                     x0, timestep)
     fx1 *= gamma / timestep
-
-    # Lin
-    n2, x2, fx2 = gradients.grad_reservoir(alphas, timestep,
-                                          Qstars, gamma, coefs_lin, x0)
     fx1 = np.column_stack([fx1,
                            -Qstars[:, 0] + fx1[:, 0],
                            -Qstars[:, 1] + fx1[:, 1],
                            -Qstars[:, 0] + fx1[:, 0] + fx1[:, 2]])
+
+    # Lin
+    dx0 = np.zeros(1)
+    vtid = np.zeros(1, dtype=np.int32)
+    n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
+                                          Qstars, gamma, coefs_lin,
+                                          x0, dx0, vtid)
     assert allclose(x1, x2)
     assert allclose(fx1, fx2)
+    assert all(~np.isnan(dx2))
 
     # Sanity check
     if not re.search("rout(e|ing)", reservoir):
@@ -292,6 +272,54 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, allclose):
     dSa = np.diff(x2) * gamma
     dSb = timestep * fx2[1:, :3].sum(axis=1)
     assert allclose(dSa, dSb)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
+@pytest.mark.parametrize("gamma", [1, 10, 100, 1000])
+@pytest.mark.parametrize("timestep", [0.1, 1])
+def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, allclose):
+    # Get data
+    df = data_reader.get_data(siteid, "daily")
+    Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qstars[:, 1] *= -1 # PET = negative demand
+    Qstars = np.ascontiguousarray(Qstars)
+    nval = len(Qstars)
+
+    # Get coefs - quad coefs with option = 0 (linear)
+    nalphas = 20
+    alphas = np.linspace(0, 1, nalphas)
+    funs = RESERVOIR_FUNCTIONS[reservoir]
+    coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
+
+    # Lin
+    x0 = 0.5
+    dx0 = np.zeros(1)
+    vtid = np.zeros(1, dtype=np.int32)
+    n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
+                                                Qstars, gamma, coefs_lin,
+                                                x0, dx0, vtid)
+    eps = 1e-2
+    dx0 = np.zeros(1)
+    _, x2m, _, _ = gradients.grad_reservoir(alphas, timestep,
+                                            Qstars, gamma - eps, coefs_lin,
+                                            x0, dx0, vtid)
+    dx0 = np.zeros(1)
+    _, x2p, _, _ = gradients.grad_reservoir(alphas, timestep,
+                                            Qstars, gamma + eps, coefs_lin,
+                                            x0, dx0, vtid)
+    expected = (x2p - x2m) / 2 / eps
+    corr = np.corrcoef(dx2, expected)[0, 1]
+    assert corr > 0.999
+
+    #err = np.abs(comp_fun(dx2) - comp_fun(expected))
+    #atol = 1e-4
+    #assert err.max() < atol
+
+    #import matplotlib.pyplot as plt
+    #plt.plot(dx2, expected, ".")
+    #plt.show()
+    #import pdb; pdb.set_trace()
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)

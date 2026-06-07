@@ -300,19 +300,29 @@ int c_grad_integrate(int nalphas, int nvariables,
             reservoir_id = variables_reservoir_id[i];
             type_id = variables_type_id[i];
 
-            /* variable belongs to another reservoir */
-            if(current_reservoir_id != reservoir_id) {
+            if(current_reservoir_id < reservoir_id) {
+                /* variable belongs to a downstream reservoir */
                 dS = 0;
                 dM = 0;
+            } else if (current_reservoir_id > reservoir_id) {
+                /* variable belongs to an upstream reservoir
+                 * TODO
+                 * */
             } else {
+                /* variable belongs to current reservoir */
                 if(type_id == 0) {
                     /* Gradient against capacity of the reservoir */
                     dM = -(Qstars[0] * mj_vect[0] + Qstars[1] * mj_vect[1]) / gamma_sq;
                     dS = -(Qstars[0] * sj_vect[0] + Qstars[1] * sj_vect[1]) / gamma_sq;
                 }
             }
-            dR = (dM - R * dS) / S;
-            dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
+
+            if(notnull(S)) {
+                dR = (dM - R * dS) / S;
+                dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * delta * dS);
+            } else {
+                dx1[i] += dM * delta;
+            }
         }
 
         /* Loop for next band */
