@@ -273,7 +273,7 @@ def grad_reservoir(alphas, timestep,
             mess = f"{nerr} errors when running c_pyquasoare_grad.grad_reservoir"
             warnings.warn(mess)
 
-    return niter, x1, fluxes
+    return niter, x1, dx1, fluxes
 
 
 def grad_model(alphas, timestep,
