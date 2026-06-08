@@ -204,6 +204,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
                         / (1. - a / qD * (s0 - sbar) * omega);
         }
     }
+
     return s1;
 }
 
@@ -503,6 +504,9 @@ int c_quad_integrate(int nalphas, int nfluxes,
                                            s_start, s_end);
             t_end = t_end < t_final && fabs(funval) > QUASOARE_EPS ? t_end : t_final;
         }
+
+        if(!isfinite(s_end))
+            return QUASOARE_STORE_LEVEL_INFINITE;
 
         /* Increment fluxes during the last interval */
         err_flux = c_quad_fluxes_increment(nfluxes,

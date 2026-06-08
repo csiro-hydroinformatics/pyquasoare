@@ -149,6 +149,9 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
 
+    else if(err_code == QUASOARE_STORE_LEVEL_INFINITE)
+        strncpy(message, "Store level becomes infinite", len);
+
     else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
         strncpy(message, "Negative value of flux function", len);
 

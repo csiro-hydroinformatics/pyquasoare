@@ -289,12 +289,15 @@ int c_grad_integrate(int nalphas, int nvariables,
             t_end = t_end < t_final && fabs(funval) > QUASOARE_EPS ? t_end : t_final;
         }
 
+        if(!isfinite(x_end))
+            return QUASOARE_STORE_LEVEL_INFINITE;
+
         /* Increment fluxes during the last interval */
         err_flux = c_grad_fluxes_increment(timestep, gamma, Qstars,
                                           mj_vect, sj_vect,
                                           M, S, t_start, t_end, x_start, x_end,
                                           fluxes);
-        if(err_flux>0)
+        if(err_flux > 0)
             return err_flux;
 
         /* Computation of sensitivities */
