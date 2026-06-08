@@ -23,17 +23,17 @@ extensions = [
         include_dirs=[numpy.get_include()]),
     Extension(name="c_pyquasoare_benchmarks",
         sources=[
-        "src/pyquasoare/c_pyquasoare_benchmarks.pyx",
-        "src/pyquasoare/c_nonlinrouting.c",
-        "src/pyquasoare/c_gr4jprod.c",
-        "src/pyquasoare/c_gradbench_linrouting.c",
-        "src/pyquasoare/c_gradbench_linrouting_d.c",
-        "src/pyquasoare/c_gradbench_quadrouting.c",
-        "src/pyquasoare/c_gradbench_quadrouting_d.c",
-        "src/pyquasoare/c_gradbench_rainfall_runoff.c",
-        "src/pyquasoare/c_gradbench_rainfall_runoff_d.c",
-        "src/pyquasoare/c_gradbench_semidist.c",
-        "src/pyquasoare/c_gradbench_semidist_d.c"
+        "src/pyquasoare/benchmarks/c_pyquasoare_benchmarks.pyx",
+        "src/pyquasoare/benchmarks/c_nonlinrouting.c",
+        "src/pyquasoare/benchmarks/c_gr4jprod.c",
+        "src/pyquasoare/benchmarks/c_gradbench_linrouting.c",
+        "src/pyquasoare/benchmarks/c_gradbench_linrouting_d.c",
+        "src/pyquasoare/benchmarks/c_gradbench_quadrouting.c",
+        "src/pyquasoare/benchmarks/c_gradbench_quadrouting_d.c",
+        "src/pyquasoare/benchmarks/c_gradbench_rainfall_runoff.c",
+        "src/pyquasoare/benchmarks/c_gradbench_rainfall_runoff_d.c",
+        "src/pyquasoare/benchmarks/c_gradbench_semidist.c",
+        "src/pyquasoare/benchmarks/c_gradbench_semidist_d.c"
         ],
         include_dirs=[numpy.get_include()])
 ]
