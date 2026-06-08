@@ -1,6 +1,5 @@
 import importlib.util
 
-
 def has_c_module(raise_error=True):
     mname = "c_pyquasoare"
     out = importlib.util.find_spec(mname)
@@ -13,3 +12,7 @@ def has_c_module(raise_error=True):
                               + " Please run python setup.py build")
         else:
             return False
+
+# Simplifies interface to benchmark
+from pyquasoare.benchmarks import benchmarks
+
