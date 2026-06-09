@@ -577,9 +577,9 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
 
         /* Manage errors */
         if(ierr > 0) {
-            if(errors == 1) {
+            if(errors == 1)
                 return ierr;
-            }
+
             else if (errors == 0 || errors == 2){
                 niter[t] = -1;
 

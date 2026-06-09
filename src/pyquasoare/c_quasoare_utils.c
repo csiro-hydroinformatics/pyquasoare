@@ -43,11 +43,11 @@ int isnull(double x){
 }
 
 int isequal(double x, double y, double atol, double rtol){
-    return fabs(x-y)<atol+rtol*fabs(x) ? 1 : 0;
+    return fabs(x - y) < atol + rtol * fabs(x) ? 1 : 0;
 }
 
 int notequal(double x, double y, double atol, double rtol){
-    return 1-isequal(x, y, atol, rtol);
+    return 1 - isequal(x, y, atol, rtol);
 }
 
 /* Code copied from
@@ -166,6 +166,9 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == QUASOARE_GRAD_IS_NAN)
         strncpy(message, "Gradient is nan", len);
+
+    else if(err_code == QUASOARE_GRAD_IS_INFINITE)
+        strncpy(message, "Gradient is infinite", len);
 
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);

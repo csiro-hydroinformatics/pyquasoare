@@ -41,7 +41,7 @@ cdef extern from 'c_quasoare_grad.h':
                         double * fluxes);
 
     int c_grad_model(int nreservoirs, int nalphas, int nval,
-                     int nvariables,
+                     int nvariables, int errors,
                      double timestep,
                      double x0,
                      double * dx0,
@@ -196,7 +196,7 @@ def grad_reservoir(int errors, double timestep, double gamma,
                             <double*> np.PyArray_DATA(fluxes))
 
 
-def grad_model(double timestep, double x0,
+def grad_model(int errors, double timestep, double x0,
                np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
                np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
@@ -267,7 +267,7 @@ def grad_model(double timestep, double x0,
         raise ValueError("fluxes.shape[0] != 6 * nreservoirs")
 
     # Run C code
-    return c_grad_model(nreservoirs, nalphas, nval, nvariables,
+    return c_grad_model(nreservoirs, nalphas, nval, nvariables, errors,
                        timestep, x0,
                        <double*> np.PyArray_DATA(dx0),
                        <int*> np.PyArray_DATA(variables_reservoir_id),

@@ -60,7 +60,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
                     double * fluxes);
 
 int c_grad_model(int nreservoirs, int nalphas, int nval,
-                 int nvariables,
+                 int nvariables, int errors,
                  double timestep,
                  double x0,
                  double * dx0,
