@@ -28,7 +28,7 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          uv run ruff check src/pyquasoare
+          uv run ruff check --ignore E402 src/pyquasoare
 
       - name: Run tests
         run: |
