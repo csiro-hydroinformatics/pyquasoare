@@ -14,5 +14,5 @@ def has_c_module(raise_error=True):
             return False
 
 # Simplifies interface to benchmark
-from pyquasoare.benchmarks import benchmarks
+from pyquasoare.benchmarks import benchmarks as benchmarks
 
