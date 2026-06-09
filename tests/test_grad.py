@@ -25,6 +25,10 @@ FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
 NALPHAS = 20
 
+DEMANDS = [-0.5, 0, 0.5]
+TIMESTEPS = [0.1, 1]
+GAMMAS = [10, 100, 10000]
+
 def fixed(x, x0):
     return x0 * np.ones_like(x)
 
@@ -35,7 +39,7 @@ def comp_fun(x, x0=1e-3):
     #return np.sign(x) * np.log(np.abs(x) + eps)
     return np.asinh(x / x0)
 
-RESERVOIR_FUNCTIONS = {
+FLUX_FUNCTIONS = {
     "gr4jprod": [
         lambda x: 1 - np.minimum(x, 1)**2,
         lambda x: np.minimum(x, 1) * (2 - np.minimum(x, 1)),
@@ -48,59 +52,63 @@ RESERVOIR_FUNCTIONS = {
         ],
     "gr4jroute": [
         lambda x: 0.9 * fixed(x, 1.),
-        lambda x: x ** 3.5,
-        lambda x: x**5 / 4
+        lambda x: np.maximum(x, 0.)**3.5,
+        lambda x: np.maximum(x, 0.)**5 / 4
         ],
     "gr4jroutequad": [
         lambda x: 0.9 * fixed(x, 1.),
-        lambda x: x ** 2,
-        lambda x: x**2 / 4
+        lambda x: np.maximum(x, 0.)**2,
+        lambda x: np.maximum(x, 0.)**2 / 4
         ],
     "quadrouting": [
         lambda x: indicator(x, 0., np.inf),
         lambda x: fixed(x, 1.),
-        lambda x: x**2
+        lambda x: np.maximum(x, 0.)**2
+        ],
+    "linrouting": [
+        # Lag theta = 3.5
+        lambda x: indicator(x, -1e-100, np.inf),
+        lambda x: fixed(x, 1.),
+        lambda x: np.maximum(x, 0.) / 3.5
         ],
     "nonlinrouting": [
+        # exponent n = 6
         lambda x: indicator(x, 0., np.inf),
-        lambda x: fixed(x, 1.),
-        lambda x: x**6
+        lambda x: indicator(x, 0, 1),
+        lambda x: np.maximum(x, 0.)**6
         ],
-    "xinanjiang": [
-        lambda x: (1 - np.minimum(x, 1.))**0.2,
-        lambda x: x,
+    "xinanjiang1": [
+        # exponent = 0.2
+        lambda x: (1 - np.clip(x, 0., 1.))**0.2,
+        lambda x: np.maximum(x, 0.),
+        lambda x: fixed(x, 0.)
+        ],
+    "xinanjiang2": [
+        # exponent = 5
+        lambda x: (1 - np.clip(x, 0., 1.))**0.2,
+        lambda x: np.maximum(x, 0.),
         lambda x: fixed(x, 0.)
         ],
     "intercept": [
-        lambda x: indicator(x, -np.inf, 1.),
-        lambda x: indicator(x, 0., np.inf),
+        lambda x: indicator(x, 0., 1.),
+        lambda x: indicator(x, 0., 1.),
         lambda x: fixed(x, 0.)
         ],
     "muskingumrouting": [
-        lambda x: indicator(x, 0., np.inf) / (1 - 0.2),
+        # KM = 2.5 / XM = 0.2
+        lambda x: indicator(x, -1e-100, np.inf) / (1 - 0.2),
         lambda x: fixed(x, 1.),
-        lambda x: x / 2. / (1 - 0.2)
+        lambda x: np.maximum(x, 0.) / 2.5 / (1 - 0.2)
         ],
 }
 
-def get_alphas_and_coefs(reservoir, scalings):
-    funs = RESERVOIR_FUNCTIONS[reservoir]
-    amax = 5 if re.search("rout", reservoir) else 1.
-    alphas = np.linspace(0, amax, NALPHAS)
-    coefs = approx.quad_coefficient_matrix(funs, alphas,
-                                           approx_opt=0)
-    stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
-    amax = max(1.2, np.nanmax(stdy))
-    alphas = np.concatenate([[0., 0.001]
-                            + np.linspace(0.1, 1, NALPHAS - 5).tolist()
-                            + np.linspace(1.1, amax, 3).tolist()])
-    coefs = approx.quad_coefficient_matrix(funs, alphas,
-                                           approx_opt=0)
-    coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
-    return alphas, coefs, coefs_lin
-
-def get_data(siteid, reservoir, timestep, gamma, demand):
+def get_data(siteid, reservoir, timestep, gamma, demand,
+             istart=None, iend=None):
     df = data_reader.get_data(siteid, "daily")
+
+    istart = 0 if istart is None else istart
+    iend = len(df) if iend is None else iend
+    df = df.iloc[istart: iend]
 
     Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
     Qstars[:, 1] *= -1 # PET = negative demand
@@ -114,6 +122,25 @@ def get_data(siteid, reservoir, timestep, gamma, demand):
     scalings[:, 2] = - 1. / timestep
 
     return Qstars, scalings
+
+
+def get_alphas_and_coefs(reservoir, scalings):
+    funs = FLUX_FUNCTIONS[reservoir]
+    amax = 5 if re.search("rout", reservoir) else 1.
+    alphas = np.linspace(0, amax, NALPHAS)
+    coefs = approx.quad_coefficient_matrix(funs, alphas,
+                                           approx_opt=0)
+    stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
+    amax = max(1.2, np.nanmax(stdy))
+    alphas = np.concatenate([[-0.001, 0., 0.001]
+                            + np.linspace(0.002, 0.998, NALPHAS - 9).tolist()
+                            + [0.999, 1., 1.001]
+                            + np.linspace(1.002, amax, 3).tolist()])
+
+    coefs = approx.quad_coefficient_matrix(funs, alphas,
+                                           approx_opt=0)
+    coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
+    return alphas, coefs, coefs_lin
 
 
 def test_network():
@@ -137,10 +164,10 @@ def test_network():
 
 
 
-@pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
+@pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 def test_lin_coefficient_matrix(reservoir, allclose):
     alphas = np.linspace(0, 1, 50)
-    funs = RESERVOIR_FUNCTIONS[reservoir]
+    funs = FLUX_FUNCTIONS[reservoir]
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
 
     for i, f in enumerate(funs):
@@ -190,13 +217,20 @@ def test_grad_integrate_error():
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
-@pytest.mark.parametrize("gamma", [10, 100, 10000])
-@pytest.mark.parametrize("timestep", [0.1, 1])
-def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
-    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, 0)
-    alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
+@pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
+@pytest.mark.parametrize("gamma", GAMMAS)
+@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("demand", DEMANDS)
+def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
+    if not re.search("rout", reservoir) and demand != 0:
+        pytest.skip("Config not relevant")
 
+    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
+        pytest.skip("Can't have demand <0 with pure linear routing models")
+
+    Qstars, scalings = get_data(siteid, reservoir, timestep,
+                                gamma, demand, 0, 500)
+    alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
     # Loop and integrate
     rid = 0
     vrid = np.zeros(1, dtype=np.int32)
@@ -215,8 +249,6 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
     eps = 1e-6
 
     nval = len(Qstars)
-    res = np.zeros((nval, 2))
-
     for i in range(nval):
         # Quad interpol
         scalings[0] = Qstars[i, 0] / gamma
@@ -241,15 +273,18 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, allclose):
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
-@pytest.mark.parametrize("gamma", [1, 10, 100, 1000])
-@pytest.mark.parametrize("timestep", [0.1, 1])
-@pytest.mark.parametrize("demand", [-0.3, 0, 0.3])
+@pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
+@pytest.mark.parametrize("gamma", GAMMAS)
+@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
     if not re.search("rout", reservoir) and demand != 0:
         pytest.skip("Config not relevant")
 
-    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, 0)
+    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
+        pytest.skip("Can't have demand <0 with pure linear routing models")
+
+    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     # Quadratic
@@ -263,12 +298,12 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
                            -Qstars[:, 0] + fx1[:, 0] + fx1[:, 2]])
 
     # Lin
-    dx0 = np.zeros(1)
-    vtid = 1 + np.zeros(1, dtype=np.int32)
+    dx0 = np.array([-x0 / gamma])
+    vtid = np.zeros(1, dtype=np.int32)
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                           Qstars, gamma, coefs_lin,
                                           x0, dx0, vtid,
-                                          errors="ignore")
+                                          errors="raise")
     assert allclose(x1, x2)
     assert allclose(fx1, fx2)
     assert all(~np.isnan(x2))
@@ -286,52 +321,80 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("reservoir", RESERVOIR_FUNCTIONS)
-@pytest.mark.parametrize("gamma", [1, 10, 100, 1000])
-@pytest.mark.parametrize("timestep", [0.1, 1])
-@pytest.mark.parametrize("demand", [-0.3, 0, 0.3])
+@pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
+@pytest.mark.parametrize("gamma", GAMMAS)
+@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allclose):
     if not re.search("rout", reservoir) and demand != 0:
         pytest.skip("Config not relevant")
 
-    if reservoir == "muskingumrouting":
-        pytest.skip("Muskingum insensitive")
+    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
+        pytest.skip("Can't have demand <0 with pure linear routing models")
 
-    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, 0)
+    start = None
+    end = None
+    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
+                                start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
-    # Lin
+    # Gradient vs capacity Γ
     x0 = 0.5
-    dx0 = np.zeros(1)
+    dx0 = np.array([-x0 / gamma])
     vtid = np.zeros(1, dtype=np.int32)
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                                 Qstars, gamma, coefs_lin,
-                                                x0, dx0, vtid)
-    eps = gamma * 1e-5
-    dx0 = np.zeros(1)
-    _, x2m, _, _ = gradients.grad_reservoir(alphas, timestep,
-                                            Qstars, gamma - eps, coefs_lin,
-                                            x0, dx0, vtid)
-    dx0 = np.zeros(1)
-    _, x2p, _, _ = gradients.grad_reservoir(alphas, timestep,
-                                            Qstars, gamma + eps, coefs_lin,
-                                            x0, dx0, vtid)
-    expected = (x2p - x2m) / 2 / eps
-    corr = np.corrcoef(dx2, expected)[0, 1]
-    assert corr > 0.99
+                                                x0, dx0, vtid,
+                                                errors="raise")
+    # Numerical difference
+    eps = gamma * 1e-4
+    dx0 = np.array([-x0 / gamma])
+    _, x2m, _, fx2m = gradients.grad_reservoir(alphas, timestep,
+                                               Qstars, gamma - eps, coefs_lin,
+                                               x0 * gamma / (gamma - eps), dx0, vtid)
+    dx0 = np.array([-x0 / gamma])
+    _, x2p, _, fx2p = gradients.grad_reservoir(alphas, timestep,
+                                               Qstars, gamma + eps, coefs_lin,
+                                               x0 * gamma / (gamma + eps), dx0, vtid)
+    # Test dx2
+    if reservoir in ["linrouting", "muskingumrouting"]:
+        # Storage does not depend on Γ hence:
+        # x = S / Γ => dx = - S / Γ^2 => dx = -x / Γ
+        expected = - x2 / gamma
+    else:
+        expected = (x2p - x2m) / 2 / eps
+
+    if dx2.std() > 1e-100:
+        corr = np.corrcoef(dx2, expected)[0, 1]
+        assert corr > 0.9989
 
     err =  np.abs(comp_fun(dx2) - comp_fun(expected))
     errmax = np.percentile(err, 98)
-    #assert errmax < 1e-5
+    assert errmax < 1e-4
+
+    # Test dfx2
+    #expected = (fx2p - fx2m) / 2 / eps
 
     if False:
         import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(13, 8), layout="constrained")
-        ax.plot(dx2)
-        ax.plot(expected)
-        ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
-        tax = ax.twinx()
+        from hydrodiy.plot import putils
+        fig, axs = plt.subplots(nrows=2, sharex=True,
+                               figsize=(13, 8), layout="constrained")
+        ax = axs[0]
+        ax.plot(x2)
+        xmax = x2.max()
+        for a in alphas:
+            if a > xmax:
+                continue
+            putils.line(ax, 1, 0, 0, a, "-", color="0.7", lw=0.5)
 
+        ax = axs[1]
+        ax.plot(dx2, label="C")
+        ax.plot(expected, label="expected")
+        ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
+        #ax.set_yscale("asinh", linear_width=1e-10)
+        ax.legend()
+        tax = ax.twinx()
         err = np.maximum(err, 1e-20)
         tax.plot(err, color="0.7")
         tax.set(ylim=(1e-10, err.max()), yscale="log")
@@ -375,13 +438,13 @@ def test_grad_gr4j(siteid, timestep, allclose):
     a2 = np.linspace(0, 1.5, nalphas)
     alphas = np.vstack([a1, a1, a2])
 
-    fint = RESERVOIR_FUNCTIONS["intercept"]
+    fint = FLUX_FUNCTIONS["intercept"]
     coefs_grad_int = gradients.lin_coefficient_matrix(fint, a1)
 
-    fprod = RESERVOIR_FUNCTIONS["gr4jprod"]
+    fprod = FLUX_FUNCTIONS["gr4jprod"]
     coefs_grad_prod = gradients.lin_coefficient_matrix(fprod, a1)
 
-    froute = RESERVOIR_FUNCTIONS["gr4jroute"]
+    froute = FLUX_FUNCTIONS["gr4jroute"]
     coefs_grad_route = gradients.lin_coefficient_matrix(froute, a2)
 
     coefs_lin = np.array([coefs_grad_int, coefs_grad_prod, coefs_grad_route])

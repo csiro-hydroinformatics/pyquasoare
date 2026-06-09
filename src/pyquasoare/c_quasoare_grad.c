@@ -4,7 +4,16 @@
 
 double wfun(double delta, double S) {
     double x = delta * S;
-    return x > 460.51 ? 1e200 : x < -460.51 ? 1e-200 : exp(x);
+    if(x > 460.51)
+        return 1e200;
+
+    if(x < -460.51)
+        return 1e-200;
+
+    if(fabs(x) < 1e-4)
+        return 1 + 2 * x / (2 - x + x * x / 6);
+
+    return exp(x);
 }
 
 double c_grad_forward(double M, double S, double t0, double x0, double t){
@@ -33,7 +42,7 @@ double c_grad_inverse(double M, double S, double x0, double x1){
         return (x1 - x0) / M;
     }
     else {
-        return 1./S * log(fabs((S * x1 + M) / (S * x0 + M)));
+        return 1. / S * log(fabs((S * x1 + M) / (S * x0 + M)));
     }
 }
 
@@ -139,6 +148,7 @@ int c_grad_integrate(int nalphas, int nvariables,
     /* Variables related to gradients */
     int reservoir_id, type_id;
     double w, R, dR, dS, dM, tau;
+    double dx_start, dx_end;
 
     /* Max number of iteration
      * If s0 stays in [alpha0, alpha1], this number
@@ -316,6 +326,7 @@ int c_grad_integrate(int nalphas, int nvariables,
                 /* variable belongs to an upstream reservoir
                  * TODO
                  * */
+                return QUASOARE_ERROR;
             } else {
                 /* variable belongs to current reservoir */
                 if(type_id == 0) {
@@ -323,19 +334,44 @@ int c_grad_integrate(int nalphas, int nvariables,
                     dM = -(Qstars[0] * mj_vect[0] + Qstars[1] * mj_vect[1]) / gamma_sq;
                     dS = -(Qstars[0] * sj_vect[0] + Qstars[1] * sj_vect[1]) / gamma_sq;
                 }
+                else if(type_id == 1) {
+                    /* Gradient against first potential flux */
+                    // TODO
+                    return QUASOARE_ERROR;
+                }
             }
 
-            if(notnull(S)) {
-                dR = (dM - R * dS) / S;
-                dx1[i] = w * (dx1[i] + dR * (1 - 1. / w) + (x_start + R) * tau * dS);
-            } else {
-                dx1[i] += dM * tau;
+            dx_start = dx1[i];
+            dx_end = dx_start;
+
+            if(notequal(x_start, x_end, QUASOARE_EPS, 0.)) {
+                if(notnull(S)) {
+                    dR = (dM - R * dS) / S;
+                    dx_end = w * dx_start + dR * (w - 1.) + (x_start + R) * tau * dS * w;
+                } else
+                    dx_end = dx_start + dM * tau;
             }
-            if(isnan(dx1[i])) {
-                fprintf(stdout, "i=%d M=%3.3e S=%3.3e w=%3.3e tau=%3.3e R=%3.3e x0=%3.3e\n",
-                        i, M, S, w, tau, R, x0);
+
+            if(fabs(dx_end) < QUASOARE_EPS)
+                dx_end = 0.;
+
+            //fprintf(stdout,
+            //        "\ngam=%2.5e Qs0=%2.5e Qs1=%2.5e tau=%2.5e M=%2.5e S=%2.5e\n"
+            //        " dM=%2.5e dS=%2.5e dR=%2.5e w=%2.5e\n"
+            //        " x0=%2.5e x1=%2.5e (!x0?%d) dx0=%2.5e dx1=%2.5e\n"
+            //        " dx1-e=%2.5e err(dx1)=%2.5e\n\n",
+            //        gamma, Qstars[0], Qstars[1], tau, M, S, dM, dS, dR,
+            //        w, x_start, x_end, notequal(x_start, x_end, QUASOARE_EPS, 0.),
+            //        dx_start, dx_end,
+            //        -x_end/gamma, fabs(dx_end + x_end / gamma));
+
+            if(!isfinite(dx_end))
+                return QUASOARE_GRAD_IS_INFINITE;
+
+            if(isnan(dx_end))
                 return QUASOARE_GRAD_IS_NAN;
-            }
+
+            dx1[i] = dx_end;
         }
 
         /* Loop for next band */
@@ -383,7 +419,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
                     double * fluxes) {
     int ierr, t, i;
     int ninputs = 2;
-    int nfluxes = 6;
+    int nfluxes_output = 6;
     double store = x0;
 
     /* Only one reservoir and one variable (its capacity) here */
@@ -403,20 +439,23 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
                                &(niter[t]),
                                &(x1[t]),
                                &(dx1[t]),
-                               &(fluxes[nfluxes * t]));
+                               &(fluxes[nfluxes_output * t]));
 
         /* Manage errors */
         if(ierr > 0) {
-            if(errors == 1) {
+            if(errors == 1)
                 return ierr;
-            }
+
             else if (errors == 0 || errors == 2){
                 niter[t] = -1;
 
                 x1[t] = store;
 
-                for(i = 0; i < nfluxes; i++)
-                    fluxes[nfluxes * t + i] = c_get_nan();
+                for(i = 0; i < nfluxes_output; i++)
+                    fluxes[nfluxes_output * t + i] = c_get_nan();
+
+                for(i = 0; i < nvariables; i++)
+                    dx1[nvariables * t + i] = c_get_nan();
             }
         }
 
@@ -435,7 +474,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
 
 
 int c_grad_model(int nreservoirs, int nalphas, int nval,
-                 int nvariables,
+                 int nvariables, int errors,
                  double timestep,
                  double x0,
                  double * dx0,
@@ -505,7 +544,6 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
              * q = 1 -> qstar2 (demand)
              * */
             for(q = 0; q < nfluxes_input; q++) {
-
                 if(isnan(Qst[q])) {
                     /* Don't forget to intialise input !*/
                     Qst[q] = 0;
@@ -556,10 +594,22 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
                                     &(dx1[kdx]),
                                     &(fluxes[kf]));
 
-            /* Basic error management */
-            if(ierr > 0)
-                return ierr;
+            /* error management */
+            if(ierr > 0) {
+                if(errors == 1)
+                    return ierr;
 
+                else if (errors == 0 || errors == 2){
+                    niter[t] = -1;
+                    x1[t] = store;
+
+                    for(j = 0; j < nfluxes_output; j++)
+                        fluxes[nfluxes_output * t + j] = c_get_nan();
+
+                    for(i = 0; i < nvariables; i++)
+                        dx1[nvariables * t + i] = c_get_nan();
+                }
+            }
         }
     }
 

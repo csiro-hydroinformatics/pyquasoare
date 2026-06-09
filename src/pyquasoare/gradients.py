@@ -3,7 +3,7 @@ from collections import namedtuple
 import numpy as np
 
 from pyquasoare import has_c_module, approx
-from pyquasoare.models import ERRORS, error_management
+from pyquasoare.models import errors_check, error_management, get_errorsid
 
 NPOTENTIAL_FLUXES = 2
 NOUTPUT_FLUXES = 6
@@ -227,11 +227,7 @@ def grad_reservoir(alphas, timestep,
     integrate.quad_forward : Integrate ODE forward.
     integrate.quad_integrate : Integrate ODE forward.
     """
-    if errors not in ERRORS:
-        txt = "/".join(ERRORS)
-        errmsg = f"Expected errors in {txt}, got {errors}."
-        raise ValueError(errmsg)
-
+    errors_check(errors)
     nval = Qstars.shape[0]
     nvariables = len(dx0)
 
@@ -247,8 +243,7 @@ def grad_reservoir(alphas, timestep,
     if dx1 is None:
         dx1 = np.zeros(nval, dtype=np.float64)
 
-    ierrors = np.int32(ERRORS.index(errors))
-
+    ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors, timestep, gamma,
                                             xmin, xmax, x0,
                                             dx0,
@@ -290,7 +285,7 @@ def grad_model(alphas, timestep,
     if dx1 is None:
         dx1 = np.zeros((nval, nreservoirs, nvariables), dtype=np.float64)
 
-    ierr = c_pyquasoare_grad.grad_model(timestep, x0,
+    ierr = c_pyquasoare_grad.grad_model(errors, timestep, x0,
                                         dx0,
                                         variables_reservoir_id,
                                         alphas,

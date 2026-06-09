@@ -11,6 +11,17 @@ else:
 ERRORS = ["ignore", "raise", "warn"]
 
 
+def errors_check(errors):
+    if errors not in ERRORS:
+        txt = "/".join(ERRORS)
+        errmsg = f"Expected errors in {txt}, got {errors}."
+        raise ValueError(errmsg)
+
+
+def get_errorsid(errors):
+    return np.int32(ERRORS.index(errors))
+
+
 def error_management(errors, ierr, name):
     mess = c_pyquasoare.get_error_message(ierr).decode()
     if errors == "raise" and ierr > 0:
@@ -19,6 +30,8 @@ def error_management(errors, ierr, name):
     if errors == "warn":
         mess = f"{name} raises warning {ierr} ({mess})."
         warnings.warn(mess)
+
+
 
 def quad_model(alphas, flux_scalings, coefs_noscaling,
                s0, timestep,
@@ -141,11 +154,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     >>> fx.sum(axis=0)[1]+s0-s1[-1]
     np.float64(-100.0)
     """
-    if errors not in ERRORS:
-        txt = "/".join(ERRORS)
-        errmsg = f"Expected errors in {txt}, got {errors}."
-        raise ValueError(errmsg)
-
+    errors_check(errors)
     nval = flux_scalings.shape[0]
 
     if fluxes is None:
@@ -159,8 +168,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     else:
         perturb = perturb.astype(np.float64)
 
-    ierrors = np.int32(ERRORS.index(errors))
-
+    ierrors = get_errorsid(errors)
     ierr = c_pyquasoare.quad_model(ierrors, alphas, flux_scalings,
                                    perturb, coefs_noscaling,
                                    s0, smin, smax,
