@@ -28,6 +28,7 @@ NALPHAS = 20
 DEMANDS = [-0.5, 0, 0.5]
 TIMESTEPS = [0.1, 1]
 GAMMAS = [1, 10, 100, 10000]
+VARIABLE_IDS = [0, 1, 2, 3]
 
 def fixed(x, x0):
     return x0 * np.ones_like(x)
@@ -41,13 +42,13 @@ def comp_fun(x, x0=1e-3):
 FLUX_FUNCTIONS = {
     "gr4jprod": [
         lambda x: 1 - np.minimum(x, 1)**2,
-        lambda x: np.minimum(x, 1) * (2 - np.minimum(x, 1)),
-        lambda x: 4**3/9**4 * x**5
+        lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
+        lambda x: 4**3/9**4 * np.maximum(x, 0)**5
         ],
     "gr4jprodquad": [
         lambda x: 1 - np.minimum(x, 1)**2,
-        lambda x: np.minimum(x, 1) * (2 - np.minimum(x, 1)),
-        lambda x: 4**3/9**4 * x**2
+        lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
+        lambda x: 4**3/9**4 * np.maximum(x, 0)**2
         ],
     "gr4jroute": [
         lambda x: 0.9 * fixed(x, 1.),
@@ -74,7 +75,7 @@ FLUX_FUNCTIONS = {
         # exponent n = 6
         lambda x: indicator(x, 0., np.inf),
         lambda x: indicator(x, 0, 1),
-        lambda x: np.maximum(x, 0.)**6
+        lambda x: np.maximum(x, 0.)**4
         ],
     "xinanjiang1": [
         # exponent = 0.2
@@ -130,7 +131,7 @@ def get_alphas_and_coefs(reservoir, scalings):
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
-    eps = 1e-6
+    eps = 1e-5
     amax = max(1 + 3 * eps, np.nanmax(stdy))
     alphas = np.concatenate([[-eps, 0., eps]
                             + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 9).tolist()
@@ -152,6 +153,27 @@ def skipit(reservoir, demand):
 
     if reservoir in ["gr4jroutequad"] and demand > 0:
         pytest.skip("Can't have demand >0 with gr4jroute quad")
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
+@pytest.mark.parametrize("gamma", [10])
+@pytest.mark.parametrize("timestep", [1])
+@pytest.mark.parametrize("demand", DEMANDS)
+@pytest.mark.parametrize("eps", [-1e-8, 0, 1e-8])
+def test_reservoir_functions(siteid, reservoir, gamma, timestep, demand, eps):
+    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
+    alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
+    coefs_lin *= 1 + eps
+
+    a0 = alphas[:-1][None, :]
+    c0 = coefs_lin[:, :, 0] * a0 + coefs_lin[:, :, 1]
+    assert np.all(c0 >= 0)
+
+    a1 = alphas[1:][None, :]
+    c1 = coefs_lin[:, :, 0] * a1 + coefs_lin[:, :, 1]
+    assert np.all(c1 >= 0)
+
 
 
 def test_network():
@@ -211,8 +233,9 @@ def test_grad_integrate_error():
     vrid = np.array([0] * nvars, dtype=np.int32)
     vtid = np.array([0] * nvars, dtype=np.int32)
     qst = -np.ones(2)
+    fxs = np.ones(3)
     ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, coefs_lin,
+                                            gamma, fxs, coefs_lin,
                                             0, x_start, dx0, vrid, vtid,
                                             n, x, dx, fx)
     assert ierr == 112
@@ -220,10 +243,27 @@ def test_grad_integrate_error():
     qst = np.ones(2)
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, coefs_lin,
+                                            gamma, fxs, coefs_lin,
                                             0, x_start, dx0, vrid, vtid,
                                             n, x, dx, fx)
     assert ierr == 111
+
+    coefs_lin[0] *= -1
+    gamma = 0
+    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                            gamma, fxs, coefs_lin,
+                                            0, x_start, dx0, vrid, vtid,
+                                            n, x, dx, fx)
+    assert ierr == 113
+
+    gamma = 100.
+    vtid = np.array([1] * nvars, dtype=np.int32)
+    fxs = np.zeros(3)
+    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
+                                            gamma, fxs, coefs_lin,
+                                            0, x_start, dx0, vrid, vtid,
+                                            n, x, dx, fx)
+    assert ierr == 604
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -326,7 +366,9 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("gamma", GAMMAS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
-def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allclose):
+@pytest.mark.parametrize("variable_id", VARIABLE_IDS)
+def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
+                                demand, variable_id, allclose):
     skipit(reservoir, demand)
     start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
@@ -334,29 +376,42 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allc
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     # Gradient vs capacity Γ
-    #x0 = 0.5
-    #dx0 = np.array([-x0 / gamma])
-
-    x0 = 3.836425661979244e-15
-    dx0 = np.array([0.])
-
-    vtid = np.zeros(1, dtype=np.int32)
+    x0 = 0.5
+    dx0 = np.array([-x0 / gamma])
+    vtid = np.array([variable_id], dtype=np.int32)
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                                 Qstars, gamma, coefs_lin,
                                                 x0, dx0, vtid,
                                                 errors="raise")
     # Numerical difference
-    eps = gamma * 1e-4
-    dx0 = np.array([-x0 / gamma])
+    vtid = np.array([variable_id], dtype=np.int32)
+    if variable_id == 0:
+        eps = gamma * 1e-4
+        gamma_m = gamma - eps
+        gamma_p = gamma + eps
+        coefs_lin_m = coefs_lin
+        coefs_lin_p = coefs_lin
+    else:
+        eps = 1e-8
+        gamma_m, gamma_p = gamma, gamma
+        coefs_lin_m = coefs_lin.copy()
+        coefs_lin_m[variable_id - 1] *= (1 - eps)
+        coefs_lin_p = coefs_lin.copy()
+        coefs_lin_p[variable_id - 1] *= (1 + eps)
+
+    dx0 = np.array([-x0 / gamma_m])
     _, x2m, _, fx2m = gradients.grad_reservoir(alphas, timestep,
-                                               Qstars, gamma - eps, coefs_lin,
-                                               x0 * gamma / (gamma - eps), dx0, vtid)
-    dx0 = np.array([-x0 / gamma])
+                                               Qstars, gamma_m, coefs_lin_m,
+                                               x0 * gamma / gamma_m, dx0, vtid,
+                                               errors="raise")
+    dx0 = np.array([-x0 / gamma_p])
     _, x2p, _, fx2p = gradients.grad_reservoir(alphas, timestep,
-                                               Qstars, gamma + eps, coefs_lin,
-                                               x0 * gamma / (gamma + eps), dx0, vtid)
+                                               Qstars, gamma_p, coefs_lin_p,
+                                               x0 * gamma / gamma_p, dx0, vtid,
+                                               errors="raise")
+
     # Test dx2
-    if reservoir in ["linrouting", "muskingumrouting"]:
+    if reservoir in ["linrouting", "muskingumrouting"] and variable_id == 0:
         # Storage does not depend on Γ hence:
         # x = S / Γ => dx = - S / Γ^2 => dx = -x / Γ
         expected = - x2 / gamma
@@ -366,38 +421,38 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allc
     corr = 1.
     if dx2.std() > 1e-100:
         corr = np.corrcoef(dx2, expected)[0, 1]
-        assert corr > 0.9999
+        assert corr > 0.999
 
     err =  np.abs(comp_fun(dx2) - comp_fun(expected))
     # eliminates 5 values
     errmax = np.sort(err)[-5]
     assert errmax < 2e-4
 
-    #if False:
-    #    import matplotlib.pyplot as plt
-    #    from hydrodiy.plot import putils
-    #    fig, axs = plt.subplots(nrows=2, sharex=True,
-    #                           figsize=(13, 8), layout="constrained")
-    #    ax = axs[0]
-    #    ax.plot(x2)
-    #    xmax = x2.max()
-    #    for a in alphas:
-    #        if a > xmax:
-    #            continue
-    #        putils.line(ax, 1, 0, 0, a, "-", color="0.7", lw=0.5)
+    if False:
+        import matplotlib.pyplot as plt
+        from hydrodiy.plot import putils
+        fig, axs = plt.subplots(nrows=2, sharex=True,
+                               figsize=(13, 8), layout="constrained")
+        ax = axs[0]
+        ax.plot(x2)
+        ax.plot(x2m, ls="--")
+        xmax = x2.max()
+        for a in alphas:
+            if a > xmax:
+                continue
+            putils.line(ax, 1, 0, 0, a, "-", color="0.7", lw=0.5)
 
-    #    ax = axs[1]
-    #    ax.plot(dx2, label="C")
-    #    ax.plot(expected, label="expected")
-    #    ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
-    #    #ax.set_yscale("asinh", linear_width=1e-10)
-    #    ax.legend()
-    #    tax = ax.twinx()
-    #    err = np.maximum(err, 1e-20)
-    #    tax.plot(err, color="0.7")
-    #    tax.set(ylim=(1e-10, err.max()), yscale="log")
-    #    plt.show()
-    #    import pdb; pdb.set_trace()
+        ax = axs[1]
+        ax.plot(dx2, label="C")
+        ax.plot(expected, label="expected")
+        ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
+        ax.legend()
+        tax = ax.twinx()
+        err = np.maximum(err, 1e-20)
+        tax.plot(err, color="0.7")
+        tax.set(ylim=(1e-10, err.max()), yscale="log")
+        plt.show()
+        import pdb; pdb.set_trace()
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)

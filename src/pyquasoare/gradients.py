@@ -139,6 +139,7 @@ def grad_reservoir(alphas, timestep,
                   current_reservoir_id=0,
                   variables_reservoir_id=None,
                   xmin=-np.inf, xmax=np.inf,
+                  flux_scalings=None,
                   errors="ignore",
                   fluxes=None, niter=None, x1=None, dx1=None):
     """ Integrate the approximate reservoir equation with initial initial
@@ -194,6 +195,8 @@ def grad_reservoir(alphas, timestep,
         Maximum store value.
     timestep : float
         Integration time step.
+    flux_scalings : np.array
+        Scaling factors applied to each flux. Default is 1.
     errors: str
         - if 'ignore', then skip over error during time step integration
         - if 'raise', throw a ValueError.
@@ -233,6 +236,8 @@ def grad_reservoir(alphas, timestep,
     if variables_reservoir_id is None:
         variables_reservoir_id = current_reservoir_id \
             * np.ones(nvariables, dtype=np.int32)
+    if flux_scalings is None:
+        flux_scalings = np.ones(3)
     if fluxes is None:
         fluxes = np.zeros((nval, 6), dtype=np.float64)
     if niter is None:
@@ -244,6 +249,7 @@ def grad_reservoir(alphas, timestep,
 
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors, timestep, gamma,
+                                            flux_scalings,
                                             xmin, xmax, x0,
                                             dx0,
                                             current_reservoir_id,
@@ -267,6 +273,7 @@ def grad_model(alphas, timestep,
                gammas, coefs_linear, x0,
                variables_reservoir_id=None,
                fluxes=None, x1=None, dx1=None,
+               flux_scalings=None,
                errors="ignore"):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
@@ -277,6 +284,8 @@ def grad_model(alphas, timestep,
 
     dx0 = np.zeros(nvariables, dtype=np.float64)
 
+    if flux_scalings is None:
+        flux_scalings = np.ones(3 * nreservoirs)
     if fluxes is None:
         fluxes = np.zeros((nval, 6 * nreservoirs), dtype=np.float64)
     if x1 is None:
