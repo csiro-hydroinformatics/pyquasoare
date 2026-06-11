@@ -292,6 +292,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     x2m = np.zeros(1, dtype=np.float64)
     dx2 = np.zeros(1, dtype=np.float64)
     fx2 = np.zeros(6, dtype=np.float64)
+    flux_scalings = np.ones(3, dtype=np.float64)
     eps = 1e-6
 
     nval = len(Qstars)
@@ -308,7 +309,8 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
         ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                                gamma, coefs_lin,
+                                                gamma,
+                                                flux_scalings, coefs_lin,
                                                 0, x_start, dx0, vrid, vtid,
                                                 n2, x2, dx2, fx2)
         assert allclose(x1, x2[0])
