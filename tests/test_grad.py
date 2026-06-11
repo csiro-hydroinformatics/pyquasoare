@@ -27,7 +27,7 @@ NALPHAS = 20
 
 DEMANDS = [-0.5, 0, 0.5]
 TIMESTEPS = [0.1, 1]
-GAMMAS = [10, 100, 10000]
+GAMMAS = [1, 10, 100, 10000]
 
 def fixed(x, x0):
     return x0 * np.ones_like(x)
@@ -36,7 +36,6 @@ def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
 def comp_fun(x, x0=1e-3):
-    #return np.sign(x) * np.log(np.abs(x) + eps)
     return np.asinh(x / x0)
 
 FLUX_FUNCTIONS = {
@@ -131,16 +130,28 @@ def get_alphas_and_coefs(reservoir, scalings):
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
-    amax = max(1.2, np.nanmax(stdy))
-    alphas = np.concatenate([[-0.001, 0., 0.001]
-                            + np.linspace(0.002, 0.998, NALPHAS - 9).tolist()
-                            + [0.999, 1., 1.001]
-                            + np.linspace(1.002, amax, 3).tolist()])
+    eps = 1e-6
+    amax = max(1 + 3 * eps, np.nanmax(stdy))
+    alphas = np.concatenate([[-eps, 0., eps]
+                            + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 9).tolist()
+                            + [1 - eps, 1., 1 + eps]
+                            + np.linspace(1 + 2 * eps, amax, 3).tolist()])
 
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
     return alphas, coefs, coefs_lin
+
+
+def skipit(reservoir, demand):
+    if not re.search("rout", reservoir) and demand != 0:
+        pytest.skip("Config not relevant")
+
+    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
+        pytest.skip("Can't have demand <0 with pure linear routing models")
+
+    if reservoir in ["gr4jroutequad"] and demand > 0:
+        pytest.skip("Can't have demand >0 with gr4jroute quad")
 
 
 def test_network():
@@ -215,21 +226,16 @@ def test_grad_integrate_error():
     assert ierr == 111
 
 
-
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
-    if not re.search("rout", reservoir) and demand != 0:
-        pytest.skip("Config not relevant")
-
-    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
-        pytest.skip("Can't have demand <0 with pure linear routing models")
-
+    skipit(reservoir, demand)
+    start, end = 0, 500
     Qstars, scalings = get_data(siteid, reservoir, timestep,
-                                gamma, demand, 0, 500)
+                                gamma, demand, start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
     # Loop and integrate
     rid = 0
@@ -278,12 +284,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
-    if not re.search("rout", reservoir) and demand != 0:
-        pytest.skip("Config not relevant")
-
-    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
-        pytest.skip("Can't have demand <0 with pure linear routing models")
-
+    skipit(reservoir, demand)
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
@@ -326,21 +327,19 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allclose):
-    if not re.search("rout", reservoir) and demand != 0:
-        pytest.skip("Config not relevant")
-
-    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
-        pytest.skip("Can't have demand <0 with pure linear routing models")
-
-    start = None
-    end = None
+    skipit(reservoir, demand)
+    start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     # Gradient vs capacity Γ
-    x0 = 0.5
-    dx0 = np.array([-x0 / gamma])
+    #x0 = 0.5
+    #dx0 = np.array([-x0 / gamma])
+
+    x0 = 3.836425661979244e-15
+    dx0 = np.array([0.])
+
     vtid = np.zeros(1, dtype=np.int32)
     n2, x2, dx2, fx2 = gradients.grad_reservoir(alphas, timestep,
                                                 Qstars, gamma, coefs_lin,
@@ -364,42 +363,41 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep, demand, allc
     else:
         expected = (x2p - x2m) / 2 / eps
 
+    corr = 1.
     if dx2.std() > 1e-100:
         corr = np.corrcoef(dx2, expected)[0, 1]
-        assert corr > 0.9989
+        assert corr > 0.9999
 
     err =  np.abs(comp_fun(dx2) - comp_fun(expected))
-    errmax = np.percentile(err, 98)
-    assert errmax < 1e-4
+    # eliminates 5 values
+    errmax = np.sort(err)[-5]
+    assert errmax < 2e-4
 
-    # Test dfx2
-    #expected = (fx2p - fx2m) / 2 / eps
+    #if False:
+    #    import matplotlib.pyplot as plt
+    #    from hydrodiy.plot import putils
+    #    fig, axs = plt.subplots(nrows=2, sharex=True,
+    #                           figsize=(13, 8), layout="constrained")
+    #    ax = axs[0]
+    #    ax.plot(x2)
+    #    xmax = x2.max()
+    #    for a in alphas:
+    #        if a > xmax:
+    #            continue
+    #        putils.line(ax, 1, 0, 0, a, "-", color="0.7", lw=0.5)
 
-    if False:
-        import matplotlib.pyplot as plt
-        from hydrodiy.plot import putils
-        fig, axs = plt.subplots(nrows=2, sharex=True,
-                               figsize=(13, 8), layout="constrained")
-        ax = axs[0]
-        ax.plot(x2)
-        xmax = x2.max()
-        for a in alphas:
-            if a > xmax:
-                continue
-            putils.line(ax, 1, 0, 0, a, "-", color="0.7", lw=0.5)
-
-        ax = axs[1]
-        ax.plot(dx2, label="C")
-        ax.plot(expected, label="expected")
-        ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
-        #ax.set_yscale("asinh", linear_width=1e-10)
-        ax.legend()
-        tax = ax.twinx()
-        err = np.maximum(err, 1e-20)
-        tax.plot(err, color="0.7")
-        tax.set(ylim=(1e-10, err.max()), yscale="log")
-        plt.show()
-        import pdb; pdb.set_trace()
+    #    ax = axs[1]
+    #    ax.plot(dx2, label="C")
+    #    ax.plot(expected, label="expected")
+    #    ax.set(title=f"corr={corr:6.4f} errmax={errmax:6.4f}")
+    #    #ax.set_yscale("asinh", linear_width=1e-10)
+    #    ax.legend()
+    #    tax = ax.twinx()
+    #    err = np.maximum(err, 1e-20)
+    #    tax.plot(err, color="0.7")
+    #    tax.set(ylim=(1e-10, err.max()), yscale="log")
+    #    plt.show()
+    #    import pdb; pdb.set_trace()
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
