@@ -11,6 +11,7 @@ cdef extern from 'c_quasoare_grad.h':
                          double timestep,
                          double Qstars[2],
                          double gamma,
+                         double flux_scalings[3],
                          double * coefs_linear,
                          double t0,
                          double x0,
@@ -26,6 +27,7 @@ cdef extern from 'c_quasoare_grad.h':
     int c_grad_reservoir(int nalphas, int nval, int nvariables,
                         int errors,
                         double timestep, double gamma,
+                        double flux_scalings[3],
                         double xmin, double xmax,
                         double x0,
                         double * dx0,
@@ -51,6 +53,7 @@ cdef extern from 'c_quasoare_grad.h':
                      double * Qstars_mapping,
                      double * alphas,
                      double * gammas,
+                     double * flux_scalings,
                      double * coefs_linear,
                      double * x1,
                      double * dx1,
@@ -65,6 +68,7 @@ def grad_integrate(int current_reservoir_id,
                    double timestep,
                    np.ndarray[double, ndim=1, mode='c'] qstars not None,
                    double gamma,
+                   np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
                    double t0, double x0,
                    np.ndarray[double, ndim=1, mode='c'] dx0 not None,
@@ -81,6 +85,9 @@ def grad_integrate(int current_reservoir_id,
 
     if qstars.shape[0] != 2:
         raise ValueError("qstars.shape[0] != 2")
+
+    if flux_scalings.shape[0] != 3:
+        raise ValueError("coefs_linear.shape[0] != 3")
 
     if coefs_linear.shape[0] != 3:
         raise ValueError("coefs_linear.shape[0] != 3")
@@ -115,6 +122,7 @@ def grad_integrate(int current_reservoir_id,
                            timestep,
                            <double*> np.PyArray_DATA(qstars),
                            gamma,
+                           <double*> np.PyArray_DATA(flux_scalings),
                            <double*> np.PyArray_DATA(coefs_linear),
                            t0, x0,
                            <double*> np.PyArray_DATA(dx0),
@@ -128,6 +136,7 @@ def grad_integrate(int current_reservoir_id,
 
 
 def grad_reservoir(int errors, double timestep, double gamma,
+                   np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    double xmin, double xmax, double x0,
                    np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                    int current_reservoir_id,
@@ -145,6 +154,9 @@ def grad_reservoir(int errors, double timestep, double gamma,
     cdef int nalphas = alphas.shape[0]
     cdef int nval = qstars.shape[0]
     cdef int nvariables = dx0.shape[0]
+
+    if flux_scalings.shape[0] != 3:
+        raise ValueError("flux_scalings.shape[0] != 3")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
@@ -182,6 +194,7 @@ def grad_reservoir(int errors, double timestep, double gamma,
     # Run C code
     return c_grad_reservoir(nalphas, nval, nvariables, errors,
                             timestep, gamma,
+                            <double*> np.PyArray_DATA(flux_scalings),
                             xmin, xmax, x0,
                             <double*> np.PyArray_DATA(dx0),
                             current_reservoir_id,
@@ -204,6 +217,7 @@ def grad_model(int errors, double timestep, double x0,
                np.ndarray[double, ndim=2, mode='c'] qstars not None,
                np.ndarray[double, ndim=2, mode='c'] qstars_mapping not None,
                np.ndarray[double, ndim=1, mode='c'] gammas not None,
+               np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
                np.ndarray[double, ndim=2, mode='c'] x1 not None,
                np.ndarray[double, ndim=3, mode='c'] dx1 not None,
@@ -217,6 +231,9 @@ def grad_model(int errors, double timestep, double x0,
 
     if gammas.shape[0] != nreservoirs:
         raise ValueError("gammas.shape[0] != nreservoirs")
+
+    if flux_scalings.shape[0] != 3 * nreservoirs:
+        raise ValueError("flux_scalings.shape[0] != 3 x nreservoirs")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
@@ -276,6 +293,7 @@ def grad_model(int errors, double timestep, double x0,
                        <double*> np.PyArray_DATA(qstars_mapping),
                        <double*> np.PyArray_DATA(alphas),
                        <double*> np.PyArray_DATA(gammas),
+                       <double*> np.PyArray_DATA(flux_scalings),
                        <double*> np.PyArray_DATA(coefs_linear),
                        <double*> np.PyArray_DATA(x1),
                        <double*> np.PyArray_DATA(dx1),

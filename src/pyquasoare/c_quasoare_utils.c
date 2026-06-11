@@ -153,13 +153,13 @@ int c_get_error_message(int err_code, char message[100]){
         strncpy(message, "Store level becomes infinite", len);
 
     else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
-        strncpy(message, "Negative value of flux function", len);
+        strncpy(message, "Negative flux function", len);
 
     else if(err_code == QUASOARE_NEGATIVE_POTENTIAL_INFLOW_FLUX)
         strncpy(message, "Negative value of potential inflow flux", len);
 
-    else if(err_code == QUASOARE_NEGATIVE_CAPACITY)
-        strncpy(message, "Negative value of reservoir capacity", len);
+    else if(err_code == QUASOARE_CAPACITY_IS_NEGATIVE_OR_NULL)
+        strncpy(message, "Reservoir capacity is negative or null", len);
 
     else if(err_code == QUASOARE_GRAD_ONLY_ONE_VARIABLE_ALLOWED)
         strncpy(message, "Only one gradient variable allowed", len);
@@ -169,6 +169,12 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == QUASOARE_GRAD_IS_INFINITE)
         strncpy(message, "Gradient is infinite", len);
+
+    else if(err_code == QUASOARE_GRAD_ZERO_FLUX_SCALING)
+        strncpy(message, "Variable scaling parameter is <=0", len);
+
+    else if(err_code == QUASOARE_GRAD_TYPEID_NOT_FOUND)
+        strncpy(message, "Variable type ID not found", len);
 
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
