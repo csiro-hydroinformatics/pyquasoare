@@ -414,9 +414,6 @@ int c_grad_integrate(int nalphas, int nvariables,
                     dx_end = dx_start + dM * tau;
             }
 
-            if(fabs(dx_end) < QUASOARE_EPS)
-                dx_end = 0.;
-
             //fprintf(stdout,
             //        "\ngam=%2.5e Qs0=%2.5e Qs1=%2.5e tau=%2.5e M=%2.5e S=%2.5e\n"
             //        " dM=%2.5e dS=%2.5e dR=%2.5e w=%2.5e\n"
@@ -482,6 +479,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
     int nfluxes_potential = 2;
     int nfluxes_output = 6;
     double store = x0;
+    double * dx_ini = dx0;
 
     /* Only one reservoir and one variable (its capacity) here */
 
@@ -494,7 +492,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
                                flux_scalings,
                                coefs_linear,
                                0., store,
-                               dx0,
+                               dx_ini,
                                current_reservoir_id,
                                variables_reservoir_id,
                                variables_type_id,
@@ -523,8 +521,7 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
 
         /* Loop initial states */
         store = x1[t];
-        for(i = 0; i < nvariables; i++)
-            dx0[i] = dx1[nvariables * t + i];
+        dx_ini = &(dx1[t]);
 
         /* Impose constraint */
         store = store < xmin ? xmin : store > xmax ? xmax : store;
