@@ -425,7 +425,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
     #    expected = (x2p - x2m) / 2 / eps
     expected = (x2p - x2m) / 2 / eps
 
-    debug = True
+    debug = False
 
     err =  np.abs(comp_fun(dx2) - comp_fun(expected))
     # eliminates nskip values : difficult to explain the difference
