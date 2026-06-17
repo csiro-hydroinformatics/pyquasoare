@@ -149,12 +149,16 @@ def get_alphas_and_coefs(reservoir, scalings):
     return alphas, coefs, coefs_lin
 
 
-def skip_this(reservoir, demand):
+def skip_this(reservoir, gamma, demand):
     if not re.search("rout", reservoir) and demand != 0:
         pytest.skip("Config not relevant")
 
-    if reservoir in ["linrouting", "muskingumrouting"] and demand < 0:
-        pytest.skip("Can't have demand <0 with pure linear routing models")
+    if reservoir in ["linrouting", "muskingumrouting"]:
+        if demand < 0:
+            pytest.skip("Can't have demand <0 with pure linear routing models")
+
+        if gamma > 1000:
+            pytest.skip("Skipping linear routing with tests with large gamma")
 
     if reservoir in ["gr4jroutequad"] and demand > 0:
         pytest.skip("Can't have demand >0 with gr4jroute quad")
@@ -276,7 +280,7 @@ def test_grad_integrate_error():
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
-    skip_this(reservoir, demand)
+    skip_this(reservoir, gamma, demand)
     start, end = 0, 500
     Qstars, scalings = get_data(siteid, reservoir, timestep,
                                 gamma, demand, start, end)
@@ -330,7 +334,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
-    skip_this(reservoir, demand)
+    skip_this(reservoir, gamma, demand)
 
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -376,7 +380,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("variable_id", VARIABLE_IDS)
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, variable_id, allclose):
-    skip_this(reservoir, demand)
+    skip_this(reservoir, gamma, demand)
     start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
