@@ -10,6 +10,10 @@
 #include "c_quasoare_utils.h"
 #include "c_quasoare_core.h"
 
+#define QUASOARE_GRAD_NFLUXES_POTENTIAL 2
+#define QUASOARE_GRAD_NFLUXES_INPUTS 3
+#define QUASOARE_GRAD_NFLUXES_OUTPUTS 6
+
 double c_grad_forward(double M, double S, double t0, double x0, double t);
 
 double c_grad_inverse(double M, double S, double x0, double x1);
