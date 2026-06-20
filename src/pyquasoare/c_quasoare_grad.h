@@ -29,12 +29,13 @@ int c_grad_fluxes_increment(double timestep,
                            double x0, double x1,
                            double fluxes[6]);
 
-int c_grad_integrate(int nalphas, int nvariables,
+int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * alphas,
                      double timestep,
-                     double Qstars[2],
+                     double *input_mapping,
+                     double Qstars[QUASOARE_GRAD_NFLUXES_POTENTIAL],
                      double gamma,
-                     double flux_scalings[3],
+                     double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
                      double * coefs_linear,
                      double t0,
                      double x0,
@@ -45,12 +46,15 @@ int c_grad_integrate(int nalphas, int nvariables,
                      int *niter,
                      double * x1,
                      double * dx1,
-                     double fluxes[6]);
+                     double fluxes[QUASOARE_NFLUXES_OUTPUTS]
+                     double * dfluxes);
 
-int c_grad_reservoir(int nalphas, int nval, int nvariables,
+int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
                     int errors,
-                    double timestep, double gamma,
-                    double flux_scalings[3],
+                    double timestep,
+                    double * input_mapping,
+                    double gamma,
+                    double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
                     double xmin, double xmax,
                     double x0,
                     double * dx0,
@@ -63,11 +67,13 @@ int c_grad_reservoir(int nalphas, int nval, int nvariables,
                     int * niter,
                     double * x1,
                     double * dx1,
-                    double * fluxes);
+                    double * fluxes,
+                    double * dfluxes);
 
-int c_grad_model(int nreservoirs, int nalphas, int nval,
-                 int nvariables, int errors,
+int c_grad_model(int nalphas, nreservoirs, int nvariables, int nval,
+                 int errors,
                  double timestep,
+                 double * input_mapping,
                  double x0,
                  double * dx0,
                  int *variables_reservoir_id,
@@ -80,6 +86,7 @@ int c_grad_model(int nreservoirs, int nalphas, int nval,
                  double * coefs_linear,
                  double * x1,
                  double * dx1,
-                 double * fluxes);
+                 double * fluxes,
+                 double * dfluxes);
 
 #endif

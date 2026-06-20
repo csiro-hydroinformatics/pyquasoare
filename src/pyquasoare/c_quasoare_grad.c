@@ -161,7 +161,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      int *niter,
                      double * x1,
                      double * dx1,
-                     double fluxes[6]
+                     double fluxes[QUASOARE_NFLUXES_OUTPUTS]
                      double * dfluxes) {
     int ierr;
     int i, k, l, idx_c, idx_m, idx_m0, idx_f, idx_f0;
