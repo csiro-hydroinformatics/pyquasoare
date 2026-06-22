@@ -12,9 +12,8 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
     steady[1] = c_get_nan();
 
     if(notnull(a)) {
-        if(isnull(Delta)) {
+        if(isnull(Delta))
             steady[0] = constants[2];
-        }
 
         else if(Delta > 0) {
             q = -0.5 * (b + signb * sqrt(Delta));
@@ -26,9 +25,8 @@ int c_quad_steady(double a, double b, double c, double steady[2]){
     }
 
     else {
-        if(notnull(b)){
+        if(notnull(b))
             steady[0] = -c / b;
-        }
     }
 
     return 0;
@@ -48,7 +46,7 @@ int c_quad_steady_flux_scalings(int nalphas, int nfluxes, int nflux_scalings,
                                 double * buff,
                                 double * steady) {
     int i, j, jj, k, idx;
-    double al0, al1, sc, grad, fun;
+    double al0, al1, sc;
     double a, b, c;
     double s, stdy[2], coefs_tangent[3];
 

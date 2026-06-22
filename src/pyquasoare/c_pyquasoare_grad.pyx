@@ -9,15 +9,15 @@ cdef extern from 'c_quasoare_grad.h':
     cdef int QUASOARE_GRAD_NFLUXES_POTENTIAL
     cdef int QUASOARE_GRAD_NFLUXES_INPUTS
     cdef int QUASOARE_GRAD_NFLUXES_OUTPUTS
-    cdef int QUASAORE_GRAD_NDERIV
+    cdef int QUASOARE_GRAD_NDERIV
 
     int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                          double * alphas,
                          double timestep,
                          double gamma,
                          double *input_mapping,
-                         double Qstars[QUASOARE_GRAD_NFLUXES_POTENTIAL],
-                         double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
+                         double *Qstars,
+                         double *flux_scalings,
                          double * coefs_linear,
                          double t0,
                          double x0,
@@ -28,7 +28,7 @@ cdef extern from 'c_quasoare_grad.h':
                          int *niter,
                          double * x1,
                          double * dx1,
-                         double fluxes[QUASOARE_NFLUXES_OUTPUTS],
+                         double *fluxes,
                          double * dfluxes);
 
     int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
@@ -37,7 +37,7 @@ cdef extern from 'c_quasoare_grad.h':
                         double timestep,
                         double gamma,
                         double * input_mapping,
-                        double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
+                        double *flux_scalings,
                         double x0,
                         double * dx0,
                         int current_reservoir_id,
@@ -51,7 +51,7 @@ cdef extern from 'c_quasoare_grad.h':
                         double * fluxes,
                         double * dfluxes);
 
-    int c_grad_model(int nalphas, nreservoirs, int nvariables, int nval,
+    int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
                      int errors,
                      double * alphas,
                      double timestep,
@@ -69,15 +69,16 @@ cdef extern from 'c_quasoare_grad.h':
                      double * fluxes,
                      double * dfluxes);
 
-def __cinit__(self):
-    pass
-
 # Flux sizes
 NFLUXES_POTENTIAL = QUASOARE_GRAD_NFLUXES_POTENTIAL
 NFLUXES_INPUTS = QUASOARE_GRAD_NFLUXES_INPUTS
 NFLUXES_OUTPUTS = QUASOARE_GRAD_NFLUXES_OUTPUTS
 NPIECEWISEPARAMS = QUASOARE_GRAD_NPIECEWISEPARAMS
-NDERIV = QUASAORE_GRAD_NDERIV
+NDERIV = QUASOARE_GRAD_NDERIV
+
+
+def __cinit__(self):
+    pass
 
 
 def grad_integrate(int nreservoirs, int current_reservoir_id,
@@ -225,7 +226,7 @@ def grad_reservoir(int errors,
     if dfluxes.shape[1] != nvariables:
         raise ValueError("dfluxes.shape[1] != nvariables")
 
-    if dfluxes.shape[2] != NFLUXES_OUTPTUS:
+    if dfluxes.shape[2] != NFLUXES_OUTPUTS:
         raise ValueError("dfluxes.shape[2] != NFLUXES_OUTPUTS")
 
     # Run C code
@@ -245,8 +246,8 @@ def grad_reservoir(int errors,
                             <int*> np.PyArray_DATA(niter),
                             <double*> np.PyArray_DATA(x1),
                             <double*> np.PyArray_DATA(dx1),
-                            <double*> np.PyArray_DATA(fluxes))
-
+                            <double*> np.PyArray_DATA(fluxes),
+                            <double*> np.PyArray_DATA(dfluxes))
 
 def grad_model(int errors,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
@@ -334,7 +335,7 @@ def grad_model(int errors,
     if dfluxes.shape[2] != nreservoirs:
         raise ValueError("dfluxes.shape[2] != nreservoirs")
 
-    if dfluxes.shape[3] != NFLUXES_OUTPTUS:
+    if dfluxes.shape[3] != NFLUXES_OUTPUTS:
         raise ValueError("dfluxes.shape[3] != NFLUXES_OUTPUTS")
 
     # Run C code

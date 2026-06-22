@@ -14,7 +14,7 @@
 #define QUASOARE_GRAD_NFLUXES_POTENTIAL 2
 #define QUASOARE_GRAD_NFLUXES_INPUTS 3
 #define QUASOARE_GRAD_NFLUXES_OUTPUTS 6
-#define QUASAORE_GRAD_NDERIV  QUASOARE_GRAD_PIECEWISE_PWARAMS * (QUASAORE_GRAD_NFLUXES_INPUTS + 1)
+#define QUASOARE_GRAD_NDERIV QUASOARE_GRAD_NPIECEWISEPARAMS*(QUASOARE_GRAD_NFLUXES_INPUTS+1)
 
 double c_grad_forward(double M, double S, double t0, double x0, double t);
 
@@ -23,21 +23,21 @@ double c_grad_inverse(double M, double S, double x0, double x1);
 
 int c_grad_fluxes_increment(double timestep,
                            double gamma,
-                           double Qstars[QUASOARE_GRAD_NFLUXES_POTENTIAL],
-                           double mj_vector[QUASOARE_GRAD_NFLUXES_INPUTS],
-                           double sj_vector[QUASOARE_GRAD_NFLUXES_INPUT3],
+                           double * Qstars,
+                           double * mj_vector,
+                           double * sj_vector,
                            double M, double S,
                            double t0, double t1,
                            double x0, double x1,
-                           double fluxes[QUASAORE_GRAD_NFLUXES_OUTPUTS]);
+                           double *fluxes);
 
 int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * alphas,
                      double timestep,
                      double gamma,
                      double *input_mapping,
-                     double Qstars[QUASOARE_GRAD_NFLUXES_POTENTIAL],
-                     double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
+                     double * Qstars,
+                     double * flux_scalings,
                      double * coefs_linear,
                      double t0,
                      double x0,
@@ -48,7 +48,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      int *niter,
                      double * x1,
                      double * dx1,
-                     double fluxes[QUASOARE_NFLUXES_OUTPUTS],
+                     double * fluxes,
                      double * dfluxes);
 
 int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
@@ -57,7 +57,7 @@ int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
                     double timestep,
                     double gamma,
                     double * input_mapping,
-                    double flux_scalings[QUASOARE_GRAD_NFLUXES_INPUTS],
+                    double * flux_scalings,
                     double x0,
                     double * dx0,
                     int current_reservoir_id,
@@ -71,7 +71,7 @@ int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
                     double * fluxes,
                     double * dfluxes);
 
-int c_grad_model(int nalphas, nreservoirs, int nvariables, int nval,
+int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
                  int errors,
                  double * alphas,
                  double timestep,
