@@ -75,7 +75,8 @@ int c_quad_constants(double a, double b, double c, double values[3]){
     values[0] = Delta;
     values[1] = qD;
     values[2] = -b / 2. / a;
-    return qD>=0. ? 0. : QUASOARE_UTILS_QD_NEGATIVE;
+    /* TODO : Why negative ? it cannot be */
+    return qD >= 0. ? 0 : QUASOARE_UTILS_QD_NEGATIVE;
 }
 
 double c_eta_fun(double x, double Delta){
