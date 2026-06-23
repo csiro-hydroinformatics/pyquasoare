@@ -184,26 +184,45 @@ def test_reservoir_functions(siteid, reservoir, gamma, timestep, demand, eps):
     assert np.all(c1 >= 0)
 
 
-def test_network():
+@pytest.mark.parametrize("linktype", ["total", "bypass"])
+def test_network(linktype, allclose):
     netw = gradients.Network(3)
-    netw.add_link_total_outflow(0, 1)
-    netw.add_link_total_outflow(1, 2)
+
+    if linktype == "total":
+        netw.add_link_total_outflow(0, 1)
+        netw.add_link_total_outflow(1, 2)
+    else:
+        netw.add_link_bypass_shortfall(0, 1)
+        netw.add_link_bypass_shortfall(1, 2)
+
     assert netw.upstream_reservoirs(2) == {0, 1}
+
+    ipm = netw.input_mapping
+    nfxp = gradients.NFLUXES_POTENTIAL
+    nfxo = gradients.NFLUXES_OUTPUTS
+    assert ipm.shape == (netw.nreservoirs, nfxp, netw.nreservoirs, nfxo)
+
+    # Reservoirs 0 receives nothing
+    assert allclose(ipm[0], 0)
+
+    ifxi = gradients.IFLUX_INFLOW
+    ifxd = gradients.IFLUX_DEMAND
+    ifxb = gradients.IFLUX_BYPASS
+    ifxs = gradients.IFLUX_SHORTFALL
+    ifxt = gradients.IFLUX_TOTALOUT
+
+    if linktype == "total":
+        assert ipm[1, ifxi, 0, ifxt] == -1
+        assert ipm[2, ifxi, 1, ifxt] == -1
+    else:
+        assert ipm[1, ifxi, 0, ifxb] == -1
+        assert ipm[1, ifxd, 0, ifxs] == -1
+        assert ipm[2, ifxi, 1, ifxb] == -1
+        assert ipm[2, ifxd, 1, ifxs] == -1
 
     # This is cyclical -> error
     with pytest.raises(ValueError, match="cyclical"):
         netw.add_link_total_outflow(2, 0)
-
-    netw = gradients.Network(3)
-    netw.add_link_bypass_shortfall(0, 1)
-    netw.add_link_bypass_shortfall(1, 2)
-    assert netw.upstream_reservoirs(2) == {0, 1}
-
-    # This is cyclical -> error
-    with pytest.raises(ValueError, match="cyclical"):
-        netw.add_link_bypass_shortfall(2, 0)
-
-
 
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 def test_lin_coefficient_matrix(reservoir, allclose):

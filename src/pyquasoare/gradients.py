@@ -4,9 +4,6 @@ import numpy as np
 from pyquasoare import has_c_module, approx
 from pyquasoare.models import errors_check, error_management, get_errorsid
 
-NPOTENTIAL_FLUXES = 2
-NOUTPUT_FLUXES = 6
-
 if has_c_module():
     import c_pyquasoare_grad
 else:
@@ -14,9 +11,21 @@ else:
                       + " Please compile C code")
 
 
+NFLUXES_POTENTIAL = c_pyquasoare_grad.NFLUXES_POTENTIAL
+NFLUXES_INPUTS = c_pyquasoare_grad.NFLUXES_INPUTS
+NFLUXES_OUTPUTS = c_pyquasoare_grad.NFLUXES_OUTPUTS
+
+IFLUX_INFLOW = c_pyquasoare_grad.IFLUX_INFLOW
+IFLUX_DEMAND = c_pyquasoare_grad.IFLUX_DEMAND
+IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
+IFLUX_BYPASS = c_pyquasoare_grad.IFLUX_BYPASS
+IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
+IFLUX_TOTALOUT = c_pyquasoare_grad.IFLUX_TOTALOUT
+
+
 def lin_coefficient_matrix(funs, alphas):
-    if len(funs) != 3:
-        raise ValueError(f"Expected 3 flux functions, got {len(funs)}.")
+    if len(funs) != NFLUXES_INPUTS:
+        raise ValueError(f"Expected {NFLUXES_INPUTS} flux functions, got {len(funs)}.")
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     return np.ascontiguousarray(coefs[:, :, 1:])
@@ -36,20 +45,21 @@ class Network():
         self.links = []
 
     @property
-    def Qstars_mapping(self):
-        nin = NPOTENTIAL_FLUXES
-        nout = NOUTPUT_FLUXES
+    def input_mapping(self):
+        nin = NFLUXES_POTENTIAL
+        nout = NFLUXES_OUTPUTS
         nres = self.nreservoirs
 
-        qstm = np.empty((nres * nin, nres * nout))
-        qstm.fill(np.nan)
+        ipm = np.zeros((nres, nin, nres, nout))
 
         for lk in self.links:
-            i = nin * lk.downstream_reservoir_id + lk.downstream_input_id
-            j = nout * lk.upstream_reservoir_id + lk.upstream_output_id
-            qstm[i, j] = lk.weight
+            rdid = lk.downstream_reservoir_id
+            idid = lk.downstream_input_id
+            ruid = lk.upstream_reservoir_id
+            ouid = lk.upstream_output_id
+            ipm[rdid, idid, ruid, ouid] = lk.weight
 
-        return qstm
+        return ipm
 
     def upstream_reservoirs(self, reservoir_id):
         # Recursive function
@@ -86,9 +96,9 @@ class Network():
             raise ValueError(errmsg)
 
         upoid = int(upstream_output_id)
-        if upoid >= NOUTPUT_FLUXES or upoid < 0:
+        if upoid >= NFLUXES_OUTPUTS or upoid < 0:
             errmsg = "Expected upstream reservoir output id in"\
-                     + f" [0, {NOUTPUT_FLUXES}-1], got {upoid}"
+                     + f" [0, {NFLUXES_OUTPUTS}-1], got {upoid}"
             raise ValueError(errmsg)
 
         downid = int(downstream_reservoir_id)
@@ -98,9 +108,9 @@ class Network():
             raise ValueError(errmsg)
 
         downiid = int(downstream_input_id)
-        if downiid >= NPOTENTIAL_FLUXES or downiid < 0:
+        if downiid >= NFLUXES_POTENTIAL or downiid < 0:
             errmsg = "Expected downstream reservoir input id in"\
-                     + f" [0, {NPOTENTIAL_FLUXES}-1], got {downiid}"
+                     + f" [0, {NFLUXES_POTENTIAL}-1], got {downiid}"
             raise ValueError(errmsg)
 
         if downid == upid:
@@ -116,21 +126,39 @@ class Network():
         self.upstream_reservoirs(downid)
 
     def add_link_total_outflow(self, upstream_reservoir_id,
-                               downstream_reservoir_id):
+                               downstream_reservoir_id,
+                               conversion_factor=1.):
         """ Links total outflow from upstream to inflow for downstream.
+        Weight is -1 because we need to convert the outflow (<0) from
+        upstream reservoir to positive inflow to the downstream reservoir.
         """
-        self.add_link(upstream_reservoir_id, 5,
-                      downstream_reservoir_id, 0, -1.)
+        if conversion_factor <= 0:
+            errmsg = "Expected conversion_factor > 0."
+            raise ValueError(errmsg)
+
+        self.add_link(upstream_reservoir_id, IFLUX_TOTALOUT,
+                      downstream_reservoir_id, IFLUX_INFLOW,
+                      -conversion_factor)
 
     def add_link_bypass_shortfall(self, upstream_reservoir_id,
-                                  downstream_reservoir_id):
+                                  downstream_reservoir_id,
+                                  conversion_factor=1.):
         """ Links upstram inflow bypass to downstream inflow and
         upstream demand shortfall to downstream demand.
+        Weight is -1 because we need to convert the outflow (<0) from
+        upstream reservoir to positive inflow to the downstream reservoir.
         """
-        self.add_link(upstream_reservoir_id, 3,
-                      downstream_reservoir_id, 0, -1.)
-        self.add_link(upstream_reservoir_id, 4,
-                      downstream_reservoir_id, 1, -1.)
+        if conversion_factor <= 0:
+            errmsg = "Expected conversion_factor > 0."
+            raise ValueError(errmsg)
+
+        self.add_link(upstream_reservoir_id, IFLUX_BYPASS,
+                      downstream_reservoir_id, IFLUX_INFLOW,
+                      -conversion_factor)
+
+        self.add_link(upstream_reservoir_id, IFLUX_SHORTFALL,
+                      downstream_reservoir_id, IFLUX_DEMAND,
+                      -conversion_factor)
 
 
 def grad_reservoir(alphas, timestep,
