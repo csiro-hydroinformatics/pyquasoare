@@ -95,11 +95,41 @@ def __cinit__(self):
     pass
 
 
+def check_dim_input_mapping(input_mapping, nreservoirs):
+    if input_mapping.shape[0] != nreservoirs:
+        raise ValueError("input_mapping.shape[0] != nreservoirs")
+
+    if input_mapping.shape[1] != NFLUXES_POTENTIAL:
+        raise ValueError("input_mapping.shape[1] != NFLUXES_POTENTIAL")
+
+    if input_mapping.shape[2] != nreservoirs:
+        raise ValueError("input_mapping.shape[2] != nreservoirs")
+
+    if input_mapping.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("input_mapping.shape[3] != NFLUXES_OUTPUTS")
+
+
+def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs):
+    ibase = 0 if nreservoirs == 1 else 1
+    if nreservoirs != 1:
+        if coefs_linear.shape[0] != nreservoirs:
+            raise ValueError("coefs_linear.shape[0] != nreservoirs")
+
+    if coefs_linear.shape[ibase] != NFLUXES_INPUTS:
+        raise ValueError(f"coefs_linear.shape[{ibase}] != NFLUXES_INPUTS")
+
+    if coefs_linear.shape[ibase + 1] != nalphas - 1:
+        raise ValueError(f"coefs_linear.shape[{ibase + 1}] != nalphas - 1")
+
+    if coefs_linear.shape[ibase + 2] != NFLUXES_POTENTIAL:
+        raise ValueError(f"coefs_linear.shape[{ibase + 2}] != NFLUXES_POTENTIAL")
+
+
 def grad_integrate(int nreservoirs, int current_reservoir_id,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
-                   np.ndarray[double, ndim=2, mode='c'] input_mapping not None,
+                   np.ndarray[double, ndim=4, mode='c'] input_mapping not None,
                    np.ndarray[double, ndim=1, mode='c'] qstars not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
@@ -111,26 +141,20 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                    np.ndarray[double, ndim=1, mode='c'] x1 not None,
                    np.ndarray[double, ndim=1, mode='c'] dx1 not None,
                    np.ndarray[double, ndim=1, mode='c'] fluxes not None,
-                   np.ndarray[double, ndim=1, mode='c'] dfluxes not None):
+                   np.ndarray[double, ndim=3, mode='c'] dfluxes not None):
 
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
     cdef int nvariables = dx0.shape[0]
+
+    check_dim_input_mapping(input_mapping, nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, 1)
 
     if qstars.shape[0] != NFLUXES_POTENTIAL:
         raise ValueError("qstars.shape[0] != NFLUXES_POTENTIAL")
 
     if flux_scalings.shape[0] != NFLUXES_INPUTS:
         raise ValueError("coefs_linear.shape[0] != NFLUXES_INPUTS")
-
-    if coefs_linear.shape[0] != NFLUXES_INPUTS:
-        raise ValueError("coefs_linear.shape[0] != NFLUXES_INPUTS")
-
-    if coefs_linear.shape[1] != nalphas - 1:
-        raise ValueError("coefs_linear.shape[1] != nalphas - 1")
-
-    if coefs_linear.shape[2] != NFLUXES_POTENTIAL:
-        raise ValueError("coefs_linear.shape[2] != NFLUXES_POTENTIAL")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
@@ -149,6 +173,15 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
 
     if fluxes.shape[0] != NFLUXES_OUTPUTS:
         raise ValueError("fluxes.shape[0] != NFLUXES_OUTPUTS")
+
+    if dfluxes.shape[0] != nvariables:
+        raise ValueError("dfluxes.shape[0] != nvariables")
+
+    if dfluxes.shape[1] != nreservoirs:
+        raise ValueError("dfluxes.shape[1] != nreservoirs")
+
+    if dfluxes.shape[2] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes.shape[2] != NFLUXES_OUTPUTS")
 
     # Run C code
     return c_grad_integrate(nalphas, nreservoirs, nvariables,
@@ -174,7 +207,7 @@ def grad_reservoir(int errors,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
-                   np.ndarray[double, ndim=2, mode='c'] input_mapping not None,
+                   np.ndarray[double, ndim=4, mode='c'] input_mapping not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    double x0,
                    np.ndarray[double, ndim=1, mode='c'] dx0 not None,
@@ -195,6 +228,9 @@ def grad_reservoir(int errors,
     cdef int nvariables = dx0.shape[0]
     cdef int nreservoirs = 1
 
+    check_dim_input_mapping(input_mapping, nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
+
     if flux_scalings.shape[0] != NFLUXES_INPUTS:
         raise ValueError("flux_scalings.shape[0] != NFLUXES_INPUTS")
 
@@ -209,15 +245,6 @@ def grad_reservoir(int errors,
 
     if qstars.shape[1] != NFLUXES_POTENTIAL:
         raise ValueError("qstars.shape[1] != NFLUXES_POTENTIAL")
-
-    if coefs_linear.shape[0] != NFLUXES_INPUTS:
-        raise ValueError("coefs_linear.shape[0] != NFLUXES_INPUTS")
-
-    if coefs_linear.shape[1] != nalphas - 1:
-        raise ValueError("coefs_linear.shape[1] != nalphas - 1")
-
-    if coefs_linear.shape[2] != NFLUXES_POTENTIAL:
-        raise ValueError("coefs_linear.shape[2] != NFLUXES_POTENTIAL")
 
     if x1.shape[0] != nval:
         raise ValueError("x1.shape[0] != nval")
@@ -263,12 +290,13 @@ def grad_reservoir(int errors,
                             <double*> np.PyArray_DATA(fluxes),
                             <double*> np.PyArray_DATA(dfluxes))
 
+
 def grad_model(int errors,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
                double timestep,
                np.ndarray[double, ndim=1, mode='c'] gammas not None,
-               np.ndarray[double, ndim=2, mode='c'] input_mapping not None,
-               np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
+               np.ndarray[double, ndim=4, mode='c'] input_mapping not None,
+               np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
                double x0,
                np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
@@ -286,6 +314,9 @@ def grad_model(int errors,
     cdef int nval = qstars.shape[0]
     cdef int nvariables = dx0.shape[0]
 
+    check_dim_input_mapping(input_mapping, nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
+
     if gammas.shape[0] != nreservoirs:
         raise ValueError("gammas.shape[0] != nreservoirs")
 
@@ -300,24 +331,6 @@ def grad_model(int errors,
 
     if qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs:
         raise ValueError("qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs")
-
-    if input_mapping.shape[0] != NFLUXES_POTENTIAL * nreservoirs:
-        raise ValueError("input_mapping.shape[0] != NFLUXES_POTENTIAL * nreservoirs")
-
-    if input_mapping.shape[1] != NFLUXES_OUTPUTS * nreservoirs:
-        raise ValueError("input_mapping.shape[1] != NFLUXES_OUTPUTS * nreservoirs")
-
-    if coefs_linear.shape[0] != nreservoirs:
-        raise ValueError("coefs_linear.shape[0] != nreservoirs")
-
-    if coefs_linear.shape[1] != NFLUXES_INPUTS:
-        raise ValueError("coefs_linear.shape[1] != NFLUXES_INPUTS")
-
-    if coefs_linear.shape[2] != nalphas - 1:
-        raise ValueError("coefs_linear.shape[2] != nalphas - 1")
-
-    if coefs_linear.shape[3] != NFLUXES_POTENTIAL:
-        raise ValueError("coefs_linear.shape[3] != NFLUXES_POTENTIAL")
 
     if x1.shape[0] != nval:
         raise ValueError("x1.shape[0] != nval")
