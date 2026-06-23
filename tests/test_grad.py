@@ -237,12 +237,20 @@ def test_lin_coefficient_matrix(reservoir, allclose):
 
 
 def test_grad_integrate_error():
-    # Lin
-    n = np.zeros(1, dtype=np.int32)
+    # Configure problem
+    niter = np.zeros(1, dtype=np.int32)
     x = np.zeros(1, dtype=np.float64)
+
+    nres = 1
+    ipm = np.zeros((nres, gradients.NFLUXES_POTENTIAL,
+                    nres, gradients.NFLUXES_OUTPUTS))
+
     nvars = 2
     dx = np.zeros(nvars, dtype=np.float64)
-    fx = np.zeros(6, dtype=np.float64)
+
+    nfxo = gradients.NFLUXES_OUTPUTS
+    fx = np.zeros(nfxo, dtype=np.float64)
+    dfx = np.zeros((nvars, nres, nfxo), dtype=np.float64)
 
     funs = [
         lambda x: np.ones_like(x),
@@ -261,35 +269,36 @@ def test_grad_integrate_error():
     vtid = np.array([0] * nvars, dtype=np.int32)
     qst = -np.ones(2)
     fxs = np.ones(3)
-    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, fxs, coefs_lin,
-                                            0, x_start, dx0, vrid, vtid,
-                                            n, x, dx, fx)
+    t0 = 0.
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+                                            ipm, qst, fxs, coefs_lin, t0,
+                                            x_start, dx0, vrid, vtid,
+                                            niter, x, dx, fx, dfx)
     assert ierr == 112
 
     qst = np.ones(2)
     coefs_lin[0] *= -1
-    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, fxs, coefs_lin,
-                                            0, x_start, dx0, vrid, vtid,
-                                            n, x, dx, fx)
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+                                            ipm, qst, fxs, coefs_lin, t0,
+                                            x_start, dx0, vrid, vtid,
+                                            niter, x, dx, fx, dfx)
     assert ierr == 111
 
     coefs_lin[0] *= -1
     gamma = 0
-    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, fxs, coefs_lin,
-                                            0, x_start, dx0, vrid, vtid,
-                                            n, x, dx, fx)
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+                                            ipm, qst, fxs, coefs_lin, t0,
+                                            x_start, dx0, vrid, vtid,
+                                            niter, x, dx, fx, dfx)
     assert ierr == 113
 
     gamma = 100.
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(3)
-    ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                            gamma, fxs, coefs_lin,
-                                            0, x_start, dx0, vrid, vtid,
-                                            n, x, dx, fx)
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+                                            ipm, qst, fxs, coefs_lin, t0,
+                                            x_start, dx0, vrid, vtid,
+                                            niter, x, dx, fx, dfx)
     assert ierr == 604
 
 

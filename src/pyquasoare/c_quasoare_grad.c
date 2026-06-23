@@ -149,8 +149,8 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * fluxes,
                      double * dfluxes) {
     int ierr;
-    int i, dvar, l, res, out, inp, idx_c, idx_m, idx_m0, idx_f, idx_f0;
-    int nit=0, jalpha_next=0, err_flux;
+    int i, dvar, res, out, inp, idx_c, idx_m, idx_m0, idx_f, idx_f0;
+    int nit=0, jalpha_next=0;
 
     int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
     int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
@@ -625,7 +625,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
 
     int ierr, t, dvar;
     int idx_q, idx_c, idx_x, idx_f, idx_a, idx_dx, idx_dxp;
-    int idx_m, idx_m0, idx_f0, idx_df;
+    int idx_m, idx_m0, idx_f0, idx_df, idx_fs;
     int inp, out, res, resu;
 
     int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
@@ -656,6 +656,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
 
             /* Data indexes */
             idx_q = (nreservoirs * t + res) * nfxp;
+            idx_fs = res * nfxo;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
             idx_x = nreservoirs * t + res;
             idx_a = nalphas * res;
@@ -718,7 +719,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
                                     gamma,
                                     input_mapping,
                                     Qst,
-                                    flux_scalings,
+                                    &(flux_scalings[idx_fs]),
                                     &(coefs_linear[idx_c]),
                                     0.,
                                     store,
