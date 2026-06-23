@@ -279,7 +279,7 @@ def test_grad_integrate_error():
     qst = np.ones(2)
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, fxs, coefs_lin, t0,
+                                            ipm, qst,fxs, coefs_lin, t0,
                                             x_start, dx0, vrid, vtid,
                                             niter, x, dx, fx, dfx)
     assert ierr == 111
@@ -313,23 +313,31 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     Qstars, scalings = get_data(siteid, reservoir, timestep,
                                 gamma, demand, start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
+    nres = 1
+    ipm = np.zeros((nres, gradients.NFLUXES_POTENTIAL,
+                    nres, gradients.NFLUXES_OUTPUTS))
+
     # Loop and integrate
     rid = 0
-    vrid = np.zeros(1, dtype=np.int32)
-    vtid = np.zeros(1, dtype=np.int32)
+    vtid = np.arange(4, dtype=np.int32)
+    nvars = len(vtid)
+    vrid = np.zeros(nvars, dtype=np.int32)
     x_start = 0.5
-    dx0 = np.zeros(1)
-    dx0m = np.zeros(1)
-    dx0p = np.zeros(1)
-    scalings = np.zeros(3)
-    n2 = np.zeros(1, dtype=np.int32)
+    dx0 = np.zeros(nvars)
+    dx0m = np.zeros(nvars)
+    dx0p = np.zeros(nvars)
+    scalings = np.ones(3)
+    niter2 = np.zeros(1, dtype=np.int32)
     x2 = np.zeros(1, dtype=np.float64)
     x2p = np.zeros(1, dtype=np.float64)
     x2m = np.zeros(1, dtype=np.float64)
-    dx2 = np.zeros(1, dtype=np.float64)
-    fx2 = np.zeros(6, dtype=np.float64)
-    flux_scalings = np.ones(3, dtype=np.float64)
+    dx2 = np.zeros(nvars, dtype=np.float64)
+    nfxo = gradients.NFLUXES_OUTPUTS
+    fx2 = np.zeros(nfxo, dtype=np.float64)
+    dfx2 = np.zeros((nvars, nres, nfxo), dtype=np.float64)
+    fxs = np.ones(gradients.NFLUXES_INPUTS, dtype=np.float64)
     eps = 1e-6
+    t0 = 0.
 
     nval = len(Qstars)
     for i in range(nval):
@@ -337,18 +345,17 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         scalings[0] = Qstars[i, 0] / gamma
         scalings[1] = Qstars[i, 1] / gamma
         scalings[2] = - 1. / timestep
-        n1, x1, fx1 = integrate.quad_integrate(alphas, scalings,
-                                               coefs, 0.,
-                                               x_start, timestep)
+        niter1, x1, fx1 = integrate.quad_integrate(alphas, scalings,
+                                                   coefs, 0.,
+                                                   x_start, timestep)
         fx1 *= gamma / timestep
 
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
-        ierr = c_pyquasoare_grad.grad_integrate(rid, alphas, timestep, qst,
-                                                gamma,
-                                                flux_scalings, coefs_lin,
-                                                0, x_start, dx0, vrid, vtid,
-                                                n2, x2, dx2, fx2)
+        ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+                                                ipm, qst, fxs, coefs_lin, t0,
+                                                x_start, dx0, vrid, vtid,
+                                                niter2, x2, dx2, fx2, dfx2)
         assert allclose(x1, x2[0])
         assert allclose(fx1, fx2[:3])
 
