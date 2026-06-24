@@ -420,7 +420,6 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, allclose, debug_mode):
-    pytest.skip("WIP")
     skip_this(reservoir, gamma, demand)
     start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
@@ -432,7 +431,6 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
     n, x, dx, fx, dfx = gradients.grad_reservoir(alphas, gamma, x0,
                                                       Qstars, coefs_lin,
                                                       timestep)
-
     # Numerical difference
     for vid in range(gradients.VARTYPE_NUMBER):
         dx_v = dx[:, vid]
@@ -448,9 +446,9 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             eps = NUMDIFF_EPS
             gamma_m, gamma_p = gamma, gamma
             coefs_lin_m = coefs_lin.copy()
-            coefs_lin_m[variable_id - 1] *= (1 - eps)
+            coefs_lin_m[vid - 1] *= (1 - eps)
             coefs_lin_p = coefs_lin.copy()
-            coefs_lin_p[variable_id - 1] *= (1 + eps)
+            coefs_lin_p[vid - 1] *= (1 + eps)
 
         _, xm, _, fxm, _ = gradients.grad_reservoir(alphas, gamma_m, x0,
                                                       Qstars, coefs_lin_m,
@@ -480,7 +478,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dfx_errmax = np.sort(dfx_err, axis=0)[-nskip]
 
         if not debug_mode:
-            assert errmax < 1e-4
+            assert dx_errmax < 1e-4
 
         if dx_v.std() > 1e-100:
             idx = dx_err < dx_errmax
@@ -496,13 +494,15 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             fig, axs = plt.subplots(nrows=2, sharex=True,
                                    figsize=(13, 6), layout="constrained")
             ax = axs[0]
-            iflux = 2
+            iflux = 0
             ax.plot(fx[:, iflux])
             ax.plot(fxm[:, iflux], color="0.6", ls="--")
             ax.plot(fxp[:, iflux], color="0.4", ls=":")
+            ax.set(title=f"Output flux #{iflux} diff vs var #{vid}")
 
             ax = axs[1]
             ax.plot(dfx_v[:, iflux], label="C")
+            ax.plot([], label="num diff")
             #ax.plot(dfx_n[:, iflux], label="num diff")
             ax.set(title=f"corr={corr:6.4f} dfx_errmax={dfx_errmax[iflux]:6.4f}")
             ax.legend()
@@ -510,7 +510,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             #dfx_err = np.maximum(dfx_err, 1e-20)
             #tax.plot(dfx_err[:, iflux], color="0.7")
             #tax.set(ylim=(1e-10, dfx_err.max()), yscale="log")
-            tax.plot(dfx_n[:, iflux], label="num diff")
+            tax.plot(dfx_n[:, iflux], color="tab:orange")
             plt.show()
             import pdb; pdb.set_trace()
 
