@@ -23,6 +23,7 @@
 #define QUASOARE_GRAD_IFLUX_SHORTFALL 4
 #define QUASOARE_GRAD_IFLUX_TOTALOUT 5
 
+#define QUASOARE_GRAD_VARTYPE_NUMBER 4
 #define QUASOARE_GRAD_VARTYPE_CAPACITY 0
 #define QUASOARE_GRAD_VARTYPE_SCALING_INFLOW 1
 #define QUASOARE_GRAD_VARTYPE_SCALING_DEMAND 2
@@ -63,18 +64,14 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * fluxes,
                      double * dfluxes);
 
-int c_grad_reservoir(int nalphas, int nreservoirs, int nvariables, int nval,
+int c_grad_reservoir(int nalphas, int nval,
                     int errors,
                     double * alphas,
                     double timestep,
                     double gamma,
-                    double * input_mapping,
                     double * flux_scalings,
                     double x0,
                     double * dx0,
-                    int current_reservoir_id,
-                    int *variables_reservoir_id,
-                    int *variables_type_id,
                     double * Qstars,
                     double * coefs_linear,
                     int * niter,

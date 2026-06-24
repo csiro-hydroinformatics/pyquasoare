@@ -1,6 +1,6 @@
+
 import pytest
 from pytest_allclose import report_rmses
-
 
 def pytest_terminal_summary(terminalreporter):
     report_rmses(terminalreporter)
@@ -11,12 +11,13 @@ def pytest_addoption(parser):
     parser.addoption("--selcase", type=int, default=-1, help="Select specific case")
     parser.addoption("--selfun", type=str, default="", help="Select specific function")
     parser.addoption("--printout", action="store_true", default=False, help="Print progress")
+    parser.addoption("--debug_mode", action="store_true", default=False,
+                     help="Activate debug mode")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def ntry(request):
     return request.config.getoption("--ntry")
-
 
 @pytest.fixture(scope="session", autouse=True)
 def selcase(request):
@@ -29,3 +30,9 @@ def selfun(request):
 @pytest.fixture(scope="session", autouse=True)
 def printout(request):
     return request.config.getoption("--printout")
+
+@pytest.fixture
+def debug_mode(request):
+    return request.config.getoption("--debug_mode")
+
+
