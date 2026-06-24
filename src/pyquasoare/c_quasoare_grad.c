@@ -81,6 +81,7 @@ int c_grad_coefs_derivative(double timestep, int type_id,
         /* Gradient against capacity of the reservoir */
         deriv[0] = -(Qstars_extended[0] * mj_vect[0]
                      + Qstars_extended[1] * mj_vect[1]) / gamma / gamma;
+
         deriv[1] = -(Qstars_extended[0] * sj_vect[0]
                      + Qstars_extended[1] * sj_vect[1]) / gamma / gamma;
 
@@ -149,7 +150,8 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * fluxes,
                      double * dfluxes) {
     int ierr;
-    int i, dvar, res, out, inp, idx_c, idx_m, idx_m0, idx_f, idx_f0;
+    int i, dvar, res, out, inp, idx_c, idx_m, idx_m0;
+    int idx_df, idx_df0;
     int nit=0, jalpha_next=0;
 
     int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
@@ -158,6 +160,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
     int ncoefs = QUASOARE_GRAD_NPIECEWISEPARAMS;
 
     int ifxi = QUASOARE_GRAD_IFLUX_INFLOW;
+    int ifxd = QUASOARE_GRAD_IFLUX_DEMAND;
     int ifxb = QUASOARE_GRAD_IFLUX_BYPASS;
     int ifxs = QUASOARE_GRAD_IFLUX_SHORTFALL;
     int ifxo = QUASOARE_GRAD_IFLUX_OUTFLOW;
@@ -351,14 +354,13 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
         /* Time increment variable */
         tau = t_end - t_start;
 
-        /* Increment fluxes during the last interval */
-        if(notnull(S)) {
+        /* Compute the integral of x(t) over the time interval */
+        if(notnull(S))
             integ_x = (x_end - x_start - M * tau) / S;
-
-        } else {
+        else
             integ_x = (x_start + M * tau / 2) * tau;
-        }
 
+        /* Increment fluxes during the last interval */
         for(i = 0; i < nfxi; i++){
             integ_fx[i] = sj_vect[i] * integ_x + mj_vect[i] * tau;
             flx = Qstars_extended[i] / timestep * integ_fx[i];
@@ -371,7 +373,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
              * hence the shortfall is positive (it corresponds to a flux
              * entering the reservoir).
              * */
-            if(i <= 1)
+            if(i == ifxi || i == ifxd)
                 fluxes[i + nfxi] += flx - Qstars_extended[i] / timestep * tau;
         }
 
@@ -389,13 +391,15 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
             idx_m0 = nfxp * nreservoirs * nfxo * reservoir_id;
 
             /* Baseline indexes for flux derivatives */
-            idx_f0 = nfxo * nreservoirs * dvar;
+            idx_df0 = nfxo * nreservoirs * dvar;
 
             if (current_reservoir_id != reservoir_id) {
-                /* variable belongs to a different reservoir */
+                /* -- variable belongs to a different reservoir -- */
 
                 /* 1. compute dQstars_extendedar[dvar] / dη based on upstream flux derivatives
                  * and their mapping to the current reservoir */
+                dQstars_extended[nfxi - 1] = 0;
+
                 for(inp = 0; inp < nfxp; inp++){
                     /* initialise derivative */
                     dQstars_extended[inp] = 0;
@@ -406,8 +410,8 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                             idx_m = idx_m0 + nreservoirs * nfxo * inp +  nfxo* res + out;
                             input_mapping_weight = input_mapping[idx_m];
                             if(notnull(input_mapping_weight)) {
-                                idx_f = idx_f0 + nfxo  * res + out;
-                                dQstars_extended[inp] += input_mapping_weight * dfluxes[idx_f];
+                                idx_df = idx_df0 + nfxo  * res + out;
+                                dQstars_extended[inp] += input_mapping_weight * dfluxes[idx_df];
                             }
                         }
                     }
@@ -428,14 +432,15 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                 }
 
             } else {
+                /* -- variable belongs to the same reservoir --- */
 
-                /* Qstars derivative in the case the variables belong to the
-                 * same reservoir as the current one */
+                /* Derivative of Qstars */
                 dQstars_extended[0] = 0;
                 dQstars_extended[1] = 0;
 
-                if (type_id == 0)
-                    /* Derivative against reservoir capacity */
+                if(type_id == QUASOARE_GRAD_VARTYPE_CAPACITY)
+                    /* Derivative of Qstars for outflow (i.e. -Γ/Δ)
+                     * against reservoir capacity (i.e. -1/Δ) */
                     dQstars_extended[2] = -1. / timestep;
                 else
                     dQstars_extended[2] = 0.;
@@ -460,6 +465,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
 
             dx_start = dx1[dvar];
 
+            /* --- computation of integral of df(x)/dη --- */
             if(notequal(x_start, x_end, QUASOARE_EPS, 0.)) {
                 if(notnull(S)) {
                     /* Compute dR and then dx_end assuming S≠0 */
@@ -525,8 +531,9 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                         - Qstars_extended[ifxi] * integ_dfx[ifxi] / timestep;
                 }
 
-                idx_f = nfxo * nreservoirs  * dvar + nfxo * reservoir_id + i;
-                dfluxes[idx_f] = G + H;
+                /* Final storage of flux derivative for the current reservoir */
+                idx_df = idx_df0 + nfxo  * current_reservoir_id + i;
+                dfluxes[idx_df] = G + H;
             }
 
             /* Store loop variables */
@@ -583,15 +590,15 @@ int c_grad_reservoir(int nalphas, int nval,
 
     /* configure model for a single reservoir */
     int current_reservoir_id = 0;
+
+    /* .. we assume that we compute the derivative
+     * agains all possible variables types */
     int nvariables = QUASOARE_GRAD_VARTYPE_NUMBER;
     int variables_reservoir_id[QUASOARE_GRAD_VARTYPE_NUMBER];
     int variables_type_id[QUASOARE_GRAD_VARTYPE_NUMBER];
 
     for(dvar = 0; dvar < nvariables; dvar++){
         variables_reservoir_id[dvar] = 0;
-
-        /* ... we compute derivative against each one of the different types
-         * of variables possible */
         variables_type_id[dvar] = dvar;
     }
 
@@ -606,7 +613,7 @@ int c_grad_reservoir(int nalphas, int nval,
         /* indexes */
         idx_dx = nvariables * t;
         idx_f = nreservoirs * nfxo * t;
-        idx_df = nreservoirs * nvariables * nfxo * t;
+        idx_df = nvariables * idx_f; // nvar × nres × nfx_out × t
 
         /* Integrate ode */
         ierr = c_grad_integrate(nalphas, nreservoirs, nvariables,
@@ -675,7 +682,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
     int ierr, t, dvar;
     int idx_q, idx_c, idx_x, idx_f, idx_a, idx_dx, idx_dxp;
     int idx_m, idx_m0, idx_f0, idx_df, idx_fs;
-    int inp, out, res, resu;
+    int inp, out, res, resu, nres_times_t;
 
     int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
     int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
@@ -704,15 +711,16 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
             gamma = gammas[res];
 
             /* Data indexes */
-            idx_q = (nreservoirs * t + res) * nfxp;
+            nres_times_t = nreservoirs * t;
+            idx_q = (nres_times_t + res) * nfxp;
             idx_fs = res * nfxo;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
-            idx_x = nreservoirs * t + res;
+            idx_x = nres_times_t + res;
             idx_a = nalphas * res;
-            idx_dx = (nreservoirs * t + res) * nvariables;
-            idx_dxp = (nreservoirs * (t - 1) + res) * nvariables;
-            idx_f = (nreservoirs * t + res) * nfxo;
-            idx_df = (nreservoirs * t + res) * nfxo * nvariables;
+            idx_dx = (nres_times_t + res) * nvariables;
+            idx_dxp = (nres_times_t - nreservoirs + res) * nvariables;
+            idx_f = (nres_times_t + res) * nfxo;
+            idx_df = (nres_times_t + res) * nfxo * nvariables;
 
             /* Initial condition */
             if(t == 0)
