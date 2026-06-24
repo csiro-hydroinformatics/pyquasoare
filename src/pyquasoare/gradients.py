@@ -14,6 +14,7 @@ else:
 NFLUXES_POTENTIAL = c_pyquasoare_grad.NFLUXES_POTENTIAL
 NFLUXES_INPUTS = c_pyquasoare_grad.NFLUXES_INPUTS
 NFLUXES_OUTPUTS = c_pyquasoare_grad.NFLUXES_OUTPUTS
+VARTYPE_NUMBER = c_pyquasoare_grad.VARTYPE_NUMBER
 
 IFLUX_INFLOW = c_pyquasoare_grad.IFLUX_INFLOW
 IFLUX_DEMAND = c_pyquasoare_grad.IFLUX_DEMAND
@@ -161,15 +162,19 @@ class Network():
                       -conversion_factor)
 
 
-def grad_reservoir(alphas, timestep,
-                  Qstars, gamma, coefs_linear,
-                  x0, dx0, variables_type_id,
-                  current_reservoir_id=0,
-                  variables_reservoir_id=None,
-                  xmin=-np.inf, xmax=np.inf,
-                  flux_scalings=None,
-                  errors="ignore",
-                  fluxes=None, niter=None, x1=None, dx1=None):
+def grad_reservoir(alphas, gamma,
+                   x0,
+                   Qstars,
+                   coefs_linear,
+                   timestep=1.,
+                   dx0=None,
+                   flux_scalings=None,
+                   x1=None,
+                   dx1=None,
+                   fluxes=None,
+                   dfluxes=None,
+                   niter=None,
+                   errors="ignore"):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
     characterised by the following differential equation:
@@ -201,39 +206,39 @@ def grad_reservoir(alphas, timestep,
     alphas : np.ndarray
         Approximation nodes. Vector of length M.
         Should be strictly increasing, i.e. alphas[i] > alphas[i-1]
+    gamma : float
+        Reservoir capacity
+    x0 : float
+        Initial condition
     Qstars : np.ndarray
         Timeseries of the 2 potential fluxes.
         This is a 2D array of dimension [N X 2] with N the number of timesteps.
-    gamma : float
-        Reservoir capacity
     coefs_linear: np.ndarray
         Linear interpolation coefficients for the 3 flux functions and each
         interpolation band. This is a 3D array of size [3 x M-1 x 2].
-        There are 2 coefficients for each flux and each band corresponding
-        to the two linear interpolation terms.
-    x0 : float
-        Initial condition
-    dx0 : np.array
-        Initial derivative condition
-    variables_type_id : np.array
-        Type of independent variables
-    xmin : float
-        Minimal store value.
-    xmax : float
-        Maximum store value.
+        There are 2 coefficients (linear interpolation) for each of the 3 input
+        fluxes and each  of the M-1 interpolation bands (see argument 'alphas').
     timestep : float
         Integration time step.
+    dx0 : np.array
+        Initial derivative condition against independent variables.
+        This is a vector of length VARTYPE_NUMBER.
+        Here we assume that we seek the derivative of the output fluxes
+        against all possible types of  independent variables.
+        By default, this vector is initialised to an vector of 0.
     flux_scalings : np.array
-        Scaling factors applied to each flux. Default is 1.
-    errors: str
-        - if 'ignore', then skip over error during time step integration
-        - if 'raise', throw a ValueError.
-        - if 'warn', throw a warning.
-    fluxes, niter, x1, dx1 : np.ndarray
+        Scaling factors applied to each flux.
+        This is a vector of size NFLUXES_INPUTS.
+        By default, this vector is initialised to an vector of 1.
+    fluxes, dfluxes, x1, dx1 : np.ndarray
         Arrays used by for computation "in place", i.e.
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
         If None, the arrays are allocated during every function run.
+    errors: str
+        - if 'ignore', then skip over error during time step integration
+        - if 'raise', throw a ValueError.
+        - if 'warn', throw a warning.
 
     Returns
     -------
@@ -244,11 +249,17 @@ def grad_reservoir(alphas, timestep,
         Final value of x at the end of each timestep.
         Vector of length P.
     dx1 : np.ndarray
-        Derivative of x1 against capacity Γ at the end of each timestep.
-        Vector of length P.
+        Derivative of x1 against each independent variable at the end of each timestep.
+        Array of size [P, Q] where Q is the number of independent variables
+        (see dx0 argument above).
     fluxes : np.ndarray
-        Value of the 6 integrated output fluxes for each timestep.
-        Matrix of size [P, 6] (one value for each timestep and each flux).
+        Integrated output fluxes for each timestep.
+        Matrix of size [P, NO] (one value for each timestep and each flux)
+        where NO is the number of outputs fluxes (constant NFLUXES_OUTPUTS).
+    dfluxes : np.ndarray
+        Derivative of the integrated output fluxes for each timestep.
+        Array of size [P, Q, NO] (one value for each timestep and each flux)
+        where NO is the number of outputs fluxes (constant NFLUXES_OUTPUTS).
 
     See Also
     --------
@@ -259,41 +270,49 @@ def grad_reservoir(alphas, timestep,
     """
     errors_check(errors)
     nval = Qstars.shape[0]
-    nvariables = len(dx0)
+    nvariables = VARTYPE_NUMBER
 
-    if variables_reservoir_id is None:
-        variables_reservoir_id = current_reservoir_id \
-            * np.ones(nvariables, dtype=np.int32)
+    if dx0 is None:
+        dx0 = np.zeros(nvariables, dtype=np.float64)
+
     if flux_scalings is None:
         flux_scalings = np.ones(3)
-    if fluxes is None:
-        fluxes = np.zeros((nval, 6), dtype=np.float64)
+
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
+
     if x1 is None:
         x1 = np.zeros(nval, dtype=np.float64)
+
     if dx1 is None:
-        dx1 = np.zeros(nval, dtype=np.float64)
+        dx1 = np.zeros((nval, nvariables), dtype=np.float64)
+
+    if fluxes is None:
+        fluxes = np.zeros((nval, NFLUXES_OUTPUTS), dtype=np.float64)
+
+    if dfluxes is None:
+        dfluxes = np.zeros((nval, nvariables, NFLUXES_OUTPUTS),
+                           dtype=np.float64)
 
     ierrors = get_errorsid(errors)
-    ierr = c_pyquasoare_grad.grad_reservoir(ierrors, timestep, gamma,
-                                            flux_scalings,
-                                            xmin, xmax, x0,
-                                            dx0,
-                                            current_reservoir_id,
-                                            variables_reservoir_id,
-                                            variables_type_id,
+    ierr = c_pyquasoare_grad.grad_reservoir(ierrors,
                                             alphas,
+                                            timestep,
+                                            gamma,
+                                            flux_scalings,
+                                            x0,
+                                            dx0,
                                             Qstars,
                                             coefs_linear,
                                             niter,
                                             x1,
                                             dx1,
-                                            fluxes)
+                                            fluxes,
+                                            dfluxes)
     name = "c_pyquasoare_grad.grad_reservoir"
     error_management(errors, ierr, name)
 
-    return niter, x1, dx1, fluxes
+    return niter, x1, dx1, fluxes, dfluxes
 
 
 def grad_model(alphas, timestep,
