@@ -10,6 +10,10 @@ cdef extern from 'c_quasoare_grad.h':
     cdef int QUASOARE_GRAD_NFLUXES_INPUTS
     cdef int QUASOARE_GRAD_NFLUXES_OUTPUTS
     cdef int QUASOARE_GRAD_NDERIV
+
+    cdef int QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
+    cdef int QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
+
     cdef int QUASOARE_GRAD_VARTYPE_NUMBER
 
     cdef int QUASOARE_GRAD_IFLUX_INFLOW
@@ -20,13 +24,13 @@ cdef extern from 'c_quasoare_grad.h':
     cdef int QUASOARE_GRAD_IFLUX_TOTALOUT
 
     int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
-                         double * alphas,
+                         double *alphas,
                          double timestep,
                          double gamma,
-                         double *input_mapping,
+                         int *input_mapping,
                          double *Qstars,
                          double *flux_scalings,
-                         double * coefs_linear,
+                         double *coefs_linear,
                          double t0,
                          double x0,
                          double *dx0,
@@ -34,44 +38,44 @@ cdef extern from 'c_quasoare_grad.h':
                          int *variables_reservoir_id,
                          int *variables_type_id,
                          int *niter,
-                         double * x1,
-                         double * dx1,
+                         double *x1,
+                         double *dx1,
                          double *fluxes,
-                         double * dfluxes);
+                         double *dfluxes);
 
     int c_grad_reservoir(int nalphas, int nval,
                          int errors,
-                         double * alphas,
+                         double *alphas,
                          double timestep,
                          double gamma,
-                         double * flux_scalings,
+                         double *flux_scalings,
                          double x0,
-                         double * dx0,
-                         double * Qstars,
-                         double * coefs_linear,
-                         int * niter,
-                         double * x1,
-                         double * dx1,
-                         double * fluxes,
-                         double * dfluxes);
+                         double *dx0,
+                         double *Qstars,
+                         double *coefs_linear,
+                         int *niter,
+                         double *x1,
+                         double *dx1,
+                         double *fluxes,
+                         double *dfluxes);
 
     int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
                      int errors,
-                     double * alphas,
+                     double *alphas,
                      double timestep,
-                     double * gammas,
-                     double * input_mapping,
-                     double * flux_scalings,
+                     double *gammas,
+                     int *input_mapping,
+                     double *flux_scalings,
                      double x0,
-                     double * dx0,
+                     double *dx0,
                      int *variables_reservoir_id,
                      int *variables_type_id,
-                     double * Qstars,
-                     double * coefs_linear,
-                     double * x1,
-                     double * dx1,
-                     double * fluxes,
-                     double * dfluxes);
+                     double *Qstars,
+                     double *coefs_linear,
+                     double *x1,
+                     double *dx1,
+                     double *fluxes,
+                     double *dfluxes);
 
 # Flux sizes
 NFLUXES_POTENTIAL = QUASOARE_GRAD_NFLUXES_POTENTIAL
@@ -79,6 +83,8 @@ NFLUXES_INPUTS = QUASOARE_GRAD_NFLUXES_INPUTS
 NFLUXES_OUTPUTS = QUASOARE_GRAD_NFLUXES_OUTPUTS
 NPIECEWISEPARAMS = QUASOARE_GRAD_NPIECEWISEPARAMS
 NDERIV = QUASOARE_GRAD_NDERIV
+INPUT_MAPPING_LASTDIM = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
+INPUT_MAPPING_SCALINGFACTOR = QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
 VARTYPE_NUMBER = QUASOARE_GRAD_VARTYPE_NUMBER
 
 IFLUX_INFLOW = QUASOARE_GRAD_IFLUX_INFLOW
@@ -101,14 +107,11 @@ def check_dim_input_mapping(input_mapping, nreservoirs):
     if input_mapping.shape[0] != nreservoirs:
         raise ValueError("input_mapping.shape[0] != nreservoirs")
 
-    if input_mapping.shape[1] != NFLUXES_POTENTIAL:
-        raise ValueError("input_mapping.shape[1] != NFLUXES_POTENTIAL")
+    if input_mapping.shape[1] != nreservoirs * NFLUXES_OUTPUTS:
+        raise ValueError("input_mapping.shape[1] != nreservoirs * NFLUXES_OUTPUTS")
 
-    if input_mapping.shape[2] != nreservoirs:
-        raise ValueError("input_mapping.shape[2] != nreservoirs")
-
-    if input_mapping.shape[3] != NFLUXES_OUTPUTS:
-        raise ValueError("input_mapping.shape[3] != NFLUXES_OUTPUTS")
+    if input_mapping.shape[2] != INPUT_MAPPING_LASTDIM:
+        raise ValueError("input_mapping.shape[2] != INPUT_MAPPING_LASTDIM")
 
 
 def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs):
@@ -131,7 +134,7 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
-                   np.ndarray[double, ndim=4, mode='c'] input_mapping not None,
+                   np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
                    np.ndarray[double, ndim=1, mode='c'] Qstars not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
@@ -190,7 +193,7 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                            <double*> np.PyArray_DATA(alphas),
                            timestep,
                            gamma,
-                           <double*> np.PyArray_DATA(input_mapping),
+                           <int*> np.PyArray_DATA(input_mapping),
                            <double*> np.PyArray_DATA(Qstars),
                            <double*> np.PyArray_DATA(flux_scalings),
                            <double*> np.PyArray_DATA(coefs_linear),
@@ -282,7 +285,7 @@ def grad_model(int errors,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
                double timestep,
                np.ndarray[double, ndim=1, mode='c'] gammas not None,
-               np.ndarray[double, ndim=4, mode='c'] input_mapping not None,
+               np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
                np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
                double x0,
                np.ndarray[double, ndim=1, mode='c'] dx0 not None,
@@ -357,7 +360,7 @@ def grad_model(int errors,
                         <double*> np.PyArray_DATA(alphas),
                         timestep,
                         <double*> np.PyArray_DATA(gammas),
-                        <double*> np.PyArray_DATA(input_mapping),
+                        <int*> np.PyArray_DATA(input_mapping),
                         <double*> np.PyArray_DATA(flux_scalings),
                         x0,
                         <double*> np.PyArray_DATA(dx0),
