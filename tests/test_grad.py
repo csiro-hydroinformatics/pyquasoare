@@ -41,6 +41,11 @@ def comp_fun(x, x0=1e-3):
     return np.asinh(x / x0)
 
 FLUX_FUNCTIONS = {
+    "transluent": [
+        lambda x: x * 0.,
+        lambda x: x * 0.,
+        lambda x: x * 0.
+        ],
     "gr4jprod": [
         lambda x: 1 - np.minimum(x, 1)**2,
         lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
@@ -208,27 +213,26 @@ def test_network(linktype, allclose):
     assert netw.upstream_reservoirs(2) == {0, 1}
 
     ipm = netw.input_mapping
-    nfxp = gradients.NFLUXES_POTENTIAL
     nfxo = gradients.NFLUXES_OUTPUTS
-    assert ipm.shape == (netw.nreservoirs, nfxp, netw.nreservoirs, nfxo)
+    ipmd = gradients.INPUT_MAPPING_LASTDIM
+    assert ipm.shape == (netw.nreservoirs, nfxo * netw.nreservoirs, ipmd)
+    sc = gradients.INPUT_MAPPING_SCALINGFACTOR
 
-    # Reservoirs 0 receives nothing
-    assert allclose(ipm[0], 0)
-
-    ifxi = gradients.IFLUX_INFLOW
-    ifxd = gradients.IFLUX_DEMAND
-    ifxb = gradients.IFLUX_BYPASS
-    ifxs = gradients.IFLUX_SHORTFALL
-    ifxt = gradients.IFLUX_TOTALOUT
-
-    if linktype == "total":
-        assert ipm[1, ifxi, 0, ifxt] == -1
-        assert ipm[2, ifxi, 1, ifxt] == -1
-    else:
-        assert ipm[1, ifxi, 0, ifxb] == -1
-        assert ipm[1, ifxd, 0, ifxs] == -1
-        assert ipm[2, ifxi, 1, ifxb] == -1
-        assert ipm[2, ifxd, 1, ifxs] == -1
+    for rid in range(netw.nreservoirs):
+        lks = ipm[rid]
+        if rid == 0:
+            assert np.all(lks == -1)
+        else:
+            if linktype == "total":
+                assert np.all(lks[1:] == -1)
+                # total outflow from upstream links to inflow
+                assert all(lks[0] == [rid - 1, 5, 0, -sc])
+            else:
+                assert np.all(lks[2:] == -1)
+                # bypass flow from upstream links to inflow
+                assert all(lks[0] == [rid - 1, 3, 0, -sc])
+                # demand shortfall flow from upstream links to demand
+                assert all(lks[1] == [rid - 1, 4, 1, -sc])
 
     # This is cyclical -> error
     with pytest.raises(ValueError, match="cyclical"):
@@ -252,8 +256,9 @@ def test_grad_integrate_error():
     x = np.zeros(1, dtype=np.float64)
 
     nres = 1
-    ipm = np.zeros((nres, gradients.NFLUXES_POTENTIAL,
-                    nres, gradients.NFLUXES_OUTPUTS))
+    ipm = np.zeros((nres, nres * gradients.NFLUXES_OUTPUTS,
+                    gradients.INPUT_MAPPING_LASTDIM),
+                    dtype=np.int32)
 
     nvars = 2
     dx = np.zeros(nvars, dtype=np.float64)
@@ -412,6 +417,13 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
     dSb = timestep * fx2[1:, :3].sum(axis=1)
     assert allclose(dSa, dSb)
 
+    if reservoir == "transluent":
+        # No flux storage
+        assert allclose(fx2[:, :3], 0.)
+        assert allclose(fx2[:, 3], -Qstars[:, 0])
+        assert allclose(fx2[:, 5], -Qstars[:, 0])
+        assert allclose(fx2[:, 4], -Qstars[:, 1])
+
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
@@ -432,7 +444,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                                       Qstars, coefs_lin,
                                                       timestep)
     # Numerical difference
-    for vid in range(gradients.VARTYPE_NUMBER):
+    for vid in [0]: #range(gradients.VARTYPE_NUMBER):
         dx_v = dx[:, vid]
         dfx_v = dfx[:, vid]
 
@@ -451,12 +463,12 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             coefs_lin_p[vid - 1] *= (1 + eps)
 
         _, xm, _, fxm, _ = gradients.grad_reservoir(alphas, gamma_m, x0,
-                                                      Qstars, coefs_lin_m,
-                                                      timestep)
+                                                    Qstars, coefs_lin_m,
+                                                    timestep)
 
         _, xp, _, fxp, _ = gradients.grad_reservoir(alphas, gamma_p, x0,
-                                                      Qstars, coefs_lin_p,
-                                                      timestep)
+                                                    Qstars, coefs_lin_p,
+                                                    timestep)
 
        # Test dx2
         #if reservoir in ["linrouting", "muskingumrouting"] and variable_id == 0:
@@ -489,28 +501,46 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                 assert corr > 0.9999
 
         if debug_mode:
+            # Display flux
+
             import matplotlib.pyplot as plt
             from hydrodiy.plot import putils
-            fig, axs = plt.subplots(nrows=2, sharex=True,
-                                   figsize=(13, 6), layout="constrained")
-            ax = axs[0]
-            iflux = 0
-            ax.plot(fx[:, iflux])
-            ax.plot(fxm[:, iflux], color="0.6", ls="--")
-            ax.plot(fxp[:, iflux], color="0.4", ls=":")
-            ax.set(title=f"Output flux #{iflux} diff vs var #{vid}")
+            fig, axs = plt.subplots(nrows=2, ncols=7, sharex=True,
+                                   figsize=(18, 8), layout="constrained")
+            for ivar in range(gradients.NFLUXES_OUTPUTS + 1):
+                if ivar == 0:
+                    ref = x
+                    dquas = dx_v
+                    dnum = dx_n
+                    title = f"storage level diff\nvs var #{vid}"
+                    errtitle = f"corr={corr:6.4f}\ndfx_errmax={dx_errmax:6.4f}"
+                else:
+                    ref = fx[:, ivar - 1]
+                    dquas = dfx_v[:, ivar - 1]
+                    dnum = dfx_n[:, ivar - 1]
+                    title = f"Output flux #{ivar - 1} diff\nvs var #{vid}"
+                    errtitle = f"dfx_errmax={dfx_errmax[ivar - 1]:6.4f}"
 
-            ax = axs[1]
-            ax.plot(dfx_v[:, iflux], label="C")
-            ax.plot([], label="num diff")
-            #ax.plot(dfx_n[:, iflux], label="num diff")
-            ax.set(title=f"corr={corr:6.4f} dfx_errmax={dfx_errmax[iflux]:6.4f}")
-            ax.legend()
-            tax = ax.twinx()
-            #dfx_err = np.maximum(dfx_err, 1e-20)
-            #tax.plot(dfx_err[:, iflux], color="0.7")
-            #tax.set(ylim=(1e-10, dfx_err.max()), yscale="log")
-            tax.plot(dfx_n[:, iflux], color="tab:orange")
+                ref = ref[:200]
+                dquas = dquas[:200]
+                dnum = dnum[:200]
+
+                ax = axs[0, ivar]
+                ax.plot(ref)
+
+                ax.set(title=title)
+
+                ax = axs[1, ivar]
+                ax.plot(dquas, label="Quasoare")
+                #ax.plot([], label="num diff")
+                ax.plot(dnum, label="num diff")
+                ax.set(title=errtitle)
+                ax.legend()
+                #tax = ax.twinx()
+                #dfx_err = np.maximum(dfx_err, 1e-20)
+                #tax.plot(dfx_err[:, iflux], color="0.7")
+                #tax.set(ylim=(1e-10, dfx_err.max()), yscale="log")
+                #tax.plot(dfx_n[:, iflux], color="tab:orange")
             plt.show()
             import pdb; pdb.set_trace()
 

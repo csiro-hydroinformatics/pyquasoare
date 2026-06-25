@@ -16,6 +16,9 @@
 #define QUASOARE_GRAD_NFLUXES_OUTPUTS 6
 #define QUASOARE_GRAD_NDERIV QUASOARE_GRAD_NPIECEWISEPARAMS*(QUASOARE_GRAD_NFLUXES_INPUTS+1)
 
+#define QUASOARE_GRAD_INPUT_MAPPING_LASTDIM 4
+#define QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR 1000000
+
 #define QUASOARE_GRAD_IFLUX_INFLOW 0
 #define QUASOARE_GRAD_IFLUX_DEMAND 1
 #define QUASOARE_GRAD_IFLUX_OUTFLOW 2
@@ -33,22 +36,11 @@ double c_grad_forward(double M, double S, double t0, double x0, double t);
 
 double c_grad_inverse(double M, double S, double x0, double x1);
 
-
-int c_grad_fluxes_increment(double timestep,
-                           double gamma,
-                           double * Qstars,
-                           double * mj_vector,
-                           double * sj_vector,
-                           double M, double S,
-                           double t0, double t1,
-                           double x0, double x1,
-                           double *fluxes);
-
 int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
-                     double * alphas,
+                     double *alphas,
                      double timestep,
                      double gamma,
-                     double *input_mapping,
+                     int *input_mapping,
                      double * Qstars,
                      double * flux_scalings,
                      double * coefs_linear,
@@ -85,7 +77,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
                  double * alphas,
                  double timestep,
                  double * gammas,
-                 double * input_mapping,
+                 int * input_mapping,
                  double * flux_scalings,
                  double x0,
                  double * dx0,

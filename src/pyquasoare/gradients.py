@@ -14,6 +14,8 @@ else:
 NFLUXES_POTENTIAL = c_pyquasoare_grad.NFLUXES_POTENTIAL
 NFLUXES_INPUTS = c_pyquasoare_grad.NFLUXES_INPUTS
 NFLUXES_OUTPUTS = c_pyquasoare_grad.NFLUXES_OUTPUTS
+INPUT_MAPPING_LASTDIM = c_pyquasoare_grad.INPUT_MAPPING_LASTDIM
+INPUT_MAPPING_SCALINGFACTOR = c_pyquasoare_grad.INPUT_MAPPING_SCALINGFACTOR
 VARTYPE_NUMBER = c_pyquasoare_grad.VARTYPE_NUMBER
 
 IFLUX_INFLOW = c_pyquasoare_grad.IFLUX_INFLOW
@@ -34,9 +36,9 @@ def lin_coefficient_matrix(funs, alphas):
 NetworkLink = namedtuple("Link",
                          [
                          "upstream_reservoir_id",
-                         "upstream_output_id",
+                         "upstream_output_flux_id",
                          "downstream_reservoir_id",
-                         "downstream_input_id",
+                         "downstream_potential_flux_id",
                          "weight"
                          ])
 
@@ -50,15 +52,24 @@ class Network():
         nin = NFLUXES_POTENTIAL
         nout = NFLUXES_OUTPUTS
         nres = self.nreservoirs
+        nipmd = INPUT_MAPPING_LASTDIM
+        sc = INPUT_MAPPING_SCALINGFACTOR
 
-        ipm = np.zeros((nres, nin, nres, nout))
+        ipm = np.empty((nres, nres * nout, nipmd), dtype=np.int32)
+        ipm.fill(-1)
 
         for lk in self.links:
             rdid = lk.downstream_reservoir_id
-            idid = lk.downstream_input_id
+            idid = lk.downstream_potential_flux_id
             ruid = lk.upstream_reservoir_id
-            ouid = lk.upstream_output_id
-            ipm[rdid, idid, ruid, ouid] = lk.weight
+            ouid = lk.upstream_output_flux_id
+
+            lks = ipm[rdid]
+            ilk = np.where(lks[:, 0] < 0)[0][0]
+            if ilk >= ipm.shape[1]:
+                errmsg = "Exceeded the maximum number of inter-reservoir links"
+                raise ValueError(errmsg)
+            lks[ilk, :] = [ruid, ouid, idid, int(lk.weight * sc)]
 
         return ipm
 
@@ -84,8 +95,8 @@ class Network():
 
         return set(add_upids(reservoir_id, [])[1:])
 
-    def add_link(self, upstream_reservoir_id, upstream_output_id,
-                 downstream_reservoir_id, downstream_input_id,
+    def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
+                 downstream_reservoir_id, downstream_potential_flux_id,
                  weight):
         nres = self.nreservoirs
 
@@ -96,7 +107,7 @@ class Network():
                      + f" [0, {nres}-1], got {upid}"
             raise ValueError(errmsg)
 
-        upoid = int(upstream_output_id)
+        upoid = int(upstream_output_flux_id)
         if upoid >= NFLUXES_OUTPUTS or upoid < 0:
             errmsg = "Expected upstream reservoir output id in"\
                      + f" [0, {NFLUXES_OUTPUTS}-1], got {upoid}"
@@ -108,7 +119,7 @@ class Network():
                      + f" [0, {nres}-1], got {downid}"
             raise ValueError(errmsg)
 
-        downiid = int(downstream_input_id)
+        downiid = int(downstream_potential_flux_id)
         if downiid >= NFLUXES_POTENTIAL or downiid < 0:
             errmsg = "Expected downstream reservoir input id in"\
                      + f" [0, {NFLUXES_POTENTIAL}-1], got {downiid}"
