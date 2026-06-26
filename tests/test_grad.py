@@ -23,7 +23,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
-NALPHAS = 50
+NALPHAS = 20
 
 DEMANDS = [-0.5, 0, 0.5]
 TIMESTEPS = [0.1, 1]
@@ -83,13 +83,13 @@ FLUX_FUNCTIONS = {
         lambda x: fixed(x, 1.),
         lambda x: np.maximum(x, 0.)**4
         ],
-    "xinanjiang1": [
+    "hymod1": [
         # exponent = 0.2
         lambda x: (1 - np.clip(x, 0., 1.))**0.2,
         lambda x: np.maximum(x, 0.),
         lambda x: fixed(x, 0.)
         ],
-    "xinanjiang2": [
+    "hymod2": [
         # exponent = 5
         lambda x: (1 - np.clip(x, 0., 1.))**0.2,
         lambda x: np.maximum(x, 0.),
@@ -238,6 +238,7 @@ def test_network(linktype, allclose):
     with pytest.raises(ValueError, match="cyclical"):
         netw.add_link_total_outflow(2, 0)
 
+
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 def test_lin_coefficient_matrix(reservoir, allclose):
     alphas = np.linspace(0, 1, 50)
@@ -283,10 +284,11 @@ def test_grad_integrate_error():
     vrid = np.array([0] * nvars, dtype=np.int32)
     vtid = np.array([0] * nvars, dtype=np.int32)
     qst = -np.ones(2)
+    dqst = np.zeros((nvars, gradients.NFLUXES_INPUTS))
     fxs = np.ones(3)
     t0 = 0.
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, fxs, coefs_lin, t0,
+                                            ipm, qst, dqst, fxs, coefs_lin, t0,
                                             x_start, dx0, vrid, vtid,
                                             niter, x, dx, fx, dfx)
     assert ierr == 112
@@ -294,7 +296,7 @@ def test_grad_integrate_error():
     qst = np.ones(2)
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst,fxs, coefs_lin, t0,
+                                            ipm, qst, dqst, fxs, coefs_lin, t0,
                                             x_start, dx0, vrid, vtid,
                                             niter, x, dx, fx, dfx)
     assert ierr == 111
@@ -302,7 +304,7 @@ def test_grad_integrate_error():
     coefs_lin[0] *= -1
     gamma = 0
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, fxs, coefs_lin, t0,
+                                            ipm, qst, dqst, fxs, coefs_lin, t0,
                                             x_start, dx0, vrid, vtid,
                                             niter, x, dx, fx, dfx)
     assert ierr == 113
@@ -311,7 +313,7 @@ def test_grad_integrate_error():
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(3)
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, fxs, coefs_lin, t0,
+                                            ipm, qst, dqst, fxs, coefs_lin, t0,
                                             x_start, dx0, vrid, vtid,
                                             niter, x, dx, fx, dfx)
     assert ierr == 604
@@ -346,6 +348,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     niter2 = np.zeros(1, dtype=np.int32)
     x2 = np.zeros(1, dtype=np.float64)
     dx2 = np.zeros(nvars, dtype=np.float64)
+    dqst = np.zeros((nvars, gradients.NFLUXES_INPUTS))
     nfxo = gradients.NFLUXES_OUTPUTS
     fx2 = np.zeros(nfxo, dtype=np.float64)
     dfx2 = np.zeros((nvars, nres, nfxo), dtype=np.float64)
@@ -366,7 +369,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
         ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                                ipm, qst, fxs, coefs_lin, t0,
+                                                ipm, qst, dqst, fxs, coefs_lin, t0,
                                                 x_start, dx0, vrid, vtid,
                                                 niter2, x2, dx2, fx2, dfx2)
         assert ierr == 0
@@ -443,6 +446,12 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
     n, x, dx, fx, dfx = gradients.grad_reservoir(alphas, gamma, x0,
                                                       Qstars, coefs_lin,
                                                       timestep)
+    # Compute integ fx and diff of integ fx
+    #single_iter = n == 1
+    #j = (alphas[:, None] - x[single_iter][None, :] < 0).sum(axis=0) - 1
+    #a0 = alphas[j]
+    #a1 = alphas[j + 1]
+
     # Numerical difference
     for vid in [0]: #range(gradients.VARTYPE_NUMBER):
         dx_v = dx[:, vid]
@@ -576,7 +585,7 @@ def test_grad_gr4j(siteid, timestep, allclose):
     # Route = 20mm
     gammas = np.array([1., 100., 20.])
 
-    nalphas = 50
+    nalphas = 10
     a1 = np.linspace(0, 1, nalphas)
     a2 = np.linspace(0, 1.5, nalphas)
     alphas = np.vstack([a1, a1, a2])

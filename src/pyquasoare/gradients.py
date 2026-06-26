@@ -49,7 +49,6 @@ class Network():
 
     @property
     def input_mapping(self):
-        nin = NFLUXES_POTENTIAL
         nout = NFLUXES_OUTPUTS
         nres = self.nreservoirs
         nipmd = INPUT_MAPPING_LASTDIM
@@ -185,6 +184,7 @@ def grad_reservoir(alphas, gamma,
                    fluxes=None,
                    dfluxes=None,
                    niter=None,
+                   dQstars_ext=None,
                    errors="ignore"):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
@@ -241,7 +241,7 @@ def grad_reservoir(alphas, gamma,
         Scaling factors applied to each flux.
         This is a vector of size NFLUXES_INPUTS.
         By default, this vector is initialised to an vector of 1.
-    fluxes, dfluxes, x1, dx1 : np.ndarray
+    fluxes, dfluxes, x1, dx1, dQstars_ext : np.ndarray
         Arrays used by for computation "in place", i.e.
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
@@ -305,6 +305,9 @@ def grad_reservoir(alphas, gamma,
         dfluxes = np.zeros((nval, nvariables, NFLUXES_OUTPUTS),
                            dtype=np.float64)
 
+    if dQstars_ext is None:
+        dQstars_ext = np.zeros((nvariables, NFLUXES_INPUTS), dtype=np.float64)
+
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors,
                                             alphas,
@@ -314,6 +317,7 @@ def grad_reservoir(alphas, gamma,
                                             x0,
                                             dx0,
                                             Qstars,
+                                            dQstars_ext,
                                             coefs_linear,
                                             niter,
                                             x1,
@@ -326,12 +330,22 @@ def grad_reservoir(alphas, gamma,
     return niter, x1, dx1, fluxes, dfluxes
 
 
-def grad_model(alphas, timestep,
-               Qstars, Qstars_mapping,
-               gammas, coefs_linear, x0,
-               variables_reservoir_id=None,
-               fluxes=None, x1=None, dx1=None,
+def grad_model(alphas, gammas,
+               input_mapping,
+               x0,
+               variables_reservoir_id,
+               variables_type_id,
+               Qstars,
+               coefs_linear,
+               timestep=1.,
+               dx0=None,
                flux_scalings=None,
+               x1=None,
+               dx1=None,
+               fluxes=None,
+               dfluxes=None,
+               niter=None,
+               dQstars_ext=None,
                errors="ignore"):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
@@ -342,24 +356,40 @@ def grad_model(alphas, timestep,
 
     dx0 = np.zeros(nvariables, dtype=np.float64)
 
-    if flux_scalings is None:
-        flux_scalings = np.ones(3 * nreservoirs)
-    if fluxes is None:
-        fluxes = np.zeros((nval, 6 * nreservoirs), dtype=np.float64)
     if x1 is None:
-        x1 = np.zeros((nval, nreservoirs), dtype=np.float64)
-    if dx1 is None:
-        dx1 = np.zeros((nval, nreservoirs, nvariables), dtype=np.float64)
+        x1 = np.zeros(nval, dtype=np.float64)
 
-    ierr = c_pyquasoare_grad.grad_model(errors, timestep, x0,
+    if dx1 is None:
+        dx1 = np.zeros((nval, nvariables), dtype=np.float64)
+
+    if fluxes is None:
+        fluxes = np.zeros((nval, NFLUXES_OUTPUTS), dtype=np.float64)
+
+    if dfluxes is None:
+        dfluxes = np.zeros((nval, nvariables, NFLUXES_OUTPUTS),
+                           dtype=np.float64)
+
+    if dQstars_ext is None:
+        dQstars_ext = np.zeros((nvariables, NFLUXES_INPUTS), dtype=np.float64)
+
+    ierr = c_pyquasoare_grad.grad_model(errors,
+                                        alphas,
+                                        timestep,
+                                        gammas,
+                                        input_mapping,
+                                        flux_scalings,
+                                        x0,
                                         dx0,
                                         variables_reservoir_id,
-                                        alphas,
-                                        Qstars, Qstars_mapping,
-                                        gammas,
+                                        variables_type_id,
+                                        Qstars,
+                                        dQstars_ext,
                                         coefs_linear,
-                                        x1, fluxes)
+                                        x1,
+                                        dx1,
+                                        fluxes,
+                                        dfluxes)
     name = "c_pyquasoare_grad.grad_model"
     error_management(errors, ierr, name)
 
-    return x1, fluxes
+    return x1, fluxes, dfluxes

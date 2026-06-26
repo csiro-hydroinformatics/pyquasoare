@@ -29,6 +29,7 @@ cdef extern from 'c_quasoare_grad.h':
                          double gamma,
                          int *input_mapping,
                          double *Qstars,
+                         double *dQstars_ext,
                          double *flux_scalings,
                          double *coefs_linear,
                          double t0,
@@ -52,6 +53,7 @@ cdef extern from 'c_quasoare_grad.h':
                          double x0,
                          double *dx0,
                          double *Qstars,
+                         double *dQstars_ext,
                          double *coefs_linear,
                          int *niter,
                          double *x1,
@@ -71,6 +73,7 @@ cdef extern from 'c_quasoare_grad.h':
                      int *variables_reservoir_id,
                      int *variables_type_id,
                      double *Qstars,
+                     double *dQstars_ext,
                      double *coefs_linear,
                      double *x1,
                      double *dx1,
@@ -136,6 +139,7 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                    double gamma,
                    np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
                    np.ndarray[double, ndim=1, mode='c'] Qstars not None,
+                   np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
                    double t0, double x0,
@@ -157,6 +161,12 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
 
     if Qstars.shape[0] != NFLUXES_POTENTIAL:
         raise ValueError("Qstars.shape[0] != NFLUXES_POTENTIAL")
+
+    if dQstars_ext.shape[0] != nvariables:
+        raise ValueError("dQstars_ext.shape[0] != nvariables")
+
+    if dQstars_ext.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")
 
     if flux_scalings.shape[0] != NFLUXES_INPUTS:
         raise ValueError("coefs_linear.shape[0] != NFLUXES_INPUTS")
@@ -195,6 +205,7 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                            gamma,
                            <int*> np.PyArray_DATA(input_mapping),
                            <double*> np.PyArray_DATA(Qstars),
+                           <double*> np.PyArray_DATA(dQstars_ext),
                            <double*> np.PyArray_DATA(flux_scalings),
                            <double*> np.PyArray_DATA(coefs_linear),
                            t0, x0,
@@ -216,6 +227,7 @@ def grad_reservoir(int errors,
                    double x0,
                    np.ndarray[double, ndim=1, mode='c'] dx0 not None,
                    np.ndarray[double, ndim=2, mode='c'] Qstars not None,
+                   np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_linear not None,
                    np.ndarray[int, ndim=1, mode='c'] niter not None,
                    np.ndarray[double, ndim=1, mode='c'] x1 not None,
@@ -236,6 +248,12 @@ def grad_reservoir(int errors,
 
     if Qstars.shape[1] != NFLUXES_POTENTIAL:
         raise ValueError("Qstars.shape[1] != NFLUXES_POTENTIAL")
+
+    if dQstars_ext.shape[0] != nvariables:
+        raise ValueError("dQstars_ext.shape[0] != nvariables")
+
+    if dQstars_ext.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")
 
     if x1.shape[0] != nval:
         raise ValueError("x1.shape[0] != nval")
@@ -273,6 +291,7 @@ def grad_reservoir(int errors,
                             x0,
                             <double*> np.PyArray_DATA(dx0),
                             <double*> np.PyArray_DATA(Qstars),
+                            <double*> np.PyArray_DATA(dQstars_ext),
                             <double*> np.PyArray_DATA(coefs_linear),
                             <int*> np.PyArray_DATA(niter),
                             <double*> np.PyArray_DATA(x1),
@@ -292,6 +311,7 @@ def grad_model(int errors,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
                np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                np.ndarray[double, ndim=2, mode='c'] Qstars not None,
+               np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
                np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
                np.ndarray[double, ndim=2, mode='c'] x1 not None,
                np.ndarray[double, ndim=3, mode='c'] dx1 not None,
@@ -321,6 +341,12 @@ def grad_model(int errors,
 
     if Qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs:
         raise ValueError("Qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs")
+
+    if dQstars_ext.shape[0] != nvariables:
+        raise ValueError("dQstars_ext.shape[0] != nvariables")
+
+    if dQstars_ext.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")
 
     if x1.shape[0] != nval:
         raise ValueError("x1.shape[0] != nval")
@@ -367,6 +393,7 @@ def grad_model(int errors,
                         <int*> np.PyArray_DATA(variables_reservoir_id),
                         <int*> np.PyArray_DATA(variables_type_id),
                         <double*> np.PyArray_DATA(Qstars),
+                        <double*> np.PyArray_DATA(dQstars_ext),
                         <double*> np.PyArray_DATA(coefs_linear),
                         <double*> np.PyArray_DATA(x1),
                         <double*> np.PyArray_DATA(dx1),
