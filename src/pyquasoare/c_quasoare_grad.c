@@ -230,7 +230,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                      double * fluxes,
                      double * dfluxes) {
     int ierr;
-    int inp, out, dvar, inp, idx_c, idx_m, idx_m0, idx_dq;
+    int inp, out, dvar, idx_c, idx_m, idx_m0, idx_dq;
     int idx_df, idx_df0;
     int nit=0, jalpha_next=0;
 
@@ -559,7 +559,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
 
             /* Compute the two terms G and H related to flux derivatives */
             for(out = 0; out < nfxo ; out++) {
-                if(out <= nfxi) {
+                if(out < nfxi) {
                     /* Inflow, demand and drainage fluxes */
                     G = dQstars_ext[idx_dq + out] / timestep * integ_fx[out];
                     H = Qstars_ext[out] * integ_dfx[out] / timestep;

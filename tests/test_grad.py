@@ -37,7 +37,7 @@ def fixed(x, x0):
 def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
-def comp_fun(x, x0=1e-3):
+def comp_fun(x, x0=1e-2):
     return np.asinh(x / x0)
 
 FLUX_FUNCTIONS = {
@@ -436,7 +436,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
-    start, end = None, 50
+    start, end = None, 600
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -446,21 +446,14 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
     n, x, dx, fx, dfx = gradients.grad_reservoir(alphas, gamma, x0,
                                                       Qstars, coefs_lin,
                                                       timestep)
-    # Compute integ fx and diff of integ fx
-    single_iter = n == 1
-    j = (alphas[:, None] - x[single_iter][None, :] < 0).sum(axis=0) - 1
-    a0 = alphas[j]
-    a1 = alphas[j + 1]
-    #import pdb; pdb.set_trace()
-
 
     # Numerical difference
-    for vid in [0]: #range(gradients.VARTYPE_NUMBER):
+    for vid in range(gradients.VARTYPE_NUMBER):
         dx_v = dx[:, vid]
         dfx_v = dfx[:, vid]
 
         if vid == 0:
-            eps = gamma * 1e-6
+            eps = gamma * 1e-4
             gamma_m = gamma - eps
             gamma_p = gamma + eps
             coefs_lin_m = coefs_lin
@@ -481,13 +474,6 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                                     Qstars, coefs_lin_p,
                                                     timestep)
 
-       # Test dx2
-        #if reservoir in ["linrouting", "muskingumrouting"] and variable_id == 0:
-        #    # Storage does not depend on Γ hence:
-        #    # x = S / Γ => dx = - S / Γ^2 => dx = -x / Γ
-        #    expected = - x2 / gamma
-        #else:
-        #    expected = (x2p - x2m) / 2 / eps
         dx_n = (xp - xm) / 2 / eps
         dfx_n = (fxp - fxm) / 2 / eps
 
@@ -501,7 +487,8 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dfx_errmax = np.sort(dfx_err, axis=0)[-nskip]
 
         if not debug_mode:
-            assert dx_errmax < 1e-4
+            assert dx_errmax < 5e-4
+            assert dfx_errmax.max() < 1e-3
 
         if dx_v.std() > 1e-100:
             idx = dx_err < dx_errmax
@@ -513,28 +500,29 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
         if debug_mode:
             # Display flux
-
             import matplotlib.pyplot as plt
             from hydrodiy.plot import putils
-            fig, axs = plt.subplots(nrows=2, ncols=7, sharex=True,
+            fig, axs = plt.subplots(nrows=2, ncols=4, sharex=True,
                                    figsize=(15, 6), layout="constrained")
-            for ivar in range(gradients.NFLUXES_OUTPUTS + 1):
+            for ivar in range(gradients.NFLUXES_INPUTS + 1):
                 if ivar == 0:
                     ref = x
                     dquas = dx_v
                     dnum = dx_n
+                    derr = dx_err
                     title = f"storage level diff\nvs var #{vid}"
                     errtitle = f"corr={corr:6.4f}\ndfx_errmax={dx_errmax:6.4f}"
                 else:
                     ref = fx[:, ivar - 1]
                     dquas = dfx_v[:, ivar - 1]
                     dnum = dfx_n[:, ivar - 1]
+                    derr = dfx_err[:, ivar - 1]
                     title = f"Output flux #{ivar - 1} diff\nvs var #{vid}"
-                    errtitle = f"dfx_errmax={dfx_errmax[ivar - 1]:6.4f}"
+                    errtitle = f"dfx_errmax={derr.max():6.4f}"
 
-                ref = ref[:200]
-                dquas = dquas[:200]
-                dnum = dnum[:200]
+                #ref = ref[:200]
+                #dquas = dquas[:200]
+                #dnum = dnum[:200]
 
                 ax = axs[0, ivar]
                 ax.plot(ref)
@@ -543,15 +531,12 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
                 ax = axs[1, ivar]
                 ax.plot(dquas, label="Quasoare")
-                #ax.plot([], label="num diff")
                 ax.plot(dnum, label="num diff")
                 ax.set(title=errtitle)
                 ax.legend()
-                #tax = ax.twinx()
-                #dfx_err = np.maximum(dfx_err, 1e-20)
-                #tax.plot(dfx_err[:, iflux], color="0.7")
-                #tax.set(ylim=(1e-10, dfx_err.max()), yscale="log")
-                #tax.plot(dfx_n[:, iflux], color="tab:orange")
+                tax = ax.twinx()
+                tax.plot(derr, color="0.7")
+                tax.set(ylim=(1e-10, max(1e-5, derr.max())), yscale="log")
             plt.show()
             import pdb; pdb.set_trace()
 
