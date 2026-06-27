@@ -18,10 +18,10 @@ cdef extern from 'c_quasoare_grad.h':
 
     cdef int QUASOARE_GRAD_IFLUX_INFLOW
     cdef int QUASOARE_GRAD_IFLUX_DEMAND
-    cdef int QUASOARE_GRAD_IFLUX_OUTFLOW
+    cdef int QUASOARE_GRAD_IFLUX_DRAINAGE
     cdef int QUASOARE_GRAD_IFLUX_BYPASS
     cdef int QUASOARE_GRAD_IFLUX_SHORTFALL
-    cdef int QUASOARE_GRAD_IFLUX_TOTALOUT
+    cdef int QUASOARE_GRAD_IFLUX_OUTFLOW
 
     int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
                          double *alphas,
@@ -92,18 +92,14 @@ VARTYPE_NUMBER = QUASOARE_GRAD_VARTYPE_NUMBER
 
 IFLUX_INFLOW = QUASOARE_GRAD_IFLUX_INFLOW
 IFLUX_DEMAND = QUASOARE_GRAD_IFLUX_DEMAND
-IFLUX_OUTFLOW = QUASOARE_GRAD_IFLUX_OUTFLOW
+IFLUX_DRAINAGE = QUASOARE_GRAD_IFLUX_DRAINAGE
 IFLUX_BYPASS = QUASOARE_GRAD_IFLUX_BYPASS
 IFLUX_SHORTFALL = QUASOARE_GRAD_IFLUX_SHORTFALL
-IFLUX_TOTALOUT = QUASOARE_GRAD_IFLUX_TOTALOUT
+IFLUX_OUTFLOW = QUASOARE_GRAD_IFLUX_OUTFLOW
 
 
 def __cinit__(self):
     pass
-
-cdef struct bidule:
-    double * data1
-    double * data2
 
 
 def check_dim_input_mapping(input_mapping, nreservoirs):

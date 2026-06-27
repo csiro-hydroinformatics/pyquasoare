@@ -23,7 +23,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
-NALPHAS = 20
+NALPHAS = 50
 
 DEMANDS = [-0.5, 0, 0.5]
 TIMESTEPS = [0.1, 1]
@@ -139,7 +139,7 @@ def get_alphas_and_coefs(reservoir, scalings):
     stdy = steady.quad_steady_flux_scalings(alphas, coefs, scalings)
     eps = 1e-5
     alphas = [-eps, 0., eps] \
-             + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 12).tolist() \
+             + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 6).tolist() \
              + [1 - eps, 1., 1 + eps]
     amax = np.nanmax(stdy)
     if amax > 1 + eps:
@@ -436,7 +436,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
-    start, end = None, None
+    start, end = None, 50
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -447,10 +447,12 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                                       Qstars, coefs_lin,
                                                       timestep)
     # Compute integ fx and diff of integ fx
-    #single_iter = n == 1
-    #j = (alphas[:, None] - x[single_iter][None, :] < 0).sum(axis=0) - 1
-    #a0 = alphas[j]
-    #a1 = alphas[j + 1]
+    single_iter = n == 1
+    j = (alphas[:, None] - x[single_iter][None, :] < 0).sum(axis=0) - 1
+    a0 = alphas[j]
+    a1 = alphas[j + 1]
+    #import pdb; pdb.set_trace()
+
 
     # Numerical difference
     for vid in [0]: #range(gradients.VARTYPE_NUMBER):
@@ -515,7 +517,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             import matplotlib.pyplot as plt
             from hydrodiy.plot import putils
             fig, axs = plt.subplots(nrows=2, ncols=7, sharex=True,
-                                   figsize=(18, 8), layout="constrained")
+                                   figsize=(15, 6), layout="constrained")
             for ivar in range(gradients.NFLUXES_OUTPUTS + 1):
                 if ivar == 0:
                     ref = x

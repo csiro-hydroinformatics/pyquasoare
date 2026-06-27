@@ -20,10 +20,10 @@ VARTYPE_NUMBER = c_pyquasoare_grad.VARTYPE_NUMBER
 
 IFLUX_INFLOW = c_pyquasoare_grad.IFLUX_INFLOW
 IFLUX_DEMAND = c_pyquasoare_grad.IFLUX_DEMAND
-IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
+IFLUX_DRAINAGE = c_pyquasoare_grad.IFLUX_DRAINAGE
 IFLUX_BYPASS = c_pyquasoare_grad.IFLUX_BYPASS
 IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
-IFLUX_TOTALOUT = c_pyquasoare_grad.IFLUX_TOTALOUT
+IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
 
 
 def lin_coefficient_matrix(funs, alphas):
@@ -147,7 +147,7 @@ class Network():
             errmsg = "Expected conversion_factor > 0."
             raise ValueError(errmsg)
 
-        self.add_link(upstream_reservoir_id, IFLUX_TOTALOUT,
+        self.add_link(upstream_reservoir_id, IFLUX_OUTFLOW,
                       downstream_reservoir_id, IFLUX_INFLOW,
                       -conversion_factor)
 
