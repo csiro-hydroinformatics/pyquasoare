@@ -173,14 +173,13 @@ class Network():
 
 
 def grad_reservoir(alphas, gamma,
-                   x0,
                    Qstars,
                    coefs_linear,
                    timestep=1.,
-                   dx0=None,
+                   x0=0.5,
                    flux_scalings=None,
-                   x1=None,
-                   dx1=None,
+                   x=None,
+                   dx=None,
                    fluxes=None,
                    dfluxes=None,
                    niter=None,
@@ -241,7 +240,7 @@ def grad_reservoir(alphas, gamma,
         Scaling factors applied to each flux.
         This is a vector of size NFLUXES_INPUTS.
         By default, this vector is initialised to an vector of 1.
-    fluxes, dfluxes, x1, dx1, dQstars_ext : np.ndarray
+    fluxes, dfluxes, x, dx, dQstars_ext : np.ndarray
         Arrays used by for computation "in place", i.e.
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
@@ -256,11 +255,11 @@ def grad_reservoir(alphas, gamma,
     niter : np.ndarray
         Number of iterations (i.e. number of interpolation bands crossed).
         Vector of length P (one number for each timestep).
-    x1 : np.ndarray
+    x : np.ndarray
         Final value of x at the end of each timestep.
         Vector of length P.
-    dx1 : np.ndarray
-        Derivative of x1 against each independent variable at the end of each timestep.
+    dx : np.ndarray
+        Derivative of x against each independent variable at the end of each timestep.
         Array of size [P, Q] where Q is the number of independent variables
         (see dx0 argument above).
     fluxes : np.ndarray
@@ -283,20 +282,17 @@ def grad_reservoir(alphas, gamma,
     nval = Qstars.shape[0]
     nvariables = VARTYPE_NUMBER
 
-    if dx0 is None:
-        dx0 = np.zeros(nvariables, dtype=np.float64)
-
     if flux_scalings is None:
         flux_scalings = np.ones(3)
 
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
 
-    if x1 is None:
-        x1 = np.zeros(nval, dtype=np.float64)
+    if x is None:
+        x = np.zeros(nval, dtype=np.float64)
 
-    if dx1 is None:
-        dx1 = np.zeros((nval, nvariables), dtype=np.float64)
+    if dx is None:
+        dx = np.zeros((nval, nvariables), dtype=np.float64)
 
     if fluxes is None:
         fluxes = np.zeros((nval, NFLUXES_OUTPUTS), dtype=np.float64)
@@ -315,19 +311,18 @@ def grad_reservoir(alphas, gamma,
                                             gamma,
                                             flux_scalings,
                                             x0,
-                                            dx0,
                                             Qstars,
                                             dQstars_ext,
                                             coefs_linear,
                                             niter,
-                                            x1,
-                                            dx1,
+                                            x,
+                                            dx,
                                             fluxes,
                                             dfluxes)
     name = "c_pyquasoare_grad.grad_reservoir"
     error_management(errors, ierr, name)
 
-    return niter, x1, dx1, fluxes, dfluxes
+    return niter, x, dx, fluxes, dfluxes
 
 
 def grad_model(alphas, gammas,
@@ -340,8 +335,8 @@ def grad_model(alphas, gammas,
                timestep=1.,
                dx0=None,
                flux_scalings=None,
-               x1=None,
-               dx1=None,
+               x=None,
+               dx=None,
                fluxes=None,
                dfluxes=None,
                niter=None,
@@ -354,13 +349,11 @@ def grad_model(alphas, gammas,
         variables_reservoir_id = np.arange(nreservoirs, dtype=np.int32)
     nvariables = variables_reservoir_id.shape[0]
 
-    dx0 = np.zeros(nvariables, dtype=np.float64)
+    if x is None:
+        x = np.zeros(nval, dtype=np.float64)
 
-    if x1 is None:
-        x1 = np.zeros(nval, dtype=np.float64)
-
-    if dx1 is None:
-        dx1 = np.zeros((nval, nvariables), dtype=np.float64)
+    if dx is None:
+        dx = np.zeros((nval, nvariables), dtype=np.float64)
 
     if fluxes is None:
         fluxes = np.zeros((nval, NFLUXES_OUTPUTS), dtype=np.float64)
@@ -379,17 +372,16 @@ def grad_model(alphas, gammas,
                                         input_mapping,
                                         flux_scalings,
                                         x0,
-                                        dx0,
                                         variables_reservoir_id,
                                         variables_type_id,
                                         Qstars,
                                         dQstars_ext,
                                         coefs_linear,
-                                        x1,
-                                        dx1,
+                                        x,
+                                        dx,
                                         fluxes,
                                         dfluxes)
     name = "c_pyquasoare_grad.grad_model"
     error_management(errors, ierr, name)
 
-    return x1, fluxes, dfluxes
+    return x, fluxes, dfluxes
