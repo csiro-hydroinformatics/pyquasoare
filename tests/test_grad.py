@@ -262,6 +262,7 @@ def test_grad_integrate_error():
                     dtype=np.int32)
 
     nvars = 2
+    x = np.array([0.5])
     dx = np.zeros(nvars, dtype=np.float64)
 
     nfxo = gradients.NFLUXES_OUTPUTS
@@ -277,8 +278,6 @@ def test_grad_integrate_error():
     coefs_lin = gradients.lin_coefficient_matrix(funs, alphas)
     timestep = 1.
     gamma = 100.
-    x_start = 0.5
-    dx0 = np.zeros(nvars)
 
     rid = 0
     vrid = np.array([0] * nvars, dtype=np.int32)
@@ -288,34 +287,30 @@ def test_grad_integrate_error():
     fxs = np.ones(3)
     t0 = 0.
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin, t0,
-                                            x_start, dx0, vrid, vtid,
-                                            niter, x, dx, fx, dfx)
+                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 112
 
     qst = np.ones(2)
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin, t0,
-                                            x_start, dx0, vrid, vtid,
-                                            niter, x, dx, fx, dfx)
+                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 111
 
     coefs_lin[0] *= -1
     gamma = 0
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin, t0,
-                                            x_start, dx0, vrid, vtid,
-                                            niter, x, dx, fx, dfx)
+                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 113
 
     gamma = 100.
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(3)
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin, t0,
-                                            x_start, dx0, vrid, vtid,
-                                            niter, x, dx, fx, dfx)
+                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 604
 
 
@@ -335,25 +330,22 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     ipm = get_input_mapping(nres, "bypass_shortfall")
 
     # Loop and integrate
-    rid = 1
+    rid = 0 # this is the top reservoir
     vrid = np.repeat(np.arange(nres, dtype=np.int32), 4)
     vtid = np.tile(np.arange(4, dtype=np.int32), 3)
     nvars = len(vtid)
 
     x_start = 0.5
-    dx0 = np.zeros(nvars)
-    dx0m = np.zeros(nvars)
-    dx0p = np.zeros(nvars)
+    dx = np.zeros(nvars)
     scalings = np.ones(3)
     niter2 = np.zeros(1, dtype=np.int32)
-    x2 = np.zeros(1, dtype=np.float64)
-    dx2 = np.zeros(nvars, dtype=np.float64)
+    x = np.array([x_start], dtype=np.float64)
+    dx = np.zeros(nvars, dtype=np.float64)
     dqst = np.zeros((nvars, gradients.NFLUXES_INPUTS))
     nfxo = gradients.NFLUXES_OUTPUTS
-    fx2 = np.zeros(nfxo, dtype=np.float64)
-    dfx2 = np.zeros((nvars, nres, nfxo), dtype=np.float64)
+    fx = np.zeros(nfxo, dtype=np.float64)
+    dfx = np.zeros((nvars, nres, nfxo), dtype=np.float64)
     fxs = np.ones(gradients.NFLUXES_INPUTS, dtype=np.float64)
-    t0 = 0.
 
     nval = len(Qstars)
     for i in range(nval):
@@ -369,15 +361,19 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
         ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                                ipm, qst, dqst, fxs, coefs_lin, t0,
-                                                x_start, dx0, vrid, vtid,
-                                                niter2, x2, dx2, fx2, dfx2)
+                                                ipm, qst, dqst, fxs, coefs_lin,
+                                                vrid, vtid,
+                                                niter2, x, dx, fx, dfx)
         assert ierr == 0
-        assert allclose(x1, x2[0])
-        assert allclose(fx1, fx2[:3])
+        assert allclose(x1, x[0])
+        assert allclose(fx1, fx[:3])
 
-        fxa = np.array([fx1[0] - qst[0], fx1[1] - qst[1], fx1[0] - qst[0] + fx1[2]])
-        assert allclose(fxa, fx2[3:])
+        fxa = np.array([fx1[0] - qst[0],
+                        fx1[1] - qst[1],
+                        fx1[0] - qst[0] + fx1[2]])
+        assert allclose(fxa, fx[3:])
+
+        x_start = x1
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -402,9 +398,9 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand, allclose):
                            -Qstars[:, 0] + fx1[:, 0] + fx1[:, 2]])
 
     # Lin
-    n2, x2, dx2, fx2, dfx2 = gradients.grad_reservoir(alphas, gamma, x0,
+    n2, x2, dx2, fx2, dfx2 = gradients.grad_reservoir(alphas, gamma,
                                                       Qstars, coefs_lin,
-                                                      timestep)
+                                                      timestep, x0)
 
     assert allclose(x1, x2)
     assert allclose(fx1, fx2)
@@ -442,10 +438,9 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     # Gradient
-    x0 = 0.5
-    n, x, dx, fx, dfx = gradients.grad_reservoir(alphas, gamma, x0,
-                                                      Qstars, coefs_lin,
-                                                      timestep)
+    n, x, dx, fx, dfx = gradients.grad_reservoir(alphas, gamma,
+                                                 Qstars, coefs_lin,
+                                                 timestep)
 
     # Numerical difference
     for vid in range(gradients.VARTYPE_NUMBER):
@@ -466,11 +461,11 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             coefs_lin_p = coefs_lin.copy()
             coefs_lin_p[vid - 1] *= (1 + eps)
 
-        _, xm, _, fxm, _ = gradients.grad_reservoir(alphas, gamma_m, x0,
+        _, xm, _, fxm, _ = gradients.grad_reservoir(alphas, gamma_m,
                                                     Qstars, coefs_lin_m,
                                                     timestep)
 
-        _, xp, _, fxp, _ = gradients.grad_reservoir(alphas, gamma_p, x0,
+        _, xp, _, fxp, _ = gradients.grad_reservoir(alphas, gamma_p,
                                                     Qstars, coefs_lin_p,
                                                     timestep)
 
