@@ -204,7 +204,6 @@ def grad_model(alphas, gammas,
                Qstars,
                coefs_linear,
                timestep=1.,
-               dx0=None,
                flux_scalings=None,
                x=None,
                dx=None,
@@ -239,7 +238,8 @@ def grad_model(alphas, gammas,
     if dQstars_ext is None:
         dQstars_ext = np.zeros((nvariables, NFLUXES_INPUTS), dtype=np.float64)
 
-    ierr = c_pyquasoare_grad.grad_model(errors,
+    ierrors = get_errorsid(errors)
+    ierr = c_pyquasoare_grad.grad_model(ierrors,
                                         alphas,
                                         timestep,
                                         gammas,
@@ -262,11 +262,12 @@ def grad_model(alphas, gammas,
 
 
 class NetworkLink():
-    def __init__(upstream_reservoir_id,
-                 upstream_output_flud_id,
+    def __init__(self,
+                 upstream_reservoir_id,
+                 upstream_output_flux_id,
                  downstream_reservoir_id,
                  downstream_potential_flux_id,
-                 weight):
+                 weight, nres):
         upid = int(upstream_reservoir_id)
         if upid >= nres or upid < 0:
             errmsg = "Expected upstream reservoir id in"\
@@ -296,80 +297,17 @@ class NetworkLink():
                      + " different from upstream reservoir id"
             raise ValueError(errmsg)
 
-         self.upstream_reservoir_id = upid
-         self.upstream_output_flux_id = upoid
-         self.downstream_reservoir_id = downid
-         self.downstream_potential_flux_id = downiid
-         self.weight = float(weight)
+        self.upstream_reservoir_id = upid
+        self.upstream_output_flux_id = upoid
+        self.downstream_reservoir_id = downid
+        self.downstream_potential_flux_id = downiid
+        self.weight = float(weight)
 
-
-class MultiReservoirModel():
-    def __init__(self, alphas, errors="ignore"):
-        self._alphas = alphas
-
-        nreservoirs, nalphas = alphas.shape
+class Network():
+    def __init__(self, nreservoirs):
         self.nreservoirs = nreservoirs
         self.links = []
-        self._errors = errors
-        self._gammas = None
-        self._flux_scalings = None
-
-        nfxi = NFLUXES_INPUTS
-        nfxp = NFLUXES_POTENTIAL
-        self._coefs_linear = np.empty((nreservoirs, nfxi, nalphas - 1, nfxp))
-
-    @property
-    def errors(self):
-        return self._errors
-
-    @property
-    def alphas(self):
-        return self._alphas
-
-    @property
-    def coefs_linear(self):
-        return self._coefs_linear
-
-    @property
-    def gammas(self):
-        gm = self._gammas
-        if gm is None:
-            raise ValueError("gammas are not set.")
-        return gm
-
-    @gammas.setter
-    def gammas(self, value):
-        nres = self.nreservoirs
-        if isinstance(value, float) is None:
-            self._gammas = value * np.ones(nres)
-        else:
-            if value.shape != (nres, ):
-                errmsg = f"Expected flux_scalings of dim ({nres},)."\
-                         + f" Got {value.shape}."
-                raise ValueError(errmsg)
-
-            self._gammas = value.astype(np.float64)
-
-    @property
-    def flux_scalings(self):
-        fs = self._flux_scalings
-        if fs is None:
-            raise ValueError("flux_scalings are not set.")
-        return fs
-
-    @flux_scalings.setter
-    def flux_scalings(self, value):
-        nres = self.nreservoirs
-        nfxi = NFLUXES_INPUTS
-        if isinstance(value, float) is None:
-            self._flux_scalings = value * np.ones(nres, nfxi)
-        else:
-            if value.shape != (nres, nfxi):
-                errmsg = f"Expected flux_scalings of dim ({nres},{nfxi})."\
-                         + f" Got {value.shape}."
-                raise ValueError(errmsg)
-
-            self._flux_scalings = value.astype(np.float64)
+        self._input_mapping = None
 
     @property
     def input_mapping(self):
@@ -377,6 +315,10 @@ class MultiReservoirModel():
         nres = self.nreservoirs
         nipmd = INPUT_MAPPING_LASTDIM
         sc = INPUT_MAPPING_SCALINGFACTOR
+
+        ipm = self._input_mapping
+        if ipm is not None:
+            return ipm
 
         ipm = np.empty((nres, nres * nout, nipmd), dtype=np.int32)
         ipm.fill(-1)
@@ -394,15 +336,8 @@ class MultiReservoirModel():
                 raise ValueError(errmsg)
             lks[ilk, :] = [ruid, ouid, idid, int(lk.weight * sc)]
 
+        self._input_mapping = ipm
         return ipm
-
-    def set_coefs_linear(self, reservoir_id, flux_functions):
-        if reservoir_id < 0 or reservoirs_id >= self.nreservoirs:
-            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
-            raise ValueError(errmsg)
-
-        rid = reservoir_id
-        self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, alphas[rid])
 
     def upstream_reservoirs(self, reservoir_id):
         # Recursive function
@@ -430,13 +365,15 @@ class MultiReservoirModel():
                  downstream_reservoir_id, downstream_potential_flux_id,
                  weight):
         nres = self.nreservoirs
-
-        # Create link
-        lk = NetworkLink(upid, upoid, downid, downiid, weight)
+        lk = NetworkLink(upstream_reservoir_id,
+                         upstream_output_flux_id,
+                         downstream_reservoir_id,
+                         downstream_potential_flux_id,
+                         weight, nres)
         self.links.append(lk)
 
         # check non-cyclic
-        self.upstream_reservoirs(downid)
+        self.upstream_reservoirs(downstream_reservoir_id)
 
     def add_link_total_outflow(self, upstream_reservoir_id,
                                downstream_reservoir_id,
@@ -468,12 +405,122 @@ class MultiReservoirModel():
         self.add_link(upstream_reservoir_id, IFLUX_BYPASS,
                       downstream_reservoir_id, IFLUX_INFLOW,
                       -conversion_factor)
-
         self.add_link(upstream_reservoir_id, IFLUX_SHORTFALL,
                       downstream_reservoir_id, IFLUX_DEMAND,
                       -conversion_factor)
 
-    def initialise(self, alphas, Qstars, variables_specs, timestep=1.):
+
+class MultiReservoirModel():
+    def __init__(self, nreservoirs, errors="ignore"):
+        self._network = Network(nreservoirs)
+        self._errors = errors
+        self._gammas = None
+        self._flux_scalings = None
+        self._alphas = None
+
+        self._coefs_linear = None
+
+    @property
+    def errors(self):
+        return self._errors
+
+    @property
+    def network(self):
+        return self._network
+
+    @property
+    def nreservoirs(self):
+        return self.network.nreservoirs
+
+    @property
+    def alphas(self):
+        return self._alphas
+
+    @property
+    def coefs_linear(self):
+        return self._coefs_linear
+
+    @property
+    def alphas(self):
+        al = self._alphas
+        if al is None:
+            raise ValueError("alphas are not set.")
+        return al
+
+    @alphas.setter
+    def alphas(self, value):
+        nres = self.nreservoirs
+        if isinstance(value, int):
+            value = np.repeat(np.linspace(0, 1, value)[None, :],
+                              self.nreservoirs, axis=0)
+
+        if value.shape[0] != nres:
+            errmsg = f"Expected flux_scalings.shape[0] = {nres}."\
+                     + f" Got {value.shape[0]}."
+            raise ValueError(errmsg)
+
+        self._alphas = value.astype(np.float64)
+
+    @property
+    def gammas(self):
+        gm = self._gammas
+        if gm is None:
+            raise ValueError("gammas are not set.")
+        return gm
+
+    @gammas.setter
+    def gammas(self, value):
+        nres = self.nreservoirs
+        if isinstance(value, float):
+            self._gammas = value * np.ones(nres)
+        else:
+            value = np.array(value)
+            if value.shape != (nres, ):
+                errmsg = f"Expected flux_scalings of dim ({nres},)."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._gammas = value.astype(np.float64)
+
+    @property
+    def flux_scalings(self):
+        fs = self._flux_scalings
+        if fs is None:
+            raise ValueError("flux_scalings are not set.")
+        return fs
+
+    @flux_scalings.setter
+    def flux_scalings(self, value):
+        nres = self.nreservoirs
+        nfxi = NFLUXES_INPUTS
+        if isinstance(value, float):
+            self._flux_scalings = value * np.ones((nres, nfxi))
+        else:
+            value = np.array(value)
+            if value.shape != (nres, nfxi):
+                errmsg = f"Expected flux_scalings of dim ({nres},{nfxi})."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._flux_scalings = value.astype(np.float64)
+
+    def set_coefs_linear(self, reservoir_id, flux_functions):
+        if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
+            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
+            raise ValueError(errmsg)
+
+        nalphas = self.alphas.shape[1]
+        nres = self.nreservoirs
+        if self._coefs_linear is None:
+            nfxi = NFLUXES_INPUTS
+            nfxp = NFLUXES_POTENTIAL
+            self._coefs_linear = np.zeros((nres, nfxi, nalphas - 1, nfxp))
+
+        rid = reservoir_id
+        ralphas = self.alphas[rid]
+        self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
+
+    def initialise(self, Qstars, variables_specs, timestep=1.):
         self.timestep = timestep
 
         nres = self.nreservoirs
@@ -482,9 +529,11 @@ class MultiReservoirModel():
         nvariables = len(variables_specs)
 
         self.flux_scalings = 1.
-        self.gammas = 100.
-        self.variables_reservoir_id = np.ascontiguousarray(variables_specs[:, 0])
-        self.variables_type_id = np.ascontiguousarray(variables_specs[:, 1])
+        variables_specs = np.array(variables_specs)
+        self.variables_reservoir_id = \
+            np.ascontiguousarray(variables_specs[:, 0]).astype(np.int32)
+        self.variables_type_id = \
+            np.ascontiguousarray(variables_specs[:, 1]).astype(np.int32)
 
         ntimesteps = Qstars.shape[0]
         if Qstars.shape[1] != nres:
@@ -496,6 +545,7 @@ class MultiReservoirModel():
         self.Qstars = Qstars
 
         self.dQstars_ext = np.empty((nvariables, nfxi))
+        self.x0 = 0.5 * np.ones(nres)
         self.x = np.empty((ntimesteps, nres))
         self.dx = np.empty((ntimesteps, nres))
         self.fluxes = np.empty((ntimesteps, nres))
@@ -504,14 +554,13 @@ class MultiReservoirModel():
 
     def run(self):
         grad_model(self.alphas, self.gammas,
-                   self.input_mapping,
+                   self.network.input_mapping,
                    self.x0,
                    self.variables_reservoir_id,
                    self.variables_type_id,
                    self.Qstars,
                    self.coefs_linear,
                    self.timestep,
-                   self.dx0,
                    self.flux_scalings,
                    self.x,
                    self.dx,
