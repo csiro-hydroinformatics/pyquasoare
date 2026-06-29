@@ -291,7 +291,7 @@ def grad_model(int errors,
                np.ndarray[double, ndim=1, mode='c'] x0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
                np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
-               np.ndarray[double, ndim=2, mode='c'] Qstars not None,
+               np.ndarray[double, ndim=3, mode='c'] Qstars not None,
                np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
                np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
                np.ndarray[double, ndim=2, mode='c'] x not None,
@@ -314,8 +314,11 @@ def grad_model(int errors,
     if x0.shape[0] != nreservoirs:
         raise ValueError("x0.shape[0] != nreservoirs")
 
-    if flux_scalings.shape[0] != NFLUXES_INPUTS * nreservoirs:
-        raise ValueError("flux_scalings.shape[0] != NFLUXES_INPUTS x nreservoirs")
+    if flux_scalings.shape[0] != nreservoirs:
+        raise ValueError("flux_scalings.shape[0] != nreservoirs")
+
+    if flux_scalings.shape[1] != NFLUXES_INPUTS
+        raise ValueError("flux_scalings.shape[1] != NFLUXES_INPUTS")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
@@ -323,8 +326,11 @@ def grad_model(int errors,
     if variables_type_id.shape[0] != nvariables:
         raise ValueError("variables_type_id.shape[0] != nvariables")
 
-    if Qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs:
-        raise ValueError("Qstars.shape[1] != NFLUXES_POTENTIAL * nreservoirs")
+    if Qstars.shape[1] != nreservoirs:
+        raise ValueError("Qstars.shape[1] != nreservoirs")
+
+    if Qstars.shape[2] != NFLUXES_POTENTIAL:
+        raise ValueError("Qstars.shape[2] != NFLUXES_POTENTIAL")
 
     if dQstars_ext.shape[1] != NFLUXES_INPUTS:
         raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")

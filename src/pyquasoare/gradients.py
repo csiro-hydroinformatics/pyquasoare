@@ -26,150 +26,21 @@ IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
 IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
 
 
+def get_alphas(nalphas, eps=1e-5, amax=1., nalphas_above_one=10, nreservoirs=1):
+    alphas = [-eps, 0., eps] \
+             + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 6).tolist() \
+             + [1 - eps, 1., 1 + eps]
+    if amax > 1.:
+        alphas += np.linspace(1 + 2 * eps, nalphas_above_one, 6).tolist()
+    return np.repeat(np.array(alphas)[None, :], nreservoirs, axis=0)
+
+
 def lin_coefficient_matrix(funs, alphas):
     if len(funs) != NFLUXES_INPUTS:
         raise ValueError(f"Expected {NFLUXES_INPUTS} flux functions, got {len(funs)}.")
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     return np.ascontiguousarray(coefs[:, :, 1:])
-
-NetworkLink = namedtuple("Link",
-                         [
-                         "upstream_reservoir_id",
-                         "upstream_output_flux_id",
-                         "downstream_reservoir_id",
-                         "downstream_potential_flux_id",
-                         "weight"
-                         ])
-
-class Network():
-    def __init__(self, nreservoirs):
-        self.nreservoirs = nreservoirs
-        self.links = []
-
-    @property
-    def input_mapping(self):
-        nout = NFLUXES_OUTPUTS
-        nres = self.nreservoirs
-        nipmd = INPUT_MAPPING_LASTDIM
-        sc = INPUT_MAPPING_SCALINGFACTOR
-
-        ipm = np.empty((nres, nres * nout, nipmd), dtype=np.int32)
-        ipm.fill(-1)
-
-        for lk in self.links:
-            rdid = lk.downstream_reservoir_id
-            idid = lk.downstream_potential_flux_id
-            ruid = lk.upstream_reservoir_id
-            ouid = lk.upstream_output_flux_id
-
-            lks = ipm[rdid]
-            ilk = np.where(lks[:, 0] < 0)[0][0]
-            if ilk >= ipm.shape[1]:
-                errmsg = "Exceeded the maximum number of inter-reservoir links"
-                raise ValueError(errmsg)
-            lks[ilk, :] = [ruid, ouid, idid, int(lk.weight * sc)]
-
-        return ipm
-
-    def upstream_reservoirs(self, reservoir_id):
-        # Recursive function
-        def add_upids(rid, upids):
-            upids.append(rid)
-            for lk in self.links:
-                if lk.downstream_reservoir_id == rid:
-                    upid = lk.upstream_reservoir_id
-
-                    if len(upids) > 0:
-                        if upid == upids[0]:
-                            errmsg = "Reservoir receives"\
-                                     + " inputs from itself. This is"\
-                                     + " cyclical reservoir connection."
-                            raise ValueError(errmsg)
-
-                    # Move upstream
-                    upids = add_upids(upid, upids)
-
-            return upids
-
-        return set(add_upids(reservoir_id, [])[1:])
-
-    def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
-                 downstream_reservoir_id, downstream_potential_flux_id,
-                 weight):
-        nres = self.nreservoirs
-
-        # Check data
-        upid = int(upstream_reservoir_id)
-        if upid >= nres or upid < 0:
-            errmsg = "Expected upstream reservoir id in"\
-                     + f" [0, {nres}-1], got {upid}"
-            raise ValueError(errmsg)
-
-        upoid = int(upstream_output_flux_id)
-        if upoid >= NFLUXES_OUTPUTS or upoid < 0:
-            errmsg = "Expected upstream reservoir output id in"\
-                     + f" [0, {NFLUXES_OUTPUTS}-1], got {upoid}"
-            raise ValueError(errmsg)
-
-        downid = int(downstream_reservoir_id)
-        if downid >= nres or downid < 0:
-            errmsg = "Expected downstream reservoir id in"\
-                     + f" [0, {nres}-1], got {downid}"
-            raise ValueError(errmsg)
-
-        downiid = int(downstream_potential_flux_id)
-        if downiid >= NFLUXES_POTENTIAL or downiid < 0:
-            errmsg = "Expected downstream reservoir input id in"\
-                     + f" [0, {NFLUXES_POTENTIAL}-1], got {downiid}"
-            raise ValueError(errmsg)
-
-        if downid == upid:
-            errmsg = "Expected downstream reservoir id to "\
-                     + " different from upstream reservoir id"
-            raise ValueError(errmsg)
-
-        # Create link
-        lk = NetworkLink(upid, upoid, downid, downiid, weight)
-        self.links.append(lk)
-
-        # check non-cyclic
-        self.upstream_reservoirs(downid)
-
-    def add_link_total_outflow(self, upstream_reservoir_id,
-                               downstream_reservoir_id,
-                               conversion_factor=1.):
-        """ Links total outflow from upstream to inflow for downstream.
-        Weight is -1 because we need to convert the outflow (<0) from
-        upstream reservoir to positive inflow to the downstream reservoir.
-        """
-        if conversion_factor <= 0:
-            errmsg = "Expected conversion_factor > 0."
-            raise ValueError(errmsg)
-
-        self.add_link(upstream_reservoir_id, IFLUX_OUTFLOW,
-                      downstream_reservoir_id, IFLUX_INFLOW,
-                      -conversion_factor)
-
-    def add_link_bypass_shortfall(self, upstream_reservoir_id,
-                                  downstream_reservoir_id,
-                                  conversion_factor=1.):
-        """ Links upstram inflow bypass to downstream inflow and
-        upstream demand shortfall to downstream demand.
-        Weight is -1 because we need to convert the outflow (<0) from
-        upstream reservoir to positive inflow to the downstream reservoir.
-        """
-        if conversion_factor <= 0:
-            errmsg = "Expected conversion_factor > 0."
-            raise ValueError(errmsg)
-
-        self.add_link(upstream_reservoir_id, IFLUX_BYPASS,
-                      downstream_reservoir_id, IFLUX_INFLOW,
-                      -conversion_factor)
-
-        self.add_link(upstream_reservoir_id, IFLUX_SHORTFALL,
-                      downstream_reservoir_id, IFLUX_DEMAND,
-                      -conversion_factor)
 
 
 def grad_reservoir(alphas, gamma,
@@ -283,7 +154,7 @@ def grad_reservoir(alphas, gamma,
     nvariables = VARTYPE_NUMBER
 
     if flux_scalings is None:
-        flux_scalings = np.ones(3)
+        flux_scalings = np.ones(NFLUXES_INPUTS)
 
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
@@ -349,6 +220,9 @@ def grad_model(alphas, gammas,
         variables_reservoir_id = np.arange(nreservoirs, dtype=np.int32)
     nvariables = variables_reservoir_id.shape[0]
 
+    if flux_scalings is None:
+        flux_scalings = np.ones(NFLUXES_INPUTS)
+
     if x is None:
         x = np.zeros(nval, dtype=np.float64)
 
@@ -385,3 +259,264 @@ def grad_model(alphas, gammas,
     error_management(errors, ierr, name)
 
     return x, fluxes, dfluxes
+
+
+class NetworkLink():
+    def __init__(upstream_reservoir_id,
+                 upstream_output_flud_id,
+                 downstream_reservoir_id,
+                 downstream_potential_flux_id,
+                 weight):
+        upid = int(upstream_reservoir_id)
+        if upid >= nres or upid < 0:
+            errmsg = "Expected upstream reservoir id in"\
+                     + f" [0, {nres}-1], got {upid}"
+            raise ValueError(errmsg)
+
+        upoid = int(upstream_output_flux_id)
+        if upoid >= NFLUXES_OUTPUTS or upoid < 0:
+            errmsg = "Expected upstream reservoir output id in"\
+                     + f" [0, {NFLUXES_OUTPUTS}-1], got {upoid}"
+            raise ValueError(errmsg)
+
+        downid = int(downstream_reservoir_id)
+        if downid >= nres or downid < 0:
+            errmsg = "Expected downstream reservoir id in"\
+                     + f" [0, {nres}-1], got {downid}"
+            raise ValueError(errmsg)
+
+        downiid = int(downstream_potential_flux_id)
+        if downiid >= NFLUXES_POTENTIAL or downiid < 0:
+            errmsg = "Expected downstream reservoir input id in"\
+                     + f" [0, {NFLUXES_POTENTIAL}-1], got {downiid}"
+            raise ValueError(errmsg)
+
+        if downid == upid:
+            errmsg = "Expected downstream reservoir id to "\
+                     + " different from upstream reservoir id"
+            raise ValueError(errmsg)
+
+         self.upstream_reservoir_id = upid
+         self.upstream_output_flux_id = upoid
+         self.downstream_reservoir_id = downid
+         self.downstream_potential_flux_id = downiid
+         self.weight = float(weight)
+
+
+class MultiReservoirModel():
+    def __init__(self, alphas, errors="ignore"):
+        self._alphas = alphas
+
+        nreservoirs, nalphas = alphas.shape
+        self.nreservoirs = nreservoirs
+        self.links = []
+        self._errors = errors
+        self._gammas = None
+        self._flux_scalings = None
+
+        nfxi = NFLUXES_INPUTS
+        nfxp = NFLUXES_POTENTIAL
+        self._coefs_linear = np.empty((nreservoirs, nfxi, nalphas - 1, nfxp))
+
+    @property
+    def errors(self):
+        return self._errors
+
+    @property
+    def alphas(self):
+        return self._alphas
+
+    @property
+    def coefs_linear(self):
+        return self._coefs_linear
+
+    @property
+    def gammas(self):
+        gm = self._gammas
+        if gm is None:
+            raise ValueError("gammas are not set.")
+        return gm
+
+    @gammas.setter
+    def gammas(self, value):
+        nres = self.nreservoirs
+        if isinstance(value, float) is None:
+            self._gammas = value * np.ones(nres)
+        else:
+            if value.shape != (nres, ):
+                errmsg = f"Expected flux_scalings of dim ({nres},)."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._gammas = value.astype(np.float64)
+
+    @property
+    def flux_scalings(self):
+        fs = self._flux_scalings
+        if fs is None:
+            raise ValueError("flux_scalings are not set.")
+        return fs
+
+    @flux_scalings.setter
+    def flux_scalings(self, value):
+        nres = self.nreservoirs
+        nfxi = NFLUXES_INPUTS
+        if isinstance(value, float) is None:
+            self._flux_scalings = value * np.ones(nres, nfxi)
+        else:
+            if value.shape != (nres, nfxi):
+                errmsg = f"Expected flux_scalings of dim ({nres},{nfxi})."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._flux_scalings = value.astype(np.float64)
+
+    @property
+    def input_mapping(self):
+        nout = NFLUXES_OUTPUTS
+        nres = self.nreservoirs
+        nipmd = INPUT_MAPPING_LASTDIM
+        sc = INPUT_MAPPING_SCALINGFACTOR
+
+        ipm = np.empty((nres, nres * nout, nipmd), dtype=np.int32)
+        ipm.fill(-1)
+
+        for lk in self.links:
+            rdid = lk.downstream_reservoir_id
+            idid = lk.downstream_potential_flux_id
+            ruid = lk.upstream_reservoir_id
+            ouid = lk.upstream_output_flux_id
+
+            lks = ipm[rdid]
+            ilk = np.where(lks[:, 0] < 0)[0][0]
+            if ilk >= ipm.shape[1]:
+                errmsg = "Exceeded the maximum number of inter-reservoir links"
+                raise ValueError(errmsg)
+            lks[ilk, :] = [ruid, ouid, idid, int(lk.weight * sc)]
+
+        return ipm
+
+    def set_coefs_linear(self, reservoir_id, flux_functions):
+        if reservoir_id < 0 or reservoirs_id >= self.nreservoirs:
+            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
+            raise ValueError(errmsg)
+
+        rid = reservoir_id
+        self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, alphas[rid])
+
+    def upstream_reservoirs(self, reservoir_id):
+        # Recursive function
+        def add_upids(rid, upids):
+            upids.append(rid)
+            for lk in self.links:
+                if lk.downstream_reservoir_id == rid:
+                    upid = lk.upstream_reservoir_id
+
+                    if len(upids) > 0:
+                        if upid == upids[0]:
+                            errmsg = "Reservoir receives"\
+                                     + " inputs from itself. This is"\
+                                     + " cyclical reservoir connection."
+                            raise ValueError(errmsg)
+
+                    # Move upstream
+                    upids = add_upids(upid, upids)
+
+            return upids
+
+        return set(add_upids(reservoir_id, [])[1:])
+
+    def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
+                 downstream_reservoir_id, downstream_potential_flux_id,
+                 weight):
+        nres = self.nreservoirs
+
+        # Create link
+        lk = NetworkLink(upid, upoid, downid, downiid, weight)
+        self.links.append(lk)
+
+        # check non-cyclic
+        self.upstream_reservoirs(downid)
+
+    def add_link_total_outflow(self, upstream_reservoir_id,
+                               downstream_reservoir_id,
+                               conversion_factor=1.):
+        """ Links total outflow from upstream to inflow for downstream.
+        Weight is -1 because we need to convert the outflow (<0) from
+        upstream reservoir to positive inflow to the downstream reservoir.
+        """
+        if conversion_factor <= 0:
+            errmsg = "Expected conversion_factor > 0."
+            raise ValueError(errmsg)
+
+        self.add_link(upstream_reservoir_id, IFLUX_OUTFLOW,
+                      downstream_reservoir_id, IFLUX_INFLOW,
+                      -conversion_factor)
+
+    def add_link_bypass_shortfall(self, upstream_reservoir_id,
+                                  downstream_reservoir_id,
+                                  conversion_factor=1.):
+        """ Links upstram inflow bypass to downstream inflow and
+        upstream demand shortfall to downstream demand.
+        Weight is -1 because we need to convert the outflow (<0) from
+        upstream reservoir to positive inflow to the downstream reservoir.
+        """
+        if conversion_factor <= 0:
+            errmsg = "Expected conversion_factor > 0."
+            raise ValueError(errmsg)
+
+        self.add_link(upstream_reservoir_id, IFLUX_BYPASS,
+                      downstream_reservoir_id, IFLUX_INFLOW,
+                      -conversion_factor)
+
+        self.add_link(upstream_reservoir_id, IFLUX_SHORTFALL,
+                      downstream_reservoir_id, IFLUX_DEMAND,
+                      -conversion_factor)
+
+    def initialise(self, alphas, Qstars, variables_specs, timestep=1.):
+        self.timestep = timestep
+
+        nres = self.nreservoirs
+        nfxi = NFLUXES_INPUTS
+        nfxp = NFLUXES_POTENTIAL
+        nvariables = len(variables_specs)
+
+        self.flux_scalings = 1.
+        self.gammas = 100.
+        self.variables_reservoir_id = np.ascontiguousarray(variables_specs[:, 0])
+        self.variables_type_id = np.ascontiguousarray(variables_specs[:, 1])
+
+        ntimesteps = Qstars.shape[0]
+        if Qstars.shape[1] != nres:
+            errmsg = f"Expected Qstars.shape[1] = {nres}."
+            raise ValueError(errmsg)
+        if Qstars.shape[2] != nfxp:
+            errmsg = f"Expected Qstars.shape[2] = {nfxp}."
+            raise ValueError(errmsg)
+        self.Qstars = Qstars
+
+        self.dQstars_ext = np.empty((nvariables, nfxi))
+        self.x = np.empty((ntimesteps, nres))
+        self.dx = np.empty((ntimesteps, nres))
+        self.fluxes = np.empty((ntimesteps, nres))
+        self.dfluxes = np.empty((ntimesteps, nres))
+        self.niter = np.empty((ntimesteps, nres), dtype=np.int32)
+
+    def run(self):
+        grad_model(self.alphas, self.gammas,
+                   self.input_mapping,
+                   self.x0,
+                   self.variables_reservoir_id,
+                   self.variables_type_id,
+                   self.Qstars,
+                   self.coefs_linear,
+                   self.timestep,
+                   self.dx0,
+                   self.flux_scalings,
+                   self.x,
+                   self.dx,
+                   self.fluxes,
+                   self.dfluxes,
+                   self.niter,
+                   self.dQstars_ext,
+                   self.errors)

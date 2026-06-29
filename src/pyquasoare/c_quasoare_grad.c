@@ -791,7 +791,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
             /* Data indexes */
             nres_times_t = nreservoirs * t;
             idx_q = (nres_times_t + res) * nfxp;
-            idx_fs = res * nfxo;
+            idx_fs = res * nfxi;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
             idx_a = nalphas * res;
             idx_x = nres_times_t + res;
