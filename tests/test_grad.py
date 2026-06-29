@@ -537,6 +537,25 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+def test_grad_model(siteid, allclose):
+    df = data_reader.get_data(siteid, "daily")
+    Qstars = np.zeros((len(df), 2, 2))
+    Qstars[:, :, 0] = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+
+    mod = gradients.MultiReservoirModel(2)
+    mod.network.add_link_total_outflow(0, 1)
+    mod.alphas = 10
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jroute"])
+    mod.gammas = [400., 50.]
+
+    vspecs = [[0, 0], [0, 1], [1, 0], [1, 1]]
+    mod.initialise(Qstars, vspecs)
+
+    mod.run()
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", [0.1, 1])
 def test_grad_gr4j(siteid, timestep, allclose):
     pytest.skip("WIP")
