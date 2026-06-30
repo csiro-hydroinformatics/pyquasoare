@@ -537,7 +537,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-def test_grad_model(siteid, allclose):
+def test_grad_model(siteid, allclose, debug_mode):
     df = data_reader.get_data(siteid, "daily")
     Qstars = np.zeros((len(df), 2, 2))
     Qstars[:, :, 0] = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -551,9 +551,7 @@ def test_grad_model(siteid, allclose):
 
     vspecs = [[0, 0], [0, 1], [1, 0], [1, 1]]
     mod.initialise(Qstars, vspecs)
-
     mod.run()
-
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", [0.1, 1])

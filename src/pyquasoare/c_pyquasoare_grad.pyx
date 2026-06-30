@@ -296,7 +296,7 @@ def grad_model(int errors,
                np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
                np.ndarray[double, ndim=2, mode='c'] x not None,
                np.ndarray[double, ndim=3, mode='c'] dx not None,
-               np.ndarray[double, ndim=2, mode='c'] fluxes not None,
+               np.ndarray[double, ndim=3, mode='c'] fluxes not None,
                np.ndarray[double, ndim=4, mode='c'] dfluxes not None):
 
     # Check dimensions
@@ -317,7 +317,7 @@ def grad_model(int errors,
     if flux_scalings.shape[0] != nreservoirs:
         raise ValueError("flux_scalings.shape[0] != nreservoirs")
 
-    if flux_scalings.shape[1] != NFLUXES_INPUTS
+    if flux_scalings.shape[1] != NFLUXES_INPUTS:
         raise ValueError("flux_scalings.shape[1] != NFLUXES_INPUTS")
 
     if variables_reservoir_id.shape[0] != nvariables:
@@ -353,8 +353,11 @@ def grad_model(int errors,
     if fluxes.shape[0] != nval:
         raise ValueError("fluxes.shape[0] != nval")
 
-    if fluxes.shape[1] != NFLUXES_OUTPUTS * nreservoirs:
-        raise ValueError("fluxes.shape[0] != NFLUXES_OUTPUTS * nreservoirs")
+    if fluxes.shape[1] != nreservoirs:
+        raise ValueError("fluxes.shape[0] != nreservoirs")
+
+    if fluxes.shape[2] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes.shape[1] != NFLUXES_OUTPUTS")
 
     if dfluxes.shape[0] != nval:
         raise ValueError("dfluxes.shape[0] != nval")

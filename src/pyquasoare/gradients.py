@@ -1,4 +1,3 @@
-from collections import namedtuple
 import numpy as np
 
 from pyquasoare import has_c_module, approx
@@ -28,7 +27,7 @@ IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
 
 def get_alphas(nalphas, eps=1e-5, amax=1., nalphas_above_one=10, nreservoirs=1):
     alphas = [-eps, 0., eps] \
-             + np.linspace(2 * eps, 1 - 2 * eps, NALPHAS - 6).tolist() \
+             + np.linspace(2 * eps, 1 - 2 * eps, nalphas - 6).tolist() \
              + [1 - eps, 1., 1 + eps]
     if amax > 1.:
         alphas += np.linspace(1 + 2 * eps, nalphas_above_one, 6).tolist()
@@ -220,13 +219,13 @@ def grad_model(alphas, gammas,
     nvariables = variables_reservoir_id.shape[0]
 
     if flux_scalings is None:
-        flux_scalings = np.ones(NFLUXES_INPUTS)
+        flux_scalings = np.ones((nreservoirs, NFLUXES_INPUTS))
 
     if x is None:
-        x = np.zeros(nval, dtype=np.float64)
+        x = np.zeros((nval, nreservoirs), dtype=np.float64)
 
     if dx is None:
-        dx = np.zeros((nval, nvariables), dtype=np.float64)
+        dx = np.zeros((nval, nreservoirs, nvariables), dtype=np.float64)
 
     if fluxes is None:
         fluxes = np.zeros((nval, NFLUXES_OUTPUTS), dtype=np.float64)
@@ -433,10 +432,6 @@ class MultiReservoirModel():
         return self.network.nreservoirs
 
     @property
-    def alphas(self):
-        return self._alphas
-
-    @property
     def coefs_linear(self):
         return self._coefs_linear
 
@@ -526,6 +521,7 @@ class MultiReservoirModel():
         nres = self.nreservoirs
         nfxi = NFLUXES_INPUTS
         nfxp = NFLUXES_POTENTIAL
+        nfxo = NFLUXES_OUTPUTS
         nvariables = len(variables_specs)
 
         self.flux_scalings = 1.
@@ -547,25 +543,27 @@ class MultiReservoirModel():
         self.dQstars_ext = np.empty((nvariables, nfxi))
         self.x0 = 0.5 * np.ones(nres)
         self.x = np.empty((ntimesteps, nres))
-        self.dx = np.empty((ntimesteps, nres))
-        self.fluxes = np.empty((ntimesteps, nres))
-        self.dfluxes = np.empty((ntimesteps, nres))
+        self.dx = np.empty((ntimesteps, nres, nvariables))
+        self.fluxes = np.empty((ntimesteps, nres, nfxo))
+        self.dfluxes = np.empty((ntimesteps, nvariables, nres, nfxo))
         self.niter = np.empty((ntimesteps, nres), dtype=np.int32)
 
     def run(self):
-        grad_model(self.alphas, self.gammas,
-                   self.network.input_mapping,
-                   self.x0,
-                   self.variables_reservoir_id,
-                   self.variables_type_id,
-                   self.Qstars,
-                   self.coefs_linear,
-                   self.timestep,
-                   self.flux_scalings,
-                   self.x,
-                   self.dx,
-                   self.fluxes,
-                   self.dfluxes,
-                   self.niter,
-                   self.dQstars_ext,
-                   self.errors)
+        grad_model(alphas=self.alphas,
+                   gammas=self.gammas,
+                   input_mapping=self.network.input_mapping,
+                   x0=self.x0,
+                   variables_reservoir_id=self.variables_reservoir_id,
+                   variables_type_id=self.variables_type_id,
+                   Qstars=self.Qstars,
+                   coefs_linear=self.coefs_linear,
+                   timestep=self.timestep,
+                   flux_scalings=self.flux_scalings,
+                   x=self.x,
+                   dx=self.dx,
+                   fluxes=self.fluxes,
+                   dfluxes=self.dfluxes,
+                   niter=self.niter,
+                   dQstars_ext=self.dQstars_ext,
+                   errors=self.errors)
+
