@@ -632,6 +632,7 @@ int c_grad_reservoir(int nalphas, int nval,
                     double * fluxes,
                     double * dfluxes) {
     int ierr, t, dvar, i, idx_dx, idx_f, idx_df;
+
     int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
     int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
 
@@ -798,7 +799,7 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
             idx_dx = (nres_times_t + res) * nvariables;
             idx_f = (nres_times_t + res) * nfxo;
             idx_df = (nres_times_t + res) * nfxo * nvariables;
-            idx_m0 = nreservoirs * nfxo * nipmd;
+            idx_m0 = nreservoirs * nfxo * nipmd * res;
 
             /* .. next time step */
             idx_xn = nres_times_t + nreservoirs + res;
@@ -812,9 +813,6 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
             Qstars_timestep[1] = Qstars[idx_q + 1];
             if(isnan(Qstars_timestep[1]))
                 Qstars_timestep[1] = 0.;
-
-            /* Baseline flux mapping index */
-            idx_m0 = nfxp * nreservoirs * nfxo * res;
 
             /* Loops through upstream links */
             for(ulink = 0; ulink < nreservoirs * nfxo; ulink++) {

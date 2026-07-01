@@ -304,7 +304,7 @@ class NetworkLink():
 
 class Network():
     def __init__(self, nreservoirs):
-        self.nreservoirs = nreservoirs
+        self.nreservoirs = int(nreservoirs)
         self.links = []
         self._input_mapping = None
 
@@ -416,7 +416,6 @@ class MultiReservoirModel():
         self._gammas = None
         self._flux_scalings = None
         self._alphas = None
-
         self._coefs_linear = None
 
     @property
@@ -430,6 +429,10 @@ class MultiReservoirModel():
     @property
     def nreservoirs(self):
         return self.network.nreservoirs
+
+    @property
+    def input_mapping(self):
+        return self.network.input_mapping
 
     @property
     def coefs_linear(self):
@@ -471,7 +474,7 @@ class MultiReservoirModel():
         else:
             value = np.array(value)
             if value.shape != (nres, ):
-                errmsg = f"Expected flux_scalings of dim ({nres},)."\
+                errmsg = f"Expected gammas of dim ({nres},)."\
                          + f" Got {value.shape}."
                 raise ValueError(errmsg)
 
@@ -515,31 +518,48 @@ class MultiReservoirModel():
         ralphas = self.alphas[rid]
         self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
 
-    def initialise(self, Qstars, variables_specs, timestep=1.):
+    def set_Qstars(self, reservoir_id, Qstars):
+        if self.Qstars is None:
+            errmsg = "Qstars is not allocated. Run 'initialise'."
+            raise ValueError(errmsg)
+
+        if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
+            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
+            raise ValueError(errmsg)
+
+        if Qstars.shape != (self.ntimesteps, NFLUXES_POTENTIAL):
+            errmsg = "Expected Qstars.shape to be"\
+                     + f" ({self.ntimestep}, {NFLUXES_POTENTIAL}),"\
+                     + f" got {Qstars.shape}."
+            raise ValueError(errmsg)
+
+        self.Qstars[:, reservoir_id, :] = Qstars
+
+    def initialise(self, ntimesteps, variables_specs=None, timestep=1.):
         self.timestep = timestep
+        self.ntimesteps = int(ntimesteps)
 
         nres = self.nreservoirs
         nfxi = NFLUXES_INPUTS
         nfxp = NFLUXES_POTENTIAL
         nfxo = NFLUXES_OUTPUTS
-        nvariables = len(variables_specs)
 
         self.flux_scalings = 1.
-        variables_specs = np.array(variables_specs)
-        self.variables_reservoir_id = \
-            np.ascontiguousarray(variables_specs[:, 0]).astype(np.int32)
-        self.variables_type_id = \
-            np.ascontiguousarray(variables_specs[:, 1]).astype(np.int32)
 
-        ntimesteps = Qstars.shape[0]
-        if Qstars.shape[1] != nres:
-            errmsg = f"Expected Qstars.shape[1] = {nres}."
-            raise ValueError(errmsg)
-        if Qstars.shape[2] != nfxp:
-            errmsg = f"Expected Qstars.shape[2] = {nfxp}."
-            raise ValueError(errmsg)
-        self.Qstars = Qstars
+        if variables_specs is None:
+            # no derivative variables, i.e. no gradient (pure simulation)
+            self.variables_reservoir_id = np.zeros((0), dtype=np.int32)
+            self.variables_type_id = np.zeros((0), dtype=np.int32)
+            nvariables = 0
+        else:
+            variables_specs = np.array(variables_specs)
+            self.variables_reservoir_id = \
+                np.ascontiguousarray(variables_specs[:, 0]).astype(np.int32)
+            self.variables_type_id = \
+                np.ascontiguousarray(variables_specs[:, 1]).astype(np.int32)
+            nvariables = len(variables_specs)
 
+        self.Qstars = np.zeros((ntimesteps, nres, nfxp))
         self.dQstars_ext = np.empty((nvariables, nfxi))
         self.x0 = 0.5 * np.ones(nres)
         self.x = np.empty((ntimesteps, nres))
@@ -551,7 +571,7 @@ class MultiReservoirModel():
     def run(self):
         grad_model(alphas=self.alphas,
                    gammas=self.gammas,
-                   input_mapping=self.network.input_mapping,
+                   input_mapping=self.input_mapping,
                    x0=self.x0,
                    variables_reservoir_id=self.variables_reservoir_id,
                    variables_type_id=self.variables_type_id,
