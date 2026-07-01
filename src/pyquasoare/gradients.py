@@ -267,6 +267,8 @@ class NetworkLink():
                  downstream_reservoir_id,
                  downstream_potential_flux_id,
                  weight, nres):
+        self.nreservoirs = nres
+
         upid = int(upstream_reservoir_id)
         if upid >= nres or upid < 0:
             errmsg = "Expected upstream reservoir id in"\
@@ -302,11 +304,25 @@ class NetworkLink():
         self.downstream_potential_flux_id = downiid
         self.weight = float(weight)
 
+    def clone(self):
+        return NetworkLink(self.upstream_reservoir_id,
+                           self.upstream_output_flux_id,
+                           self.downstream_reservoir_id,
+                           self.downstream_potential_flux_id,
+                           self.weight, self.nreservoirs)
+
+
 class Network():
     def __init__(self, nreservoirs):
         self.nreservoirs = int(nreservoirs)
         self.links = []
         self._input_mapping = None
+
+    def clone(self):
+        netw = Network(self.nreservoirs)
+        for lk in self.links:
+            netw.links.append(lk.clone())
+        return netw
 
     @property
     def input_mapping(self):
@@ -418,6 +434,19 @@ class MultiReservoirModel():
         self._alphas = None
         self._coefs_linear = None
 
+        self.variables_reservoir_id = None
+        self.variables_type_id = None
+        self.Qstars = None
+        self.dQstars_ext = None
+        self.x0 = None
+        self.x = None
+        self.dx = None
+        self.fluxes = None
+        self.dfluxes = None
+        self.niter = None
+        self.timestep = None
+        self.ntimesteps = None
+
     @property
     def errors(self):
         return self._errors
@@ -520,7 +549,7 @@ class MultiReservoirModel():
 
     def set_Qstars(self, reservoir_id, Qstars):
         if self.Qstars is None:
-            errmsg = "Qstars is not allocated. Run 'initialise'."
+            errmsg = "Qstars is not allocated. Run 'allocate'."
             raise ValueError(errmsg)
 
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
@@ -535,7 +564,7 @@ class MultiReservoirModel():
 
         self.Qstars[:, reservoir_id, :] = Qstars
 
-    def initialise(self, ntimesteps, variables_specs=None, timestep=1.):
+    def allocate(self, ntimesteps, variables_specs=None, timestep=1.):
         self.timestep = timestep
         self.ntimesteps = int(ntimesteps)
 
@@ -567,6 +596,36 @@ class MultiReservoirModel():
         self.fluxes = np.empty((ntimesteps, nres, nfxo))
         self.dfluxes = np.empty((ntimesteps, nvariables, nres, nfxo))
         self.niter = np.empty((ntimesteps, nres), dtype=np.int32)
+
+    def clone(self):
+        mcl = MultiReservoirModel(self.nreservoirs,
+                                  self.errors)
+        mcl._network = self.network.clone()
+        mcl._gammas = self.gammas
+        mcl._flux_scalings = self.flux_scalings
+        mcl._alphas = self.alphas
+        mcl._coefs_linear = self.coefs_linear
+
+        attrns = [
+            "variables_reservoir_id",
+            "variables_type_id",
+            "Qstars",
+            "x0",
+            "x",
+            "dx",
+            "fluxes",
+            "dfluxes",
+            "niter",
+            "timestep",
+            "ntimesteps"
+            ]
+        for attrn in attrns:
+            value = getattr(self, attrn)
+            if hasattr(value, "copy"):
+                value = value.copy()
+            setattr(mcl, attrn, value)
+
+        return mcl
 
     def run(self):
         grad_model(alphas=self.alphas,
