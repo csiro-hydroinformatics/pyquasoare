@@ -537,21 +537,55 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-def test_grad_model(siteid, allclose, debug_mode):
+@pytest.mark.parametrize("timestep", TIMESTEPS)
+def test_grad_model(siteid, timestep, allclose, debug_mode):
     df = data_reader.get_data(siteid, "daily")
-    Qstars = np.zeros((len(df), 2, 2))
-    Qstars[:, :, 0] = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    #df = df.iloc[:5]
 
-    mod = gradients.MultiReservoirModel(2)
-    mod.network.add_link_total_outflow(0, 1)
+    mod = gradients.MultiReservoirModel(3)
     mod.alphas = 10
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jroute"])
-    mod.gammas = [400., 50.]
+    mod.network.add_link_bypass_shortfall(0, 1)
+    mod.network.add_link_total_outflow(1, 2)
 
-    vspecs = [[0, 0], [0, 1], [1, 0], [1, 1]]
-    mod.initialise(Qstars, vspecs)
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["intercept"])
+    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
+    mod.gammas = [5., 400., 50.]
+
+    mod.initialise(len(df), timestep=timestep)
+
+    Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qst1[:, -1] *= -1
+    Qst1 = np.ascontiguousarray(Qst1)
+    mod.set_Qstars(0, Qst1)
+
     mod.run()
+
+    # Run single reservoir
+    _, _, _, fx1, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[0]),
+                                               mod.gammas[0],
+                                               Qst1,
+                                               np.ascontiguousarray(mod.coefs_linear[0]),
+                                               timestep, mod.x0[0])
+
+    Qst2 = np.ascontiguousarray(-fx1[:, 3:5])
+    _, _, _, fx2, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[1]),
+                                               mod.gammas[1],
+                                               Qst2,
+                                               np.ascontiguousarray(mod.coefs_linear[1]),
+                                               timestep, mod.x0[1])
+
+    Qst3 = np.zeros_like(Qst1)
+    Qst3[:, 0] = -fx2[:, 5]
+    _, _, _, fx3, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[2]),
+                                               mod.gammas[2],
+                                               Qst3,
+                                               np.ascontiguousarray(mod.coefs_linear[2]),
+                                               timestep, mod.x0[2])
+    for ires in range(mod.nreservoirs):
+        fx = [fx1, fx2, fx3][ires]
+        assert allclose(fx, mod.fluxes[:, ires])
+
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", [0.1, 1])
