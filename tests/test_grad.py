@@ -481,59 +481,16 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dx_errmax = np.sort(dx_err)[-nskip]
         dfx_errmax = np.sort(dfx_err, axis=0)[-nskip]
 
-        if not debug_mode:
-            assert dx_errmax < 5e-4
-            assert dfx_errmax.max() < 1e-3
+        assert dx_errmax < 5e-4
+        assert dfx_errmax.max() < 1e-3
 
         if dx_v.std() > 1e-100:
             idx = dx_err < dx_errmax
             corr = np.corrcoef(dx_v[idx], dx_n[idx])[0, 1]
             # Sometimes corr is close to 0 because of strange
             # behaviour of numerical differences
-            if not debug_mode and abs(corr) > 1e-5:
+            if abs(corr) > 1e-5:
                 assert corr > 0.9999
-
-        if debug_mode:
-            # Display flux
-            import matplotlib.pyplot as plt
-            from hydrodiy.plot import putils
-            fig, axs = plt.subplots(nrows=2, ncols=4, sharex=True,
-                                   figsize=(15, 6), layout="constrained")
-            for ivar in range(gradients.NFLUXES_INPUTS + 1):
-                if ivar == 0:
-                    ref = x
-                    dquas = dx_v
-                    dnum = dx_n
-                    derr = dx_err
-                    title = f"storage level diff\nvs var #{vid}"
-                    errtitle = f"corr={corr:6.4f}\ndfx_errmax={dx_errmax:6.4f}"
-                else:
-                    ref = fx[:, ivar - 1]
-                    dquas = dfx_v[:, ivar - 1]
-                    dnum = dfx_n[:, ivar - 1]
-                    derr = dfx_err[:, ivar - 1]
-                    title = f"Output flux #{ivar - 1} diff\nvs var #{vid}"
-                    errtitle = f"dfx_errmax={derr.max():6.4f}"
-
-                #ref = ref[:200]
-                #dquas = dquas[:200]
-                #dnum = dnum[:200]
-
-                ax = axs[0, ivar]
-                ax.plot(ref)
-
-                ax.set(title=title)
-
-                ax = axs[1, ivar]
-                ax.plot(dquas, label="Quasoare")
-                ax.plot(dnum, label="num diff")
-                ax.set(title=errtitle)
-                ax.legend()
-                tax = ax.twinx()
-                tax.plot(derr, color="0.7")
-                tax.set(ylim=(1e-10, max(1e-5, derr.max())), yscale="log")
-            plt.show()
-            import pdb; pdb.set_trace()
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -552,7 +509,7 @@ def test_grad_model(siteid, timestep, allclose, debug_mode):
     mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
     mod.gammas = [5., 400., 50.]
 
-    mod.initialise(len(df), timestep=timestep)
+    mod.allocate(len(df), timestep=timestep)
 
     Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
     Qst1[:, -1] *= -1
@@ -588,82 +545,83 @@ def test_grad_model(siteid, timestep, allclose, debug_mode):
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("timestep", [0.1, 1])
-def test_grad_gr4j(siteid, timestep, allclose):
+@pytest.mark.parametrize("timestep", TIMESTEPS)
+def test_grad_model_tangent(siteid, timestep, allclose, debug_mode):
     pytest.skip("WIP")
-
-    demand = -0.2
-
-    # Get data
     df = data_reader.get_data(siteid, "daily")
+    df = df.iloc[:100]
 
-    Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
-    Qstars[:, 1] *= -1 # PET = negative demand
+    mod = gradients.MultiReservoirModel(2)
+    mod.alphas = 10
+    mod.network.add_link_total_outflow(0, 1)
 
-    Qstars = np.column_stack([Qstars, np.nan * Qstars, np.nan * Qstars])
-    Qstars = np.ascontiguousarray(Qstars)
-    Qstars[:, -1] = demand  # Fixed demand for routing reservoir
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jroute"])
+    mod.gammas = [400., 50.]
 
-    nin = 2
-    nout = 6
-    nres = Qstars.shape[1] // nin
+    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in [0, 1]]
+    mod.allocate(len(df), variables_specs=vspecs, timestep=timestep)
 
-    netw = gradients.Network(nres)
-    netw.add_link_bypass_shortfall(0, 1) # Intercept -> Prod
-    netw.add_link_total_outflow(1, 2) # Prod -> Route
+    Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qst1[:, -1] *= -1
+    Qst1 = np.ascontiguousarray(Qst1)
+    mod.set_Qstars(0, Qst1)
+    mod.run()
 
-    # Get params
-    # Intercept = 1mm
-    # Prod = 100mm
-    # Route = 20mm
-    gammas = np.array([1., 100., 20.])
+    fx = mod.fluxes
+    dfx = mod.dfluxes
 
-    nalphas = 10
-    a1 = np.linspace(0, 1, nalphas)
-    a2 = np.linspace(0, 1.5, nalphas)
-    alphas = np.vstack([a1, a1, a2])
+    for ivar, vspec in enumerate(vspecs):
+        rid, vid = vspec
+        modp = mod.clone()
+        modm = mod.clone()
 
-    fint = FLUX_FUNCTIONS["intercept"]
-    coefs_grad_int = gradients.lin_coefficient_matrix(fint, a1)
+        if vid == 0:
+            g = mod.gammas[rid]
+            eps = g * 1e-4
+            gs = mod.gammas.copy()
+            gs[rid] = g + eps
+            modp.gammas = gs
 
-    fprod = FLUX_FUNCTIONS["gr4jprod"]
-    coefs_grad_prod = gradients.lin_coefficient_matrix(fprod, a1)
+            gs = mod.gammas.copy()
+            gs[rid] = g - eps
+            modm.gammas = gs
 
-    froute = FLUX_FUNCTIONS["gr4jroute"]
-    coefs_grad_route = gradients.lin_coefficient_matrix(froute, a2)
+        modp.run()
+        modm.run()
 
-    coefs_lin = np.array([coefs_grad_int, coefs_grad_prod, coefs_grad_route])
+        dfx_n = (modp.fluxes - modm.fluxes) / 2 / eps
+        dfx_c = dfx[:, ivar, :, :]
 
-    # initialisation
-    x0 = 0.5
+        if debug_mode:
+            import matplotlib.pyplot as plt
+            plt.close("all")
+            nfxo = gradients.NFLUXES_OUTPUTS
+            nfxi = gradients.NFLUXES_INPUTS
+            fig, axs = plt.subplots(nrows=mod.nreservoirs,
+                                    ncols=nfxi,
+                                    figsize=(15, 7),
+                                    layout="constrained")
 
-    # 3 steps run
-    qst = np.ascontiguousarray(Qstars[:, :2])
-    _, x1i, fluxesi = gradients.grad_reservoir(a1, timestep,
-                                              qst, gammas[0],
-                                              coefs_grad_int, x0)
-    qst[:, 0] = -fluxesi[:, 3]
-    qst[:, 1] = -fluxesi[:, 4]
-    _, x1p, fluxesp = gradients.grad_reservoir(a1, timestep,
-                                              qst, gammas[1],
-                                              coefs_grad_prod, x0)
+            for iax, ax in enumerate(axs.flat):
+                res = iax // nfxi
+                ifx = iax % nfxi
+                yc = dfx_c[:, res, ifx]
+                yn = dfx_n[:, res, ifx]
+                ax.plot(yc, label="C")
+                ax.plot(yn, label="N")
+                tax = ax.twinx()
+                err = yc - yn
+                tax.plot(err, color="0.7")
+                ax.legend(loc=1)
+                title = f"Res {res} - Fx {ifx}"
+                ax.set_title(title, y=0.95, x=0.5,
+                             ha="center",
+                             va="top",
+                             fontweight="bold")
 
-    qst[:, 0] = -fluxesp[:, 5]
-    qst[:, 1] = demand
-    _, x1r, fluxesr = gradients.grad_reservoir(a2, timestep,
-                                              qst, gammas[2],
-                                              coefs_grad_route, x0)
+            plt.show()
+            import pdb; pdb.set_trace()
 
-    # Model run
-    x1, fluxes = gradients.grad_model(alphas, timestep,
-                                      Qstars, netw.Qstars_mapping,
-                                      gammas, coefs_lin, x0)
 
-    assert allclose(x1i, x1[:, 0])
-    assert allclose(fluxesi, fluxes[:, :6])
 
-    assert allclose(x1p, x1[:, 1])
-    assert allclose(fluxesp, fluxes[:, 6:12])
-
-    assert allclose(x1r, x1[:, 2])
-    assert allclose(fluxesr, fluxes[:, 12:])
