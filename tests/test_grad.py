@@ -234,9 +234,19 @@ def test_network(linktype, allclose):
                 # demand shortfall flow from upstream links to demand
                 assert all(lks[1] == [rid - 1, 4, 1, -sc])
 
-    # This is cyclical -> error
+
+def test_network_cyclical():
+    netw = gradients.Network(3)
+    netw.add_link_total_outflow(0, 1)
+    netw.add_link_total_outflow(1, 2)
     with pytest.raises(ValueError, match="cyclical"):
         netw.add_link_total_outflow(2, 0)
+
+
+def test_network_wrong_order():
+    netw = gradients.Network(3)
+    with pytest.raises(ValueError, match="rearrange"):
+        netw.add_link_total_outflow(2, 1)
 
 
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
@@ -493,12 +503,59 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                 assert corr > 0.9999
 
 
+def test_grad_model_clone(allclose):
+    siteid = "203014"
+    timestep = 1.
+
+
+    mod = gradients.MultiReservoirModel(2)
+    mod.alphas = 10
+    mod.network.add_link_bypass_shortfall(0, 1)
+
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["intercept"])
+    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
+    mod.gammas = [5., 400.]
+
+    df = data_reader.get_data(siteid, "daily")
+    mod.allocate(len(df), timestep=timestep)
+    Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qst1[:, -1] *= -1
+    Qst1 = np.ascontiguousarray(Qst1)
+    mod.set_Qstars(0, Qst1)
+
+    modc = mod.clone()
+
+    # Check clone is independent from source
+    attrns = [
+        "variables_reservoir_id",
+        "variables_type_id",
+        "_coefs_linear",
+        "_flux_scalings",
+        "Qstars",
+        "x0",
+        "x",
+        "dx",
+        "fluxes",
+        "dfluxes",
+        "niter",
+        ]
+    ntested = 0
+    for vn in attrns:
+        v1 = getattr(mod, vn)
+        v2 = getattr(modc, vn)
+        try:
+            v2.flat[0] += 1
+        except:
+            continue
+
+        assert abs(v1.flat[0] - v2.flat[0]) > 0
+        ntested += 1
+
+    assert ntested == 7
+
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 def test_grad_model(siteid, timestep, allclose, debug_mode):
-    df = data_reader.get_data(siteid, "daily")
-    #df = df.iloc[:5]
-
     mod = gradients.MultiReservoirModel(3)
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
@@ -509,8 +566,8 @@ def test_grad_model(siteid, timestep, allclose, debug_mode):
     mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
     mod.gammas = [5., 400., 50.]
 
+    df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep=timestep)
-
     Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
@@ -546,54 +603,86 @@ def test_grad_model(siteid, timestep, allclose, debug_mode):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
-def test_grad_model_tangent(siteid, timestep, allclose, debug_mode):
+@pytest.mark.parametrize("demand", DEMANDS)
+def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     pytest.skip("WIP")
     df = data_reader.get_data(siteid, "daily")
-    df = df.iloc[:100]
+    df = df.iloc[:1]
 
-    mod = gradients.MultiReservoirModel(2)
+    mod = gradients.MultiReservoirModel(3)
     mod.alphas = 10
-    mod.network.add_link_total_outflow(0, 1)
+    mod.network.add_link_bypass_shortfall(0, 1)
+    mod.network.add_link_total_outflow(1, 2)
 
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jroute"])
-    mod.gammas = [400., 50.]
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["intercept"])
+    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
+    mod.gammas = [5., 400., 50.]
 
-    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in [0, 1]]
+    nv = gradients.VARTYPE_NUMBER
+    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
     mod.allocate(len(df), variables_specs=vspecs, timestep=timestep)
 
     Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
     mod.set_Qstars(0, Qst1)
-    mod.run()
 
+    Qst2 = np.zeros((len(df), 2))
+    Qst2[:, -1] = 1.
+    mod.set_Qstars(1, Qst2)
+
+    # Set demand
+    fxs = np.ones((mod.nreservoirs, 3))
+    fxs[-1, 1] = demand
+    mod.flux_scalings = fxs
+
+    mod.run()
     fx = mod.fluxes
     dfx = mod.dfluxes
 
+    # Numerical differences
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
+        print(f"var#{ivar}: rid={rid} vid={vid}")
+
+        # Test downstream parameters have no effect on upstream fluxes
+        if rid > 0:
+            dfxu = dfx[:, ivar, :rid, :]
+            assert allclose(dfxu, 0.)
+        continue
+
         modp = mod.clone()
         modm = mod.clone()
 
         if vid == 0:
-            g = mod.gammas[rid]
-            eps = g * 1e-4
+            # Differentiate against gamma
             gs = mod.gammas.copy()
-            gs[rid] = g + eps
+            eps = gs[rid] * 1e-4
+            gs[rid] = gs[rid] + eps
             modp.gammas = gs
 
             gs = mod.gammas.copy()
-            gs[rid] = g - eps
+            gs[rid] = gs[rid] - eps
             modm.gammas = gs
+        else:
+            eps = NUMDIFF_EPS
+            coefs_lin = modm._coefs_linear
+            coefs_lin[rid, vid - 1] *= (1 - eps)
+
+            d = modm.coefs_linear[rid, vid - 1] - mod.coefs_linear[rid, vid - 1]
+
+            coefs_lin = modp._coefs_linear
+            coefs_lin[rid, vid - 1] *= (1 + eps)
 
         modp.run()
         modm.run()
 
         dfx_n = (modp.fluxes - modm.fluxes) / 2 / eps
         dfx_c = dfx[:, ivar, :, :]
+        #assert allclose(dfx_n, dfx_c)
 
-        if debug_mode:
+        if debug_mode and vid == 1 and rid == 1:
             import matplotlib.pyplot as plt
             plt.close("all")
             nfxo = gradients.NFLUXES_OUTPUTS

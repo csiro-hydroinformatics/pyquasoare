@@ -141,6 +141,7 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
         reservoir_id = variables_reservoir_id[dvar];
         type_id = variables_type_id[dvar];
         idx_dq = nfxi * dvar;
+        //fprintf(stdout, "\t\tdvar=%d rid=%d tid=%d\n", dvar, reservoir_id, type_id);
 
         /* Baseline index for flux derivatives */
         idx_df0 = nfxo * nreservoirs * dvar;
@@ -149,8 +150,8 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
         for(inp = 0; inp < nfxi; inp++)
             dQstars_ext[idx_dq + inp] = 0;
 
-        if(reservoir_id != current_reservoir_id) {
-            /* Variable does not belong to the current reservoir.
+        if(reservoir_id < current_reservoir_id) {
+            /* Variable belongs to upstream reservoir.
              * Compute dQstars_timestep_extar[dvar] / dη based
              * on upstream flux derivatives and their mapping to
              * the current reservoir */
@@ -175,8 +176,15 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
                      / input_mapping_scaling_factor;
 
                  idx_df = idx_df0 + nfxo  * resup_id + resup_ofx_id;
+
+                 /* THIS CAN ONLY BE COMPUTED IF UPSTREAM HAS RUN
+                  * HENCE, WE NEED TO ORDER THE RESERVOIRS */
                  dQstars_ext[idx_dq + resdown_pfx_id]
                      += input_mapping_weight * dfluxes[idx_df];
+
+                 //fprintf(stdout, "\t\t\tulink=%d\n", ulink);
+                 //fprintf(stdout, "\t\t\tidx_dq=%d rdid=%d ifxu=%d ifxd=%d idx_df=%d\n", idx_dq, resup_id, resup_ofx_id, resdown_pfx_id, idx_df);
+                 //fprintf(stdout, "\t\t\tw=%3.3e df=%3.3e -> dQ=%3.3e\n", input_mapping_weight, dfluxes[idx_df], dQstars_ext[idx_dq + resdown_pfx_id]);
             }
 
         } else {
@@ -305,7 +313,10 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
     if(gamma <= 0)
         return QUASOARE_CAPACITY_IS_NEGATIVE_OR_NULL;
 
-    /* Compute Qstars derivative */
+    /* Compute Qstars derivative
+     * This is independent from quasoare iterations
+     * */
+    //fprintf(stdout, "\t=> qstars derivatives\n");
     c_grad_qstars_derivative(nreservoirs, nvariables,
                              input_mapping, timestep,
                              current_reservoir_id,
@@ -316,6 +327,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
 
     /* Time loop */
     while (t_end < t_final * (1 - QUASOARE_EPS) && nit < niter_max) {
+        //fprintf(stdout, "\t=> quasoare iteration %d\n", nit);
         nit += 1;
 
         /* Extrapolation is triggered if s_start is
@@ -474,6 +486,7 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
 
         /* Loop over independent variables */
         for(dvar = 0; dvar < nvariables; dvar++) {
+            //fprintf(stdout, "\t\tCompute sensitivities dvar=%d\n", dvar);
             reservoir_id = variables_reservoir_id[dvar];
             type_id = variables_type_id[dvar];
 
@@ -780,17 +793,20 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
     }
 
     /* timestep loop */
-    for(t = 0; t < nval; t++) {
+    for(t  = 0; t < nval; t++) {
+        /* All flux derivatives are required to retrieve upstream fluxes */
+        nres_times_t = nreservoirs * t;
+        idx_df = nres_times_t * nfxo * nvariables;
 
         /* loop through reservoirs */
         for(res = 0; res < nreservoirs; res++) {
+            //fprintf(stdout, "\n--- t=%d res=%d ---\n", t, res);
             current_reservoir_id = res;
 
             /* Get reservoir capacity */
             gamma = gammas[res];
 
             /* Data indexes */
-            nres_times_t = nreservoirs * t;
             idx_q = (nres_times_t + res) * nfxp;
             idx_fs = res * nfxi;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
@@ -798,7 +814,6 @@ int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
             idx_x = nres_times_t + res;
             idx_dx = (nres_times_t + res) * nvariables;
             idx_f = (nres_times_t + res) * nfxo;
-            idx_df = (nres_times_t + res) * nfxo * nvariables;
             idx_m0 = nreservoirs * nfxo * nipmd * res;
 
             /* .. next time step */
