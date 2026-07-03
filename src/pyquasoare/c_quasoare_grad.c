@@ -139,9 +139,12 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
     /* Loop on variables */
     for(dvar = 0; dvar < nvariables; dvar++) {
         reservoir_id = variables_reservoir_id[dvar];
+        if(reservoir_id >= nreservoirs)
+           return QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS;
+
         type_id = variables_type_id[dvar];
         idx_dq = nfxi * dvar;
-        //fprintf(stdout, "\t\tdvar=%d rid=%d tid=%d\n", dvar, reservoir_id, type_id);
+        //fprintf(stdout, "\t\tcrid=%d dvar=%d rid=%d tid=%d\n", current_reservoir_id, dvar, reservoir_id, type_id);
 
         /* Baseline index for flux derivatives */
         idx_df0 = nfxo * nreservoirs * dvar;
@@ -151,7 +154,7 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
             dQstars_ext[idx_dq + inp] = 0;
 
         if(reservoir_id < current_reservoir_id) {
-            /* Variable belongs to upstream reservoir.
+            /* Variable belongs to a reservoir located upstream.
              * Compute dQstars_timestep_extar[dvar] / dη based
              * on upstream flux derivatives and their mapping to
              * the current reservoir */
@@ -164,12 +167,21 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
                  idx_m = idx_m0 + ulink * nipmd;
                  resup_id = input_mapping[idx_m];
 
+                 /* Wrong upstream reservoir */
+                 if(reservoir_id != resup_id)
+                    continue;
+
                  /* No more links ... we break */
                  if(resup_id < 0)
                      break;
 
                  resup_ofx_id = input_mapping[idx_m + 1];
+                 if(resup_ofx_id >= QUASOARE_GRAD_NFLUXES_OUTPUTS)
+                    return QUASOARE_GRAD_FLUXID_OUTOFBOUNDS;
+
                  resdown_pfx_id = input_mapping[idx_m + 2];
+                 if(resdown_pfx_id >= QUASOARE_GRAD_NFLUXES_POTENTIAL)
+                    return QUASOARE_GRAD_FLUXID_OUTOFBOUNDS;
 
                  /* here we scale the weight using the scaling factor */
                  input_mapping_weight = (double)(input_mapping[idx_m + 3])
@@ -182,8 +194,8 @@ int c_grad_qstars_derivative(int nreservoirs, int nvariables,
                  dQstars_ext[idx_dq + resdown_pfx_id]
                      += input_mapping_weight * dfluxes[idx_df];
 
-                 //fprintf(stdout, "\t\t\tulink=%d\n", ulink);
-                 //fprintf(stdout, "\t\t\tidx_dq=%d rdid=%d ifxu=%d ifxd=%d idx_df=%d\n", idx_dq, resup_id, resup_ofx_id, resdown_pfx_id, idx_df);
+                 //fprintf(stdout, "\t\t\tulink=%d ruid=%d ifxu=%d ifxd=%d\n", ulink, resup_id, resup_ofx_id, resdown_pfx_id);
+                 //fprintf(stdout, "\t\t\tidx_m=%d idx_dq=%d idx_df=%d\n", idx_m, idx_dq, idx_df);
                  //fprintf(stdout, "\t\t\tw=%3.3e df=%3.3e -> dQ=%3.3e\n", input_mapping_weight, dfluxes[idx_df], dQstars_ext[idx_dq + resdown_pfx_id]);
             }
 
@@ -317,13 +329,15 @@ int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
      * This is independent from quasoare iterations
      * */
     //fprintf(stdout, "\t=> qstars derivatives\n");
-    c_grad_qstars_derivative(nreservoirs, nvariables,
-                             input_mapping, timestep,
-                             current_reservoir_id,
-                             variables_reservoir_id,
-                             variables_type_id,
-                             dfluxes,
-                             dQstars_ext);
+    ierr = c_grad_qstars_derivative(nreservoirs, nvariables,
+                                    input_mapping, timestep,
+                                    current_reservoir_id,
+                                    variables_reservoir_id,
+                                    variables_type_id,
+                                    dfluxes,
+                                    dQstars_ext);
+    if(ierr > 0)
+        return ierr;
 
     /* Time loop */
     while (t_end < t_final * (1 - QUASOARE_EPS) && nit < niter_max) {
