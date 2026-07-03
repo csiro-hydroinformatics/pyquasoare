@@ -374,7 +374,13 @@ class Network():
 
             return upids
 
-        return set(add_upids(reservoir_id, [])[1:])
+        upids = set(add_upids(reservoir_id, [])[1:])
+        if any(u >= reservoir_id for u in upids):
+            errmsg = "Some reservoir ids located upstream of reservoir"\
+                     + f" #{reservoir_id} are >={reservoir_id}."\
+                     + " Please rearrange reservoirs to get lower ids upstream."
+            raise ValueError(errmsg)
+        return upids
 
     def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
                  downstream_reservoir_id, downstream_potential_flux_id,
@@ -389,6 +395,7 @@ class Network():
 
         # check non-cyclic
         self.upstream_reservoirs(downstream_reservoir_id)
+
 
     def add_link_total_outflow(self, upstream_reservoir_id,
                                downstream_reservoir_id,
@@ -588,7 +595,9 @@ class MultiReservoirModel():
                 np.ascontiguousarray(variables_specs[:, 1]).astype(np.int32)
             nvariables = len(variables_specs)
 
-        self.Qstars = np.zeros((ntimesteps, nres, nfxp))
+        Qst = np.empty((ntimesteps, nres, nfxp))
+        Qst.fill(np.nan)
+        self.Qstars = Qst
         self.dQstars_ext = np.empty((nvariables, nfxi))
         self.x0 = 0.5 * np.ones(nres)
         self.x = np.empty((ntimesteps, nres))
@@ -609,6 +618,8 @@ class MultiReservoirModel():
         attrns = [
             "variables_reservoir_id",
             "variables_type_id",
+            "_coefs_linear",
+            "_flux_scalings",
             "Qstars",
             "x0",
             "x",
