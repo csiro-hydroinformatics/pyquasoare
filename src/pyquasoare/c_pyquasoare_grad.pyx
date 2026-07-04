@@ -5,44 +5,45 @@ np.import_array()
 
 # -- HEADERS --
 cdef extern from 'c_quasoare_grad.h':
-    cdef int QUASOARE_GRAD_NPIECEWISEPARAMS
-    cdef int QUASOARE_GRAD_NFLUXES_POTENTIAL
-    cdef int QUASOARE_GRAD_NFLUXES_INPUTS
-    cdef int QUASOARE_GRAD_NFLUXES_OUTPUTS
-    cdef int QUASOARE_GRAD_NDERIV
+    cdef unsigned int QUASOARE_GRAD_NPIECEWISEPARAMS
+    cdef unsigned int QUASOARE_GRAD_NFLUXES_POTENTIAL
+    cdef unsigned int QUASOARE_GRAD_NFLUXES_INPUTS
+    cdef unsigned int QUASOARE_GRAD_NFLUXES_OUTPUTS
+    cdef unsigned int QUASOARE_GRAD_NDERIV
 
-    cdef int QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
-    cdef int QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
+    cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
+    cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
+    cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID
 
-    cdef int QUASOARE_GRAD_VARTYPE_NUMBER
+    cdef unsigned int QUASOARE_GRAD_VARTYPE_NUMBER
 
-    cdef int QUASOARE_GRAD_IFLUX_INFLOW
-    cdef int QUASOARE_GRAD_IFLUX_DEMAND
-    cdef int QUASOARE_GRAD_IFLUX_DRAINAGE
-    cdef int QUASOARE_GRAD_IFLUX_BYPASS
-    cdef int QUASOARE_GRAD_IFLUX_SHORTFALL
-    cdef int QUASOARE_GRAD_IFLUX_OUTFLOW
+    cdef unsigned int QUASOARE_GRAD_IFLUX_INFLOW
+    cdef unsigned int QUASOARE_GRAD_IFLUX_DEMAND
+    cdef unsigned int QUASOARE_GRAD_IFLUX_DRAINAGE
+    cdef unsigned int QUASOARE_GRAD_IFLUX_BYPASS
+    cdef unsigned int QUASOARE_GRAD_IFLUX_SHORTFALL
+    cdef unsigned int QUASOARE_GRAD_IFLUX_OUTFLOW
 
-    int c_grad_integrate(int nalphas, int nreservoirs, int nvariables,
+    unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          double *alphas,
                          double timestep,
                          double gamma,
-                         int *input_mapping,
+                         unsigned int *input_mapping,
                          double *Qstars,
                          double *dQstars_ext,
                          double *flux_scalings,
                          double *coefs_linear,
-                         int current_reservoir_id,
-                         int *variables_reservoir_id,
-                         int *variables_type_id,
-                         int *niter,
+                         unsigned int current_reservoir_id,
+                         unsigned int *variables_reservoir_id,
+                         unsigned int *variables_type_id,
+                         unsigned int *niter,
                          double *x,
                          double *dx,
                          double *fluxes,
                          double *dfluxes);
 
-    int c_grad_reservoir(int nalphas, int nval,
-                         int errors,
+    unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
+                         unsigned int errors,
                          double *alphas,
                          double timestep,
                          double gamma,
@@ -51,22 +52,22 @@ cdef extern from 'c_quasoare_grad.h':
                          double *Qstars,
                          double *dQstars_ext,
                          double *coefs_linear,
-                         int *niter,
+                         unsigned int *niter,
                          double *x,
                          double *dx,
                          double *fluxes,
                          double *dfluxes);
 
-    int c_grad_model(int nalphas, int nreservoirs, int nvariables, int nval,
-                     int errors,
+    unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
+                     unsigned int errors,
                      double *alphas,
                      double timestep,
                      double *gammas,
-                     int *input_mapping,
+                     unsigned int *input_mapping,
                      double *flux_scalings,
                      double *x0,
-                     int *variables_reservoir_id,
-                     int *variables_type_id,
+                     unsigned int *variables_reservoir_id,
+                     unsigned int *variables_type_id,
                      double *Qstars,
                      double *dQstars_ext,
                      double *coefs_linear,
@@ -83,6 +84,7 @@ NPIECEWISEPARAMS = QUASOARE_GRAD_NPIECEWISEPARAMS
 NDERIV = QUASOARE_GRAD_NDERIV
 INPUT_MAPPING_LASTDIM = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
 INPUT_MAPPING_SCALINGFACTOR = QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
+INPUT_MAPPING_MISSINGRESERVOIRID = QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID
 VARTYPE_NUMBER = QUASOARE_GRAD_VARTYPE_NUMBER
 
 IFLUX_INFLOW = QUASOARE_GRAD_IFLUX_INFLOW
@@ -124,7 +126,7 @@ def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs):
         raise ValueError(f"coefs_linear.shape[{ibase + 2}] != NFLUXES_POTENTIAL")
 
 
-def grad_integrate(int nreservoirs, int current_reservoir_id,
+def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
@@ -142,8 +144,8 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                    np.ndarray[double, ndim=3, mode='c'] dfluxes not None):
 
     # Check dimensions
-    cdef int nalphas = alphas.shape[0]
-    cdef int nvariables = dx.shape[0]
+    cdef unsigned int nalphas = alphas.shape[0]
+    cdef unsigned int nvariables = dx.shape[0]
 
     check_dim_input_mapping(input_mapping, nreservoirs)
     check_dim_coefs_linear(coefs_linear, nalphas, 1)
@@ -189,15 +191,15 @@ def grad_integrate(int nreservoirs, int current_reservoir_id,
                            <double*> np.PyArray_DATA(alphas),
                            timestep,
                            gamma,
-                           <int*> np.PyArray_DATA(input_mapping),
+                           <unsigned int*> np.PyArray_DATA(input_mapping),
                            <double*> np.PyArray_DATA(Qstars),
                            <double*> np.PyArray_DATA(dQstars_ext),
                            <double*> np.PyArray_DATA(flux_scalings),
                            <double*> np.PyArray_DATA(coefs_linear),
                            current_reservoir_id,
-                           <int*> np.PyArray_DATA(variables_reservoir_id),
-                           <int*> np.PyArray_DATA(variables_type_id),
-                           <int*> np.PyArray_DATA(niter),
+                           <unsigned int*> np.PyArray_DATA(variables_reservoir_id),
+                           <unsigned int*> np.PyArray_DATA(variables_type_id),
+                           <unsigned int*> np.PyArray_DATA(niter),
                            <double*> np.PyArray_DATA(x),
                            <double*> np.PyArray_DATA(dx),
                            <double*> np.PyArray_DATA(fluxes),
@@ -219,10 +221,10 @@ def grad_reservoir(int errors,
                    np.ndarray[double, ndim=3, mode='c'] dfluxes not None):
 
     # Check dimensions
-    cdef int nalphas = alphas.shape[0]
-    cdef int nval = Qstars.shape[0]
-    cdef int nvariables = VARTYPE_NUMBER
-    cdef int nreservoirs = 1
+    cdef unsigned int nalphas = alphas.shape[0]
+    cdef unsigned int nval = Qstars.shape[0]
+    cdef unsigned int nvariables = VARTYPE_NUMBER
+    cdef unsigned int nreservoirs = 1
 
     check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
 
@@ -275,7 +277,7 @@ def grad_reservoir(int errors,
                             <double*> np.PyArray_DATA(Qstars),
                             <double*> np.PyArray_DATA(dQstars_ext),
                             <double*> np.PyArray_DATA(coefs_linear),
-                            <int*> np.PyArray_DATA(niter),
+                            <unsigned int*> np.PyArray_DATA(niter),
                             <double*> np.PyArray_DATA(x),
                             <double*> np.PyArray_DATA(dx),
                             <double*> np.PyArray_DATA(fluxes),
@@ -300,10 +302,10 @@ def grad_model(int errors,
                np.ndarray[double, ndim=4, mode='c'] dfluxes not None):
 
     # Check dimensions
-    cdef int nreservoirs = alphas.shape[0]
-    cdef int nalphas = alphas.shape[1]
-    cdef int nval = Qstars.shape[0]
-    cdef int nvariables = dQstars_ext.shape[0]
+    cdef unsigned int nreservoirs = alphas.shape[0]
+    cdef unsigned int nalphas = alphas.shape[1]
+    cdef unsigned int nval = Qstars.shape[0]
+    cdef unsigned int nvariables = dQstars_ext.shape[0]
 
     check_dim_input_mapping(input_mapping, nreservoirs)
     check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
@@ -376,11 +378,11 @@ def grad_model(int errors,
                         <double*> np.PyArray_DATA(alphas),
                         timestep,
                         <double*> np.PyArray_DATA(gammas),
-                        <int*> np.PyArray_DATA(input_mapping),
+                        <unsigned int*> np.PyArray_DATA(input_mapping),
                         <double*> np.PyArray_DATA(flux_scalings),
                         <double*> np.PyArray_DATA(x0),
-                        <int*> np.PyArray_DATA(variables_reservoir_id),
-                        <int*> np.PyArray_DATA(variables_type_id),
+                        <unsigned int*> np.PyArray_DATA(variables_reservoir_id),
+                        <unsigned int*> np.PyArray_DATA(variables_type_id),
                         <double*> np.PyArray_DATA(Qstars),
                         <double*> np.PyArray_DATA(dQstars_ext),
                         <double*> np.PyArray_DATA(coefs_linear),
