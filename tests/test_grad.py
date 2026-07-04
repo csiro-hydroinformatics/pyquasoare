@@ -217,22 +217,26 @@ def test_network(linktype, allclose):
     ipmd = gradients.INPUT_MAPPING_LASTDIM
     assert ipm.shape == (netw.nreservoirs, nfxo * netw.nreservoirs, ipmd)
     sc = gradients.INPUT_MAPPING_SCALINGFACTOR
+    missid = gradients.INPUT_MAPPING_MISSINGRESERVOIRID
 
     for rid in range(netw.nreservoirs):
         lks = ipm[rid]
         if rid == 0:
-            assert np.all(lks == -1)
+            assert np.all(lks[:, 0] == missid)
+            assert np.all(lks[:, 1:] == 0)
         else:
             if linktype == "total":
-                assert np.all(lks[1:] == -1)
+                assert np.all(lks[1:, 0] == missid)
+                assert np.all(lks[1:, 1:] == 0)
                 # total outflow from upstream links to inflow
-                assert all(lks[0] == [rid - 1, 5, 0, -sc])
+                assert all(lks[0] == [rid - 1, 5, 0, sc, 0])
             else:
-                assert np.all(lks[2:] == -1)
+                assert np.all(lks[2:, 0] == missid)
+                assert np.all(lks[2:, 1:] == 0)
                 # bypass flow from upstream links to inflow
-                assert all(lks[0] == [rid - 1, 3, 0, -sc])
+                assert all(lks[0] == [rid - 1, 3, 0, sc, 0])
                 # demand shortfall flow from upstream links to demand
-                assert all(lks[1] == [rid - 1, 4, 1, -sc])
+                assert all(lks[1] == [rid - 1, 4, 1, sc, 0])
 
 
 def test_network_cyclical():
@@ -607,17 +611,17 @@ def test_grad_model(siteid, timestep, allclose, debug_mode):
 def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     pytest.skip("WIP")
     df = data_reader.get_data(siteid, "daily")
-    df = df.iloc[:1]
+    df = df.iloc[:20]
 
-    mod = gradients.MultiReservoirModel(3)
+    mod = gradients.MultiReservoirModel(3, "raise")
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
     mod.network.add_link_total_outflow(1, 2)
 
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["intercept"])
+    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
     mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
     mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
-    mod.gammas = [5., 400., 50.]
+    mod.gammas = [50., 400., 50.]
 
     nv = gradients.VARTYPE_NUMBER
     vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
@@ -630,7 +634,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
 
     Qst2 = np.zeros((len(df), 2))
     Qst2[:, -1] = 1.
-    mod.set_Qstars(1, Qst2)
+    mod.set_Qstars(2, Qst2)
 
     # Set demand
     fxs = np.ones((mod.nreservoirs, 3))
@@ -644,13 +648,11 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     # Numerical differences
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
-        print(f"var#{ivar}: rid={rid} vid={vid}")
 
         # Test downstream parameters have no effect on upstream fluxes
         if rid > 0:
             dfxu = dfx[:, ivar, :rid, :]
             assert allclose(dfxu, 0.)
-        continue
 
         modp = mod.clone()
         modm = mod.clone()
@@ -682,7 +684,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
         dfx_c = dfx[:, ivar, :, :]
         #assert allclose(dfx_n, dfx_c)
 
-        if debug_mode and vid == 1 and rid == 1:
+        if debug_mode and ivar == 4:
             import matplotlib.pyplot as plt
             plt.close("all")
             nfxo = gradients.NFLUXES_OUTPUTS
@@ -697,6 +699,11 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
                 ifx = iax % nfxi
                 yc = dfx_c[:, res, ifx]
                 yn = dfx_n[:, res, ifx]
+
+                if vid == 0:
+                    yc *= mod.gammas[res]
+                    yn *= mod.gammas[res]
+
                 ax.plot(yc, label="C")
                 ax.plot(yn, label="N")
                 tax = ax.twinx()

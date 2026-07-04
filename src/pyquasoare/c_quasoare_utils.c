@@ -177,6 +177,15 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_GRAD_TYPEID_NOT_FOUND)
         strncpy(message, "Variable type ID not found", len);
 
+    else if(err_code == QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS)
+        strncpy(message, "Reservoir ID is out of bounds", len);
+
+    else if(err_code == QUASOARE_GRAD_FLUXID_OUTOFBOUNDS)
+        strncpy(message, "Flux ID is out of bounds", len);
+
+    else if(err_code == QUASOARE_GRAD_NRESERVOIRS_TOOLARGE)
+        strncpy(message, "Number of reservoirs is too large", len);
+
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);
 

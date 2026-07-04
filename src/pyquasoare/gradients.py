@@ -9,12 +9,12 @@ else:
     raise ImportError("Cannot run quasoare without C module."
                       + " Please compile C code")
 
-
 NFLUXES_POTENTIAL = c_pyquasoare_grad.NFLUXES_POTENTIAL
 NFLUXES_INPUTS = c_pyquasoare_grad.NFLUXES_INPUTS
 NFLUXES_OUTPUTS = c_pyquasoare_grad.NFLUXES_OUTPUTS
 INPUT_MAPPING_LASTDIM = c_pyquasoare_grad.INPUT_MAPPING_LASTDIM
 INPUT_MAPPING_SCALINGFACTOR = c_pyquasoare_grad.INPUT_MAPPING_SCALINGFACTOR
+INPUT_MAPPING_MISSINGRESERVOIRID = c_pyquasoare_grad.INPUT_MAPPING_MISSINGRESERVOIRID
 VARTYPE_NUMBER = c_pyquasoare_grad.VARTYPE_NUMBER
 
 IFLUX_INFLOW = c_pyquasoare_grad.IFLUX_INFLOW
@@ -267,6 +267,9 @@ class NetworkLink():
                  downstream_reservoir_id,
                  downstream_potential_flux_id,
                  weight, nres):
+        if nres >= INPUT_MAPPING_MISSINGRESERVOIRID:
+            errmsg = f"nreservoirs cannot exceed {INPUT_MAPPING_MISSINGRESERVOIRID}."
+            raise ValueError(errmsg)
         self.nreservoirs = nres
 
         upid = int(upstream_reservoir_id)
@@ -314,6 +317,10 @@ class NetworkLink():
 
 class Network():
     def __init__(self, nreservoirs):
+        if nreservoirs >= INPUT_MAPPING_MISSINGRESERVOIRID:
+            errmsg = f"nreservoirs cannot exceed {INPUT_MAPPING_MISSINGRESERVOIRID}."
+            raise ValueError(errmsg)
+
         self.nreservoirs = int(nreservoirs)
         self.links = []
         self._input_mapping = None
@@ -335,8 +342,8 @@ class Network():
         if ipm is not None:
             return ipm
 
-        ipm = np.empty((nres, nres * nout, nipmd), dtype=np.int32)
-        ipm.fill(-1)
+        ipm = np.zeros((nres, nres * nout, nipmd), dtype=np.int32)
+        ipm[:, :, 0] = INPUT_MAPPING_MISSINGRESERVOIRID
 
         for lk in self.links:
             rdid = lk.downstream_reservoir_id
@@ -345,11 +352,13 @@ class Network():
             ouid = lk.upstream_output_flux_id
 
             lks = ipm[rdid]
-            ilk = np.where(lks[:, 0] < 0)[0][0]
+            ilk = np.where(lks[:, 0] == INPUT_MAPPING_MISSINGRESERVOIRID)[0][0]
             if ilk >= ipm.shape[1]:
                 errmsg = "Exceeded the maximum number of inter-reservoir links"
                 raise ValueError(errmsg)
-            lks[ilk, :] = [ruid, ouid, idid, int(lk.weight * sc)]
+
+            w = lk.weight * sc
+            lks[ilk, :] = [ruid, ouid, idid, int(abs(w)), 0 if w < 0 else 1]
 
         self._input_mapping = ipm
         return ipm
@@ -595,16 +604,16 @@ class MultiReservoirModel():
                 np.ascontiguousarray(variables_specs[:, 1]).astype(np.int32)
             nvariables = len(variables_specs)
 
-        Qst = np.empty((ntimesteps, nres, nfxp))
+        Qst = np.zeros((ntimesteps, nres, nfxp))
         Qst.fill(np.nan)
         self.Qstars = Qst
-        self.dQstars_ext = np.empty((nvariables, nfxi))
+        self.dQstars_ext = np.zeros((nvariables, nfxi))
         self.x0 = 0.5 * np.ones(nres)
-        self.x = np.empty((ntimesteps, nres))
-        self.dx = np.empty((ntimesteps, nres, nvariables))
-        self.fluxes = np.empty((ntimesteps, nres, nfxo))
-        self.dfluxes = np.empty((ntimesteps, nvariables, nres, nfxo))
-        self.niter = np.empty((ntimesteps, nres), dtype=np.int32)
+        self.x = np.zeros((ntimesteps, nres))
+        self.dx = np.zeros((ntimesteps, nres, nvariables))
+        self.fluxes = np.zeros((ntimesteps, nres, nfxo))
+        self.dfluxes = np.zeros((ntimesteps, nvariables, nres, nfxo))
+        self.niter = np.zeros((ntimesteps, nres), dtype=np.int32)
 
     def clone(self):
         mcl = MultiReservoirModel(self.nreservoirs,
