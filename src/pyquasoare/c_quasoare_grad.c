@@ -91,7 +91,7 @@ int c_grad_coefs_derivative(double timestep, unsigned int type_id,
     else {
         /* Gradient against flux scaling */
 
-        /* Flux number is assumed to be type of variable - 1 */
+        /* Scaling flux number is assumed to be type of variable - 1 */
         if(type_id < QUASOARE_GRAD_VARTYPE_SCALING_INFLOW
                 || type_id > QUASOARE_GRAD_VARTYPE_SCALING_DRAINAGE)
             return QUASOARE_GRAD_TYPEID_NOT_FOUND;
@@ -106,11 +106,11 @@ int c_grad_coefs_derivative(double timestep, unsigned int type_id,
             return QUASOARE_GRAD_ZERO_FLUX_SCALING;
 
         /* Gradient against scaling applied to inflow, demand o or demand flux function */
-        deriv[0] = Qstars_ext[i] * mij / scaling / gamma;
-        deriv[1] = Qstars_ext[i] * sij / scaling / gamma;
+        deriv[0] = Qstars_ext[i] * mij / gamma;
+        deriv[1] = Qstars_ext[i] * sij / gamma;
 
-        deriv[ncoefs + i] = mij / scaling;
-        deriv[ncoefs + nfxi + i] = sij / scaling;
+        deriv[ncoefs + i] = mij;
+        deriv[ncoefs + nfxi + i] = sij;
     }
     return 0;
 }
@@ -361,9 +361,9 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         return ierr;
 
     //for(dvar = 0; dvar < nvariables; dvar++) {
-    //    fprintf(stdout, "\n\t\t");
+    //    //fprintf(stdout, "\n\t\t");
     //    for(inp=0; inp < nfxi; inp++)
-    //        fprintf(stdout, "%5.3e ", dQstars_ext[nfxi * dvar + inp]);
+    //        //fprintf(stdout, "%5.3e ", dQstars_ext[nfxi * dvar + inp]);
     //}
     //fprintf(stdout, "\n");
 
@@ -416,6 +416,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             M += mij * qi;
             S += sij * qi;
         }
+        //fprintf(stdout, "\n\t\tM = %3.3e", M);
+        //fprintf(stdout, "\n\t\tS = %3.3e", S);
 
         /* Check coefficients */
         if(isnan(M) || isnan(S))
@@ -677,20 +679,20 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
 
 int c_grad_reservoir(int nalphas, unsigned int nval,
-                    unsigned int errors,
-                    double * alphas,
-                    double timestep,
-                    double gamma,
-                    double * flux_scalings,
-                    double x0,
-                    double * Qstars,
-                    double * dQstars_ext,
-                    double * coefs_linear,
-                    unsigned int * niter,
-                    double * x,
-                    double * dx,
-                    double * fluxes,
-                    double * dfluxes) {
+                     unsigned int errors,
+                     double * alphas,
+                     double timestep,
+                     double gamma,
+                     double * flux_scalings,
+                     double x0,
+                     double * Qstars,
+                     double * dQstars_ext,
+                     double * coefs_linear,
+                     unsigned int * niter,
+                     double * x,
+                     double * dx,
+                     double * fluxes,
+                     double * dfluxes) {
     unsigned int ierr, t, dvar, i, idx_dx, idx_f, idx_df;
 
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
@@ -746,18 +748,16 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 
         /* Manage errors */
         if(ierr > 0) {
+            niter[t] = -1;
+
+            for(i = 0; i < nfxo; i++)
+                fluxes[idx_f + i] = c_get_nan();
+
+            for(dvar = 0; dvar < nvariables; dvar++)
+                dx[idx_dx + dvar] = c_get_nan();
+
             if(errors == 1)
                 return ierr;
-
-            else if (errors == 0 || errors == 2){
-                niter[t] = -1;
-
-                for(i = 0; i < nfxo; i++)
-                    fluxes[idx_f + i] = c_get_nan();
-
-                for(dvar = 0; dvar < nvariables; dvar++)
-                    dx[idx_dx + dvar] = c_get_nan();
-            }
         }
 
         /* Loop states and diff states */
@@ -861,7 +861,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
         /* loop through reservoirs */
         for(res = 0; res < nreservoirs; res++) {
-            //fprintf(stdout, "\n--- t=%d res=%d ---\n", t, res);
+            //fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
             current_reservoir_id = res;
 
             /* Get reservoir capacity */
@@ -959,39 +959,39 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                                     &(fluxes[idx_f]),
                                     &(dfluxes[idx_df]));
 
-            //fprintf(stdout, "\t=> dfluxes t=%d res=%d", t, res);
+            //fprintf(stdout, "\n\t=> fluxes t=%d res=%d", t, res);
+            //for(out=0; out < nfxo; out++)
+            //    fprintf(stdout, "\n\t\tQ[%d] = %3.3e", out, fluxes[idx_f + out]);
+
+            //fprintf(stdout, "\n\t=> dfluxes t=%d res=%d", t, res);
             //for(int dvar=0; dvar < nvariables; dvar ++) {
             //    fprintf(stdout, "\n\t\tvar=%d", dvar);
             //    for(int res2=0; res2 < nreservoirs; res2++) {
             //        fprintf(stdout, "\n\t\t\tres=%d\n\t\t\t\t", res2);
-            //        for(int o=0; o<nfxo; o++) {
+            //        for(int o=0; o<nfxo; o++)
             //            fprintf(stdout, "%6.3e ", dfluxes[idx_df + nfxo * nreservoirs * dvar + nfxo  * res2 + o]);
-            //        }
             //    }
             //    fprintf(stdout, "\n\n");
             //}
 
             /* error management */
             if(ierr > 0) {
+                for(out = 0; out < nfxo; out++)
+                    fluxes[idx_f + out] = c_get_nan();
+
+                for(dvar = 0; dvar < nvariables; dvar++) {
+                    dx[idx_dx + dvar] = c_get_nan();
+                }
+
                 if(errors == 1)
                     return ierr;
-
-                else if (errors == 0 || errors == 2){
-                    niter[t] = -1;
-
-                    for(out = 0; out < nfxo; out++)
-                        fluxes[nfxo * t + out] = c_get_nan();
-
-                    for(dvar = 0; dvar < nvariables; dvar++)
-                        dx[nvariables * t + dvar] = c_get_nan();
-                }
             }
 
             /* Loop states and diff states */
             if(t < nval - 1) {
                 x[idx_xn] = x[idx_x];
 
-                for(dvar = 0; dvar < nvariables; dvar ++)
+                for(dvar = 0; dvar < nvariables; dvar++)
                     dx[idx_dxn + dvar] = dx[idx_dx + dvar];
             }
         }

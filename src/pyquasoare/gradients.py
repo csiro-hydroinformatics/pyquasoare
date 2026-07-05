@@ -446,7 +446,7 @@ class MultiReservoirModel():
         self._network = Network(nreservoirs)
         self._errors = errors
         self._gammas = None
-        self._flux_scalings = None
+        self._flux_scalings = np.ones((nreservoirs, NFLUXES_INPUTS))
         self._alphas = None
         self._coefs_linear = None
 
@@ -514,7 +514,7 @@ class MultiReservoirModel():
     @gammas.setter
     def gammas(self, value):
         nres = self.nreservoirs
-        if isinstance(value, float):
+        if isinstance(value, float) or isinstance(value, int):
             self._gammas = value * np.ones(nres)
         else:
             value = np.array(value)
@@ -536,7 +536,7 @@ class MultiReservoirModel():
     def flux_scalings(self, value):
         nres = self.nreservoirs
         nfxi = NFLUXES_INPUTS
-        if isinstance(value, float):
+        if isinstance(value, float) or isinstance(value, int):
             self._flux_scalings = value * np.ones((nres, nfxi))
         else:
             value = np.array(value)
@@ -588,8 +588,6 @@ class MultiReservoirModel():
         nfxi = NFLUXES_INPUTS
         nfxp = NFLUXES_POTENTIAL
         nfxo = NFLUXES_OUTPUTS
-
-        self.flux_scalings = 1.
 
         if variables_specs is None:
             # no derivative variables, i.e. no gradient (pure simulation)
