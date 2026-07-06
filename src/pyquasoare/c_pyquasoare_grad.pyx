@@ -12,7 +12,6 @@ cdef extern from 'c_quasoare_grad.h':
     cdef unsigned int QUASOARE_GRAD_NDERIV
 
     cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
-    cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
     cdef unsigned int QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID
 
     cdef unsigned int QUASOARE_GRAD_VARTYPE_NUMBER
@@ -29,6 +28,7 @@ cdef extern from 'c_quasoare_grad.h':
                          double timestep,
                          double gamma,
                          unsigned int *input_mapping,
+                         double *input_mapping_weights,
                          double *Qstars,
                          double *dQstars_ext,
                          double *flux_scalings,
@@ -64,6 +64,7 @@ cdef extern from 'c_quasoare_grad.h':
                      double timestep,
                      double *gammas,
                      unsigned int *input_mapping,
+                     double *input_mapping_weights,
                      double *flux_scalings,
                      double *x0,
                      unsigned int *variables_reservoir_id,
@@ -83,7 +84,6 @@ NFLUXES_OUTPUTS = QUASOARE_GRAD_NFLUXES_OUTPUTS
 NPIECEWISEPARAMS = QUASOARE_GRAD_NPIECEWISEPARAMS
 NDERIV = QUASOARE_GRAD_NDERIV
 INPUT_MAPPING_LASTDIM = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
-INPUT_MAPPING_SCALINGFACTOR = QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR
 INPUT_MAPPING_MISSINGRESERVOIRID = QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID
 VARTYPE_NUMBER = QUASOARE_GRAD_VARTYPE_NUMBER
 
@@ -99,7 +99,8 @@ def __cinit__(self):
     pass
 
 
-def check_dim_input_mapping(input_mapping, nreservoirs):
+def check_dim_input_mapping(input_mapping, input_mapping_weights,
+                            nreservoirs):
     if input_mapping.shape[0] != nreservoirs:
         raise ValueError("input_mapping.shape[0] != nreservoirs")
 
@@ -109,9 +110,14 @@ def check_dim_input_mapping(input_mapping, nreservoirs):
     if input_mapping.shape[2] != INPUT_MAPPING_LASTDIM:
         raise ValueError("input_mapping.shape[2] != INPUT_MAPPING_LASTDIM")
 
+    if input_mapping_weights.shape[0] != nreservoirs:
+        raise ValueError("input_mapping_weights.shape[0] != nreservoirs")
 
-def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs):
-    ibase = 0 if nreservoirs == 1 else 1
+    if input_mapping_weights.shape[1] != nreservoirs * NFLUXES_OUTPUTS:
+        raise ValueError("input_mapping_weights.shape[1] != nreservoirs * NFLUXES_OUTPUTS")
+
+def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, is_model):
+    ibase = 1 if is_model  else 0
     if nreservoirs != 1:
         if coefs_linear.shape[0] != nreservoirs:
             raise ValueError("coefs_linear.shape[0] != nreservoirs")
@@ -131,6 +137,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                    double timestep,
                    double gamma,
                    np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
+                   np.ndarray[double, ndim=2, mode='c'] input_mapping_weights not None,
                    np.ndarray[double, ndim=1, mode='c'] Qstars not None,
                    np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
@@ -147,8 +154,9 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
     cdef unsigned int nalphas = alphas.shape[0]
     cdef unsigned int nvariables = dx.shape[0]
 
-    check_dim_input_mapping(input_mapping, nreservoirs)
-    check_dim_coefs_linear(coefs_linear, nalphas, 1)
+    check_dim_input_mapping(input_mapping, input_mapping_weights,
+                            nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, 1, False)
 
     if Qstars.shape[0] != NFLUXES_POTENTIAL:
         raise ValueError("Qstars.shape[0] != NFLUXES_POTENTIAL")
@@ -192,6 +200,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                            timestep,
                            gamma,
                            <unsigned int*> np.PyArray_DATA(input_mapping),
+                           <double*> np.PyArray_DATA(input_mapping_weights),
                            <double*> np.PyArray_DATA(Qstars),
                            <double*> np.PyArray_DATA(dQstars_ext),
                            <double*> np.PyArray_DATA(flux_scalings),
@@ -226,7 +235,7 @@ def grad_reservoir(int errors,
     cdef unsigned int nvariables = VARTYPE_NUMBER
     cdef unsigned int nreservoirs = 1
 
-    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, False)
 
     if flux_scalings.shape[0] != NFLUXES_INPUTS:
         raise ValueError("flux_scalings.shape[0] != NFLUXES_INPUTS")
@@ -289,6 +298,7 @@ def grad_model(int errors,
                double timestep,
                np.ndarray[double, ndim=1, mode='c'] gammas not None,
                np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
+               np.ndarray[double, ndim=2, mode='c'] input_mapping_weights not None,
                np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
                np.ndarray[double, ndim=1, mode='c'] x0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
@@ -307,8 +317,9 @@ def grad_model(int errors,
     cdef unsigned int nval = Qstars.shape[0]
     cdef unsigned int nvariables = dQstars_ext.shape[0]
 
-    check_dim_input_mapping(input_mapping, nreservoirs)
-    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs)
+    check_dim_input_mapping(input_mapping, input_mapping_weights,
+                            nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, True)
 
     if gammas.shape[0] != nreservoirs:
         raise ValueError("gammas.shape[0] != nreservoirs")
@@ -379,6 +390,7 @@ def grad_model(int errors,
                         timestep,
                         <double*> np.PyArray_DATA(gammas),
                         <unsigned int*> np.PyArray_DATA(input_mapping),
+                        <double*> np.PyArray_DATA(input_mapping_weights),
                         <double*> np.PyArray_DATA(flux_scalings),
                         <double*> np.PyArray_DATA(x0),
                         <unsigned int*> np.PyArray_DATA(variables_reservoir_id),

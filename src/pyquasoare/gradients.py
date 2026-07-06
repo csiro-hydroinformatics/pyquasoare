@@ -13,7 +13,6 @@ NFLUXES_POTENTIAL = c_pyquasoare_grad.NFLUXES_POTENTIAL
 NFLUXES_INPUTS = c_pyquasoare_grad.NFLUXES_INPUTS
 NFLUXES_OUTPUTS = c_pyquasoare_grad.NFLUXES_OUTPUTS
 INPUT_MAPPING_LASTDIM = c_pyquasoare_grad.INPUT_MAPPING_LASTDIM
-INPUT_MAPPING_SCALINGFACTOR = c_pyquasoare_grad.INPUT_MAPPING_SCALINGFACTOR
 INPUT_MAPPING_MISSINGRESERVOIRID = c_pyquasoare_grad.INPUT_MAPPING_MISSINGRESERVOIRID
 VARTYPE_NUMBER = c_pyquasoare_grad.VARTYPE_NUMBER
 
@@ -23,6 +22,50 @@ IFLUX_DRAINAGE = c_pyquasoare_grad.IFLUX_DRAINAGE
 IFLUX_BYPASS = c_pyquasoare_grad.IFLUX_BYPASS
 IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
 IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
+
+
+FLUX_FUNCTIONS = {
+    "transluent": [
+        lambda x: x * 0.,
+        lambda x: x * 0.,
+        lambda x: x * 0.
+        ],
+    "gr4jprod": [
+        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
+        lambda x: 4**3/9**4 * np.maximum(x, 0)**5
+        ],
+    "gr2mprod": [
+        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
+        lambda x: np.maximum(x, 0)**4 / 3.
+        ],
+    "gr4jroute": [
+        lambda x: 0.9 * np.ones_like(x),
+        lambda x: np.maximum(x, 0.)**3.5,
+        lambda x: np.maximum(x, 0.)**5 / 4
+        ],
+    "gr2mroute": [
+        lambda x: np.ones_like(x),
+        lambda x: np.maximum(x, 0.),
+        lambda x: np.maximum(x, 0.)**2
+        ],
+    "quadrouting": [
+        lambda x: np.where(x > 0., 1., 0.),
+        lambda x: np.ones_like(x),
+        lambda x: np.maximum(x, 0.)**2
+        ],
+    "linrouting": [
+        lambda x: np.where(x > 0., 1., 0.),
+        lambda x: np.ones_like(x),
+        lambda x: np.maximum(x, 0.)
+        ],
+    "openwater": [
+        lambda x: np.where((x > 0.) & (x < 1.), 1., 0.),
+        lambda x: np.where((x > 0.) & (x < 1.), 1., 0.),
+        lambda x: np.zeros_like(x)
+        ]
+}
 
 
 def get_alphas(nalphas, eps=1e-5, amax=1., nalphas_above_one=10, nreservoirs=1):
@@ -197,6 +240,7 @@ def grad_reservoir(alphas, gamma,
 
 def grad_model(alphas, gammas,
                input_mapping,
+               input_mapping_weights,
                x0,
                variables_reservoir_id,
                variables_type_id,
@@ -243,6 +287,7 @@ def grad_model(alphas, gammas,
                                         timestep,
                                         gammas,
                                         input_mapping,
+                                        input_mapping_weights,
                                         flux_scalings,
                                         x0,
                                         variables_reservoir_id,
@@ -324,6 +369,7 @@ class Network():
         self.nreservoirs = int(nreservoirs)
         self.links = []
         self._input_mapping = None
+        self._input_mapping_weights = None
 
     def clone(self):
         netw = Network(self.nreservoirs)
@@ -331,12 +377,10 @@ class Network():
             netw.links.append(lk.clone())
         return netw
 
-    @property
-    def input_mapping(self):
+    def get_input_mapping(self):
         nout = NFLUXES_OUTPUTS
         nres = self.nreservoirs
         nipmd = INPUT_MAPPING_LASTDIM
-        sc = INPUT_MAPPING_SCALINGFACTOR
 
         ipm = self._input_mapping
         if ipm is not None:
@@ -344,6 +388,8 @@ class Network():
 
         ipm = np.zeros((nres, nres * nout, nipmd), dtype=np.int32)
         ipm[:, :, 0] = INPUT_MAPPING_MISSINGRESERVOIRID
+
+        ipmw = np.zeros((nres, nres * nout), dtype=np.float64)
 
         for lk in self.links:
             rdid = lk.downstream_reservoir_id
@@ -357,11 +403,13 @@ class Network():
                 errmsg = "Exceeded the maximum number of inter-reservoir links"
                 raise ValueError(errmsg)
 
-            w = lk.weight * sc
-            lks[ilk, :] = [ruid, ouid, idid, int(abs(w)), 0 if w < 0 else 1]
+            lks[ilk, :] = [ruid, ouid, idid]
+            ipmw[rdid, ilk] = lk.weight
 
         self._input_mapping = ipm
-        return ipm
+        self._input_mapping_weights = ipmw
+
+        return ipm, ipmw
 
     def upstream_reservoirs(self, reservoir_id):
         # Recursive function
@@ -406,10 +454,10 @@ class Network():
         self.upstream_reservoirs(downstream_reservoir_id)
 
 
-    def add_link_total_outflow(self, upstream_reservoir_id,
-                               downstream_reservoir_id,
-                               conversion_factor=1.):
-        """ Links total outflow from upstream to inflow for downstream.
+    def add_link_outflow(self, upstream_reservoir_id,
+                         downstream_reservoir_id,
+                         conversion_factor=1.):
+        """ Links outflow from upstream to inflow for downstream.
         Weight is -1 because we need to convert the outflow (<0) from
         upstream reservoir to positive inflow to the downstream reservoir.
         """
@@ -475,9 +523,8 @@ class MultiReservoirModel():
     def nreservoirs(self):
         return self.network.nreservoirs
 
-    @property
-    def input_mapping(self):
-        return self.network.input_mapping
+    def get_input_mapping(self):
+        return self.network.get_input_mapping()
 
     @property
     def coefs_linear(self):
@@ -551,6 +598,10 @@ class MultiReservoirModel():
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
             raise ValueError(errmsg)
+
+        sf = str(flux_functions)
+        if sf in FLUX_FUNCTIONS:
+            flux_functions = FLUX_FUNCTIONS[sf]
 
         nalphas = self.alphas.shape[1]
         nres = self.nreservoirs
@@ -646,9 +697,12 @@ class MultiReservoirModel():
         return mcl
 
     def run(self):
+        inpm, inpmw = self.get_input_mapping()
+
         grad_model(alphas=self.alphas,
                    gammas=self.gammas,
-                   input_mapping=self.input_mapping,
+                   input_mapping=inpm,
+                   input_mapping_weights=inpmw,
                    x0=self.x0,
                    variables_reservoir_id=self.variables_reservoir_id,
                    variables_type_id=self.variables_type_id,
