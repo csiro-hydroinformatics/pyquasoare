@@ -615,7 +615,6 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             if(isnan(dx_end))
                 return QUASOARE_GRAD_IS_NAN;
 
-
             /* Compute the two terms G and H related to flux derivatives */
             for(out = 0; out < nfxo ; out++) {
 
