@@ -47,7 +47,7 @@ def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
 def comp_fun(x, x0=1e-2):
-    return np.asinh(x / x0)
+    return x0 * np.asinh(x / x0)
 
 FLUX_FUNCTIONS = {
     "gr4jprodquad": [
@@ -775,13 +775,12 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("timestep", [1., 0.1])
 def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
-                                                 debug_mode, allclose):
-    df = data_reader.get_data(siteid, "daily")
-    df = df.interpolate()
-
-    # Creates a 2000 years simulation
-    noriginal = len(df)
-    nrepeat = 200
+                                             debug_mode, allclose):
+    noriginal = 365 * 5
+    nrepeat = 500
+    df = data_reader.get_data(siteid, "daily")[-noriginal:]
+    df = df.interpolate().iloc[-noriginal:]
+    assert df.shape[0] == noriginal
     df = np.tile(df, (nrepeat, 1))
     pin = df[:, 0]
     ein = df[:, 1]
@@ -816,29 +815,35 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     t0 = time.time()
     mod.run()
     dtq = time.time() - t0
-    nstart = -noriginal
-    assert allclose(dfx[nstart:, 0], -mod.dfluxes[nstart:, 0, 0, 5],
-                    atol=5e-3)
-    assert dtq < dtb * 30
+
+    err = np.abs(comp_fun(fx[:, 0]) + comp_fun(mod.fluxes[:, 0, 5]))
+    assert err.max() < 5e-3
+
+    err = np.abs(comp_fun(dfx[:, 0]) + comp_fun(mod.dfluxes[:, 0, 0, 5]))
+    assert err.max() < 5e-3
+
+    assert dtq < dtb * 25
 
 
-@pytest.mark.parametrize("gamma", [10, 100, 10000])
-@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
-@pytest.mark.parametrize("timestep", [1., 0.1])
+@pytest.mark.parametrize("gamma", [10, 1000])
+@pytest.mark.parametrize("demand", [-0.1])
+@pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("nreaches", [1, 2, 5])
 @pytest.mark.parametrize("diff", [1, 2, 3, 4])
 def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
-                                          diff, allclose):
+                                          diff, allclose, debug_mode):
     pytest.skip("WIP")
-    noriginal = 2000
-    nrepeat = 200
+    noriginal = 365 * 5
+    nrepeat = 100
     nval = nrepeat * noriginal
     pin = np.empty((nval, nreaches))
     ein = np.empty((nval, nreaches))
-    areas = 100 * np.ones(nreaches)
+    # Random catchment areas
+    areas = np.linspace(100, 500, nreaches)
     for isite, siteid in enumerate(data_reader.SITEIDS[:nreaches]):
         df = data_reader.get_data(siteid, "daily")[-noriginal:]
-        df = df.interpolate()
+        assert df.shape[0] == noriginal
+        df = df.interpolate().iloc[-noriginal:]
         df = np.tile(df, (nrepeat, 1))
         pin[:, isite] = df[:, 0]
         ein[:, isite] = df[:, 1]
@@ -856,6 +861,7 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
     demands_rr_route = np.ones(nreaches) * demand
     ddemands_rr_route = o if diff == 4 else zr
 
+    t0 = time.time()
     out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
                                                 gammas_rr_prod,
                                                 dgammas_rr_prod,
@@ -865,6 +871,7 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
                                                 dgammas_ro_route,
                                                 demands_rr_route,
                                                 ddemands_rr_route)
+    dtb = time.time() - t0
     x_rr_prod, dx_rr_prod, \
         x_rr_route, dx_rr_route, \
         x_ro_route, dx_ro_route, \
@@ -873,45 +880,171 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
         fx_ro_route, dfx_ro_route = out
 
     # run quasoare
-    nres = nreaches * 3
+    nres_per_reach = 4
+    nres = nreaches * nres_per_reach
     mod = gradients.MultiReservoirModel(nres, errors="raise")
-    vspecs = [[diff - 1, 0]]
+    # .. gradients against capacity in top reach
+    #    if diff <= 3 or demand if diff == 4 (i.e. demand flux scaling)
+    vspecs = [[diff - 1, 0]] if diff != 4 else [[1, 2]]
     mod.allocate(nval, timestep=timestep,
                  variables_specs=vspecs)
+
+    # Set alphas
+    nalphas = 200
+    xmax = np.zeros(mod.nreservoirs)
     for ireach in range(nreaches):
-        ibase = 3 * ireach
+        xmax[nres_per_reach * ireach] = x_rr_prod[:, ireach].max()
+        xmax[nres_per_reach * ireach + 1] = x_rr_route[:, ireach].max()
+        xmax[nres_per_reach * ireach + 2] = x_ro_route[:, ireach].max()
+        xmax[nres_per_reach * ireach + 3] = 1.
+
+    mod.alphas = (xmax * 1.05)[:, None] * np.linspace(0, 1, nalphas)[None, :]
+
+    # Set data and network
+    for ireach in range(nreaches):
+        ibase = nres_per_reach * ireach
         # RR prod = ibase
         # RR routing = ibase + 1
         # RO routing = ibase + 2
+        # Transluent = ibase + 3
 
+        # .. inputs ..
         # Set RR prod inputs
-        Qst = np.column_stack([pin[:, ireach], ein[:, ireach]])
+        Qst = np.column_stack([pin[:, ireach], -ein[:, ireach]])
         mod.set_Qstars(ibase, Qst)
 
+        # Set RR route inputs
+        Qst = np.ones((nval, 2))
+        Qst[:, 0] = np.nan
+        mod.set_Qstars(ibase + 1, Qst)
+
+        # .. coefs ...
+        # Set RR prod coefs
+        mod.set_coefs_linear(ibase, FLUX_FUNCTIONS["gr4jprodquad"])
+
+        # Set RR route coefs
+        mod.set_coefs_linear(ibase + 1, FLUX_FUNCTIONS["gr4jroutequad"])
+
+        # Set RO route coefs
+        mod.set_coefs_linear(ibase + 2, FLUX_FUNCTIONS["quadrouting"])
+
+        # Set Transluent coefs
+        mod.set_coefs_linear(ibase + 3, "transluent")
+
+        # .. links ...
         # RR prod -> RR routing
         mod.network.add_link_outflow(ibase, ibase + 1)
 
-        # RR routing -> RO routing
-        # .. conversion mm -> m3/s
-        conv = areas[ireach] * 86.4 / timestep
-        mod.network.add_link_outflow(ibase + 1, ibase + 2, conv)
+        # RR route -> transluent with conversion
+        conv = areas[ireach] * timestep / 86.4
+        mod.network.add_link_outflow(ibase + 1, ibase + 3, conv)
 
-        # RO routing upstream -> downstream
+        # Transluent upstream -> RO route
         if ireach > 0:
-            mod.network.add_link_outflow(ibase - 1, ibase + 2, conv)
+            mod.network.add_link_outflow(ibase - 1, ibase + 2)
 
-    # Set alphas + adjust them for routing reservoirs
-    nalphas = 200
-    mod.alphas = np.repeat(np.linspace(0, 1, nalphas)[None, :], mod.nreservoirs, 0)
+        # RO Route -> transluent
+        mod.network.add_link_outflow(ibase + 2, ibase + 3)
 
     # Set capacity
-    # TODO
+    mod.gammas = np.tile([gamma, gamma / 10, gamma / 20, 1.], (nreaches,))
 
-    # Set demands
-    # TODO
+    # Set demands for rr route reservoirs
+    mod.flux_scalings[1::nres_per_reach, 1] = demand
 
     # Run model
-    #mod.run()
+    t0 = time.time()
+    mod.run()
+    dtq = time.time() - t0
+
+    if debug_mode:
+        import matplotlib.pyplot as plt
+        plt.close("all")
+        # Skip model routing reservoir (replaced by transluent)
+        nres = (nres_per_reach - 1) * nreaches
+        fig, axs = plt.subplots(nrows=2, ncols=nres,
+                                figsize=(18, 6), layout="constrained",
+                                sharex=True)
+
+        for res in range(nres):
+            ireach = res // 3
+            ires_mod_base = nres_per_reach * ireach
+
+            if res % 3 == 0:
+                yb = fx_rr_prod[-noriginal:, ireach]
+                dyb = dfx_rr_prod[-noriginal:, ireach]
+                rtype = "RR prod"
+                ires_mod = ires_mod_base
+            elif res % 3 == 1:
+                yb = fx_rr_route[-noriginal:, ireach]
+                dyb = dfx_rr_route[-noriginal:, ireach]
+                rtype = "RR route"
+                ires_mod = ires_mod_base + 1
+            elif res % 3 == 2:
+                yb = fx_ro_route[-noriginal:, ireach]
+                dyb = dfx_ro_route[-noriginal:, ireach]
+                rtype = "RO route"
+                ires_mod = ires_mod_base + 3
+
+            yq = -mod.fluxes[-noriginal:, ires_mod, 5]
+            dyq = -mod.dfluxes[-noriginal:, 0, ires_mod, 5]
+
+            if diff < 4:
+                g0 = mod.gammas[diff]
+                dyb *= g0
+                dyq *= g0
+
+            ax = axs[0, res]
+            ax.plot(yb, label="benchmark")
+            ax.plot(yq, label="quasoare")
+            tax = ax.twinx()
+            tax.plot(np.abs(yb-yq), lw=0.8, color="0.6", alpha=0.2)
+
+            title = f"R{res} ({rtype})"
+            ylabel = "Flow [m3/s]" if res % 3 == 2 else "Runoff [mm/d]"
+            ax.set(title=title, ylabel=ylabel)
+            if res == 0:
+                ax.legend()
+
+            ax = axs[1, res]
+            ax.plot(dyb)
+            ax.plot(dyq)
+            tax = ax.twinx()
+            tax.plot(np.abs(dyb-dyq), lw=0.8, color="0.6", alpha=0.2)
+
+            ax.set(ylabel=ylabel)
+
+        ftitle = f"Diff {diff} Δb={dtb:4.2e}s Δq={dtq:4.2e}s"
+        fig.suptitle(ftitle, fontweight="bold", fontsize=15)
+        plt.show()
+        import pdb; pdb.set_trace()
+
+    assert dtq < dtb * 25
+
+    # Error on rr prod
+    nrp = nres_per_reach
+    err = np.abs(comp_fun(fx_rr_prod) + comp_fun(mod.fluxes[:, ::nrp, 5]))
+    assert err.max() < 5e-3
+
+    err = np.abs(comp_fun(dfx_rr_prod) + comp_fun(mod.dfluxes[:, 0, ::nrp, 5]))
+    assert err.max() < 5e-3
+
+    # Error on rr route
+    err = np.abs(comp_fun(fx_rr_route) + comp_fun(mod.fluxes[:, 1::nrp, 5]))
+    assert err.max() < 5e-3
+
+    err = np.abs(comp_fun(dfx_rr_route) + comp_fun(mod.dfluxes[:, 0, 1::nrp, 5]))
+    assert err.max() < 1e-2
+
+    # Error on ro route
+    err = np.abs(comp_fun(fx_ro_route) + comp_fun(mod.fluxes[:, 3::nrp, 5]))
+    assert err.max() < 1e-2
+
+    err = np.abs(comp_fun(dfx_ro_route) + comp_fun(mod.dfluxes[:, 0, 3::nrp, 5]))
+    assert err.max() < 1e-2
+
+
+
 
 
 

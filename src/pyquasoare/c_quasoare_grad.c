@@ -125,9 +125,10 @@ int c_grad_qstars_derivative(unsigned int nreservoirs, unsigned int nvariables,
                              unsigned int *variables_type_id,
                              double * dfluxes,
                              double * dQstars_ext) {
-    unsigned int dvar, idx_m0, idx_m, idx_mw0, idx_mw;
-    unsigned int idx_df, idx_df0, idx_dq0, idx_dq, ulink, inp;
+    unsigned int dvar, ulink, inp;
     unsigned int reservoir_id, type_id, resup_id, resup_ofx_id, resdown_pfx_id;
+    unsigned long idx_m0, idx_m, idx_mw0, idx_mw;
+    unsigned long idx_df, idx_df0, idx_dq0, idx_dq;
 
     unsigned int missid = QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID;
     double input_weight;
@@ -269,8 +270,9 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                      double * fluxes,
                      double * dfluxes) {
     unsigned int ierr;
-    unsigned int inp, out, dvar, idx_c, idx_dq0, idx_dq;
-    unsigned int idx_df, idx_df0;
+    unsigned int inp, out, dvar;
+    unsigned long idx_c, idx_dq0, idx_dq;
+    unsigned long idx_df, idx_df0;
     unsigned int nit=0, jalpha_next=0;
 
     unsigned int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
@@ -695,7 +697,8 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
                      double * dx,
                      double * fluxes,
                      double * dfluxes) {
-    unsigned int ierr, t, dvar, i, idx_dx, idx_f, idx_df;
+    unsigned int ierr, t, dvar, i;
+    unsigned long idx_dx, idx_f, idx_df;
 
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
@@ -796,10 +799,10 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                  double *fluxes,
                  double *dfluxes) {
 
-    unsigned int ierr, t, dvar;
-    unsigned int idx_q, idx_c, idx_x, idx_xn, idx_f, idx_a, idx_dx, idx_dxn;
-    unsigned int idx_m, idx_m0, idx_mw, idx_mw0, idx_up_f, idx_df, idx_fs;
-    unsigned int inp, out, res, resu, nres_times_t;
+    unsigned int ierr, t, dvar, inp, out, res, resu;
+    unsigned long idx_q, idx_c, idx_x, idx_xn, idx_f, idx_a, idx_dx, idx_dxn;
+    unsigned long idx_m, idx_m0, idx_mw, idx_mw0, idx_up_f, idx_df, idx_fs;
+    unsigned long nres_times_t;
 
     unsigned int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;

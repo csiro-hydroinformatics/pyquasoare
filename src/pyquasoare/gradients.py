@@ -697,6 +697,7 @@ class MultiReservoirModel():
         return mcl
 
     def run(self):
+        # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
 
         grad_model(alphas=self.alphas,
