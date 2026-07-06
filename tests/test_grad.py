@@ -264,6 +264,8 @@ def test_grad_integrate_error():
     ipm = np.zeros((nres, nres * gradients.NFLUXES_OUTPUTS,
                     gradients.INPUT_MAPPING_LASTDIM),
                     dtype=np.int32)
+    ipmw = np.zeros((nres, nres * gradients.NFLUXES_OUTPUTS),
+                    dtype=np.float64)
 
     nvars = 2
     x = np.array([0.5])
@@ -291,21 +293,21 @@ def test_grad_integrate_error():
     fxs = np.ones(3)
     t0 = 0.
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 112
 
     qst = np.ones(2)
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 111
 
     coefs_lin[0] *= -1
     gamma = 0
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 113
 
@@ -313,7 +315,7 @@ def test_grad_integrate_error():
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(3)
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                            ipm, qst, dqst, fxs, coefs_lin,
+                                            ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 604
 
