@@ -9,7 +9,7 @@
 #include <errno.h>
 
 /* Define Error messages */
-#define QUASOARE_ERROR 100000
+#define QUASOARE_ERROR 1000
 
 #define QUASOARE_APPROX_SAMEALPHA 101
 #define QUASOARE_TIME_TOOLOW 102

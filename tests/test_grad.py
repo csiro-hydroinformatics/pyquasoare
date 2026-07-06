@@ -14,6 +14,8 @@ import scipy.integrate as sci_integrate
 from hydrodiy.io import iutils, csv
 
 from pyquasoare import integrate, models, gradients, approx, steady
+from pyquasoare.benchmarks import benchmarks
+
 import c_pyquasoare_grad
 
 import data_reader
@@ -48,41 +50,15 @@ def comp_fun(x, x0=1e-2):
     return np.asinh(x / x0)
 
 FLUX_FUNCTIONS = {
-    "transluent": [
-        lambda x: x * 0.,
-        lambda x: x * 0.,
-        lambda x: x * 0.
-        ],
-    "gr4jprod": [
-        lambda x: 1 - np.minimum(x, 1)**2,
-        lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
-        lambda x: 4**3/9**4 * np.maximum(x, 0)**5
-        ],
     "gr4jprodquad": [
         lambda x: 1 - np.minimum(x, 1)**2,
         lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
         lambda x: 4**3/9**4 * np.maximum(x, 0)**2
         ],
-    "gr4jroute": [
-        lambda x: 0.9 * fixed(x, 1.),
-        lambda x: np.maximum(x, 0.)**3.5,
-        lambda x: np.maximum(x, 0.)**5 / 4
-        ],
     "gr4jroutequad": [
         lambda x: 0.9 * fixed(x, 1.),
         lambda x: np.maximum(x, 0.)**2,
         lambda x: np.maximum(x, 0.)**2 / 4
-        ],
-    "quadrouting": [
-        lambda x: indicator(x, 0., np.inf),
-        lambda x: fixed(x, 1.),
-        lambda x: np.maximum(x, 0.)**2
-        ],
-    "linrouting": [
-        # Lag theta = 3.5
-        lambda x: indicator(x, 0, np.inf),
-        lambda x: fixed(x, 1.),
-        lambda x: np.maximum(x, 0.) / 3.5
         ],
     "nonlinrouting": [
         # exponent n = 6
@@ -102,11 +78,6 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0.),
         lambda x: fixed(x, 0.)
         ],
-    "openwater": [
-        lambda x: indicator(x, 0., 1.),
-        lambda x: indicator(x, 0., 1.),
-        lambda x: fixed(x, 0.)
-        ],
     "muskingumrouting": [
         # KM = 2.5 / XM = 0.2
         lambda x: indicator(x, 0, np.inf) / (1 - 0.2),
@@ -114,6 +85,9 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0.) / 2.5 / (1 - 0.2)
         ],
 }
+
+FLUX_FUNCTIONS.update(gradients.FLUX_FUNCTIONS)
+
 
 def get_data(siteid, reservoir, timestep, gamma, demand,
              istart=None, iend=None):
@@ -164,11 +138,11 @@ def get_alphas_and_coefs(reservoir, scalings):
 def get_input_mapping(nreservoirs, ntype):
     netw = gradients.Network(nreservoirs)
     for res in range(1, nreservoirs):
-        if ntype == "total_outflow":
-            netw.add_link_total_outflow(res - 1, res)
+        if ntype == "outflow":
+            netw.add_link_outflow(res - 1, res)
         else:
             netw.add_link_bypass_shortfall(res - 1, res)
-    return netw.input_mapping
+    return netw.get_input_mapping()
 
 
 def skip_this(reservoir, gamma, demand):
@@ -206,58 +180,67 @@ def test_reservoir_functions(siteid, reservoir, gamma, timestep, demand, eps):
     assert np.all(c1 >= 0)
 
 
-@pytest.mark.parametrize("linktype", ["total", "bypass"])
+@pytest.mark.parametrize("linktype", ["outflow", "bypass"])
 def test_network(linktype, allclose):
     netw = gradients.Network(3)
 
-    if linktype == "total":
-        netw.add_link_total_outflow(0, 1)
-        netw.add_link_total_outflow(1, 2)
+    if linktype == "outflow":
+        netw.add_link_outflow(0, 1)
+        netw.add_link_outflow(1, 2)
     else:
         netw.add_link_bypass_shortfall(0, 1)
         netw.add_link_bypass_shortfall(1, 2)
 
     assert netw.upstream_reservoirs(2) == {0, 1}
 
-    ipm = netw.input_mapping
+    ipm, ipmw = netw.get_input_mapping()
     nfxo = gradients.NFLUXES_OUTPUTS
     ipmd = gradients.INPUT_MAPPING_LASTDIM
     assert ipm.shape == (netw.nreservoirs, nfxo * netw.nreservoirs, ipmd)
-    sc = gradients.INPUT_MAPPING_SCALINGFACTOR
+    assert ipmw.shape == (netw.nreservoirs, nfxo * netw.nreservoirs)
     missid = gradients.INPUT_MAPPING_MISSINGRESERVOIRID
 
     for rid in range(netw.nreservoirs):
         lks = ipm[rid]
+        ws = ipmw[rid]
+
         if rid == 0:
             assert np.all(lks[:, 0] == missid)
             assert np.all(lks[:, 1:] == 0)
+            assert np.all(ws == 0)
         else:
-            if linktype == "total":
+            if linktype == "outflow":
                 assert np.all(lks[1:, 0] == missid)
                 assert np.all(lks[1:, 1:] == 0)
                 # total outflow from upstream links to inflow
-                assert all(lks[0] == [rid - 1, 5, 0, sc, 0])
+                assert all(lks[0] == [rid - 1, 5, 0])
+
+                assert np.all(ws[1:] == 0)
+                assert ws[0] == -1.
             else:
                 assert np.all(lks[2:, 0] == missid)
                 assert np.all(lks[2:, 1:] == 0)
                 # bypass flow from upstream links to inflow
-                assert all(lks[0] == [rid - 1, 3, 0, sc, 0])
+                assert all(lks[0] == [rid - 1, 3, 0])
                 # demand shortfall flow from upstream links to demand
-                assert all(lks[1] == [rid - 1, 4, 1, sc, 0])
+                assert all(lks[1] == [rid - 1, 4, 1])
+
+                assert np.all(ws[2:] == 0)
+                assert np.all(ws[:2] == -1.)
 
 
 def test_network_cyclical():
     netw = gradients.Network(3)
-    netw.add_link_total_outflow(0, 1)
-    netw.add_link_total_outflow(1, 2)
+    netw.add_link_outflow(0, 1)
+    netw.add_link_outflow(1, 2)
     with pytest.raises(ValueError, match="cyclical"):
-        netw.add_link_total_outflow(2, 0)
+        netw.add_link_outflow(2, 0)
 
 
 def test_network_wrong_order():
     netw = gradients.Network(3)
     with pytest.raises(ValueError, match="rearrange"):
-        netw.add_link_total_outflow(2, 1)
+        netw.add_link_outflow(2, 1)
 
 
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
@@ -348,7 +331,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     nres = 3
-    ipm = get_input_mapping(nres, "bypass_shortfall")
+    ipm, ipmw = get_input_mapping(nres, "bypass_shortfall")
 
     # Loop and integrate
     rid = 0 # this is the top reservoir
@@ -382,7 +365,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
         ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
-                                                ipm, qst, dqst, fxs, coefs_lin,
+                                                ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                                 vrid, vtid,
                                                 niter2, x, dx, fx, dfx)
         assert ierr == 0
@@ -547,7 +530,7 @@ def test_grad_model_setters(allclose):
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, FLUX_FUNCTIONS["openwater"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(1, "gr4jprod")
 
     mod.gammas = 10
     assert allclose(mod.gammas, 10.)
@@ -565,15 +548,15 @@ def test_grad_model_setters(allclose):
 
 
 def test_grad_model_clone(allclose):
-    siteid = "203014"
-    timestep = 1.
     mod = gradients.MultiReservoirModel(2, errors="raise")
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["openwater"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
     mod.gammas = [5., 400.]
 
+    siteid = "203014"
+    timestep = 1.
     df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep=timestep)
     Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
@@ -622,17 +605,17 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
 
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
-    mod.network.add_link_total_outflow(1, 2)
-    mod.network.add_link_total_outflow(2, 5)
-    mod.network.add_link_total_outflow(3, 5)
-    mod.network.add_link_total_outflow(4, 5)
+    mod.network.add_link_outflow(1, 2)
+    mod.network.add_link_outflow(2, 5)
+    mod.network.add_link_outflow(3, 5)
+    mod.network.add_link_outflow(4, 5)
 
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["openwater"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
-    mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
-    mod.set_coefs_linear(3, FLUX_FUNCTIONS["gr4jroute"])
-    mod.set_coefs_linear(4, FLUX_FUNCTIONS["gr4jroute"])
-    mod.set_coefs_linear(5, FLUX_FUNCTIONS["transluent"])
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
+    mod.set_coefs_linear(2, "gr4jroute")
+    mod.set_coefs_linear(3, "gr4jroute")
+    mod.set_coefs_linear(4, "gr4jroute")
+    mod.set_coefs_linear(5, "transluent")
     mod.gammas = [5., 400., 50., 10., 5., 1.]
 
     fxs = np.ones((mod.nreservoirs, 3))
@@ -716,11 +699,11 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     mod = gradients.MultiReservoirModel(3, "raise")
     mod.alphas = 10
     mod.network.add_link_bypass_shortfall(0, 1)
-    mod.network.add_link_total_outflow(1, 2)
+    mod.network.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, FLUX_FUNCTIONS["gr4jprod"])
-    mod.set_coefs_linear(1, FLUX_FUNCTIONS["gr4jprod"])
-    mod.set_coefs_linear(2, FLUX_FUNCTIONS["gr4jroute"])
+    mod.set_coefs_linear(0, "gr4jprod")
+    mod.set_coefs_linear(1, "gr4jprod")
+    mod.set_coefs_linear(2, "gr4jroute")
     mod.gammas = [50., 400., 50.]
 
     nv = gradients.VARTYPE_NUMBER
@@ -784,3 +767,149 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
         dfx_c = dfx[:, ivar, :, :]
         atol = 1e-7
         assert allclose(dfx_n, dfx_c, atol=atol)
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
+                                                 debug_mode, allclose):
+    df = data_reader.get_data(siteid, "daily")
+    df = df.interpolate()
+
+    # Creates a 2000 years simulation
+    noriginal = len(df)
+    nrepeat = 200
+    df = np.tile(df, (nrepeat, 1))
+    pin = df[:, 0]
+    ein = df[:, 1]
+    qin = df[:, 2]
+
+    x0 = 0.5
+
+    # run benchmarks
+    gammas = np.array([gamma])
+    dgammas = np.array([1.])
+    t0 = time.time()
+    out = benchmarks.gradbench_quadrouting_tangent(timestep, qin, x0,
+                                                   gammas, dgammas)
+    dtb = time.time() - t0
+
+    x, dx, fx, dfx = out
+
+    # run quasoare
+    mod = gradients.MultiReservoirModel(1, errors="raise")
+    nalphas = 500
+    mod.alphas = np.linspace(0., x.max() * 1.05, nalphas)[None, :]
+    mod.set_coefs_linear(0, "quadrouting")
+    mod.gammas = gamma
+
+    nval = len(df)
+    vspecs = [[0, 0]]
+    mod.allocate(nval, timestep=timestep,
+                 variables_specs=vspecs)
+    Qst0 = np.zeros((nval, 2))
+    Qst0[:, 0] = qin
+    mod.set_Qstars(0, Qst0)
+    t0 = time.time()
+    mod.run()
+    dtq = time.time() - t0
+    nstart = -noriginal
+    assert allclose(dfx[nstart:, 0], -mod.dfluxes[nstart:, 0, 0, 5],
+                    atol=5e-3)
+    assert dtq < dtb * 30
+
+
+@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
+@pytest.mark.parametrize("timestep", [1., 0.1])
+@pytest.mark.parametrize("nreaches", [1, 2, 5])
+@pytest.mark.parametrize("diff", [1, 2, 3, 4])
+def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
+                                          diff, allclose):
+    pytest.skip("WIP")
+    noriginal = 2000
+    nrepeat = 200
+    nval = nrepeat * noriginal
+    pin = np.empty((nval, nreaches))
+    ein = np.empty((nval, nreaches))
+    areas = 100 * np.ones(nreaches)
+    for isite, siteid in enumerate(data_reader.SITEIDS[:nreaches]):
+        df = data_reader.get_data(siteid, "daily")[-noriginal:]
+        df = df.interpolate()
+        df = np.tile(df, (nrepeat, 1))
+        pin[:, isite] = df[:, 0]
+        ein[:, isite] = df[:, 1]
+
+    # run benchmarks
+    x0 = 0.5
+    gammas_rr_prod = np.array([gamma] * nreaches)
+    zr = np.zeros(nreaches)
+    o = np.array([1.] + [0.] * (nreaches - 1))
+    dgammas_rr_prod = o if diff == 1 else zr
+    gammas_rr_route = np.array([gamma / 10] * nreaches)
+    dgammas_rr_route = o if diff == 2 else zr
+    gammas_ro_route = np.array([gamma / 20] * nreaches)
+    dgammas_ro_route = o if diff == 3 else zr
+    demands_rr_route = np.ones(nreaches) * demand
+    ddemands_rr_route = o if diff == 4 else zr
+
+    out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
+                                                gammas_rr_prod,
+                                                dgammas_rr_prod,
+                                                gammas_rr_route,
+                                                dgammas_rr_route,
+                                                gammas_ro_route,
+                                                dgammas_ro_route,
+                                                demands_rr_route,
+                                                ddemands_rr_route)
+    x_rr_prod, dx_rr_prod, \
+        x_rr_route, dx_rr_route, \
+        x_ro_route, dx_ro_route, \
+        fx_rr_prod, dfx_rr_prod, \
+        fx_rr_route, dfx_rr_route, \
+        fx_ro_route, dfx_ro_route = out
+
+    # run quasoare
+    nres = nreaches * 3
+    mod = gradients.MultiReservoirModel(nres, errors="raise")
+    vspecs = [[diff - 1, 0]]
+    mod.allocate(nval, timestep=timestep,
+                 variables_specs=vspecs)
+    for ireach in range(nreaches):
+        ibase = 3 * ireach
+        # RR prod = ibase
+        # RR routing = ibase + 1
+        # RO routing = ibase + 2
+
+        # Set RR prod inputs
+        Qst = np.column_stack([pin[:, ireach], ein[:, ireach]])
+        mod.set_Qstars(ibase, Qst)
+
+        # RR prod -> RR routing
+        mod.network.add_link_outflow(ibase, ibase + 1)
+
+        # RR routing -> RO routing
+        # .. conversion mm -> m3/s
+        conv = areas[ireach] * 86.4 / timestep
+        mod.network.add_link_outflow(ibase + 1, ibase + 2, conv)
+
+        # RO routing upstream -> downstream
+        if ireach > 0:
+            mod.network.add_link_outflow(ibase - 1, ibase + 2, conv)
+
+    # Set alphas + adjust them for routing reservoirs
+    nalphas = 200
+    mod.alphas = np.repeat(np.linspace(0, 1, nalphas)[None, :], mod.nreservoirs, 0)
+
+    # Set capacity
+    # TODO
+
+    # Set demands
+    # TODO
+
+    # Run model
+    #mod.run()
+
+
+

@@ -16,8 +16,7 @@
 #define QUASOARE_GRAD_NFLUXES_OUTPUTS 6
 #define QUASOARE_GRAD_NDERIV QUASOARE_GRAD_NPIECEWISEPARAMS*(QUASOARE_GRAD_NFLUXES_INPUTS+1)
 
-#define QUASOARE_GRAD_INPUT_MAPPING_LASTDIM 5
-#define QUASOARE_GRAD_INPUT_MAPPING_SCALINGFACTOR 1000000
+#define QUASOARE_GRAD_INPUT_MAPPING_LASTDIM 3
 #define QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID 9999
 
 #define QUASOARE_GRAD_IFLUX_INFLOW 0
@@ -42,6 +41,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                      double timestep,
                      double gamma,
                      unsigned int *input_mapping,
+                     double *input_mapping_weights,
                      double * Qstars,
                      double * dQstars_ext,
                      double * flux_scalings,
@@ -77,6 +77,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                  double timestep,
                  double * gammas,
                  unsigned int * input_mapping,
+                 double *input_mapping_weights,
                  double * flux_scalings,
                  double *x0,
                  unsigned int *variables_reservoir_id,
