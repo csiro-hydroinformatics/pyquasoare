@@ -10,9 +10,6 @@ double wfun(double delta, double S) {
     if(x < -460.51)
         return 1e-200;
 
-    if(fabs(x) < 1e-4)
-        return 1 + 2 * x / (2 - x + x * x / 6);
-
     return exp(x);
 }
 
