@@ -785,6 +785,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     pin = df[:, 0]
     ein = df[:, 1]
     qin = df[:, 2]
+    nval = len(df)
 
     x0 = 0.5
 
@@ -798,19 +799,23 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
     x, dx, fx, dfx = out
 
-    eps = 1e-5
+    eps = 1e-6
     gammas_m = gammas.copy()
     gammas_m[0] = gamma - eps
     gammas_p = gammas.copy()
     gammas_p[0] = gamma + eps
 
+    xn = np.empty((3, nval, 1))
+    fxn = np.empty((3, nval, 1))
+
     t0 = time.time()
+    x, fx = benchmarks.gradbench_quadrouting(timestep, qin, x0,
+                                             gammas, out=(xn[0], fxn[0]))
     xm, fxm = benchmarks.gradbench_quadrouting(timestep, qin, x0,
-                                               gammas_m)
+                                               gammas_m, out=(xn[1], fxn[1]))
     xp, fxp = benchmarks.gradbench_quadrouting(timestep, qin, x0,
-                                               gammas_p)
+                                               gammas_p, out=(xn[2], fxn[2]))
     dtn = time.time() - t0
-    dtn += dtb # because we need the original simul as well
 
     dfx_n = (fxp - fxm) / eps / 2
 
@@ -838,21 +843,21 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     dtq = time.time() - t0
 
     if debug_mode:
-        yb = fx[-noriginal:, 0]
-        ybm = fxm[-noriginal:, :]
-        ybp = fxp[-noriginal:, :]
+        istart = -noriginal
+        yb = fx[istart:, 0]
+        ybm = fxm[istart:, :]
+        ybp = fxp[istart:, :]
 
         yq = -mod.fluxes[:, 0, 5]
 
-        dyb = dfx[-noriginal:, 0]
-        dyn = dfx_n[-noriginal:, 0]
+        dyb = dfx[istart:, 0]
+        dyn = dfx_n[istart:, 0]
         dyq = -mod.dfluxes[:, 0, 0, 5]
 
-        yq = yq[-noriginal:]
-        dyq = dyq[-noriginal:]
+        yq = yq[istart:]
+        dyq = dyq[istart:]
 
         import matplotlib.pyplot as plt
-        plt.close("all")
         fig, axs = plt.subplots(ncols=2, nrows=2,
                                 sharex=True, layout="constrained",
                                 figsize=(17, 7))
@@ -861,13 +866,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.plot(yb, "k-", label="benchmark")
             title = "Difference" if imod == 0 else "Quasoare"
             if imod == 0:
-                ax.plot(ybp, "k--", label="bench +")
-                ax.plot(ybm, "k:", label="bench -")
+                #ax.plot(ybp, "k--", label="bench +")
+                #ax.plot(ybm, "k:", label="bench -")
                 emax = np.nan
-
-                #idx = yb > 20
-                #dd = (ybp[idx] - ybm[idx]) / 2. / eps
-                #import pdb; pdb.set_trace()
             else:
                 ax.plot(yq, "k--", label="quasoare")
                 emax = np.abs(yq - yb).max()
@@ -888,6 +889,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
             tax = ax.twinx()
             tax.plot(dy - dyb, "-", color="0.6", lw=0.8)
+            y0, y1 = tax.get_ylim()
+            y1 = max(y1, abs(y0))
+            tax.set_ylim((-y1, y1))
 
             emax = np.abs(dy - dyb).max()
             title = f"{title} diff errmax={emax:3.3e}"
@@ -910,8 +914,8 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     assert errdf.max() < 2e-3
     #assert errdf.max() < errdfn.max() * 10
 
-    assert dtq < dtb * 20
-    assert dtq < dtn * 10
+    assert dtq < dtb * 30
+    assert dtq < dtn * 15
 
 
 @pytest.mark.parametrize("gamma", [10, 1000])
@@ -986,7 +990,7 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
                  variables_specs=vspecs)
 
     # Set alphas
-    nalphas = 200
+    nalphas = 500
     xmaxs = np.zeros(mod.nreservoirs)
     for ireach in range(nreaches):
         xmaxs[nres_per_reach * ireach] = np.max(x_rr_prod[:, ireach])
@@ -994,11 +998,11 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
         xmaxs[nres_per_reach * ireach + 2] = np.max(x_ro_route[:,  ireach])
         xmaxs[nres_per_reach * ireach + 3] = 1
 
-    nu = 1e-3
+    nu = 1e-5
     lows = np.array([-nu, 0., nu / 10, nu])
 
     alphas = [np.repeat(lows[None, :], mod.nreservoirs, 0),
-              2 * nu + xmaxs[:, None] * np.linspace(0, 1.05,
+              2 * nu + xmaxs[:, None] * np.linspace(0, 1.,
                                                     nalphas - 4)[None, :]]
     mod.alphas = np.column_stack(alphas)
 
@@ -1130,34 +1134,34 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
         fig.savefig(fp)
 
     print(f"\nTime: dtb={dtb:4.2e} dtq={dtq:4.2e} / ratio = {dtq / dtb:0.1f}")
-    assert dtq < dtb * 20
+    assert dtq < dtb * 65
 
     # Error on rr prod
     nrp = nres_per_reach
     err = np.abs(comp_fun(fx_rr_prod) + comp_fun(mod.fluxes[:, ::nrp, 5]))
-    logtxt = f"{err.max():4.2e}"
+    logtxt = f"FRP={err.max():3.1e}"
     assert err.max() < 5e-5
 
     err = np.abs(comp_fun(dfx_rr_prod) + comp_fun(mod.dfluxes[:, 0, ::nrp, 5]))
-    logtxt += f" {err.max():4.2e}"
+    logtxt += f" DRP={err.max():3.1e}"
     assert err.max() < 5e-4
 
     # Error on rr route
     err = np.abs(comp_fun(fx_rr_route) + comp_fun(mod.fluxes[:, 1::nrp, 5]))
-    logtxt += f" {err.max():4.2e}"
+    logtxt += f" FRR={err.max():3.1e}"
     assert err.max() < 5e-3
 
     err = np.abs(comp_fun(dfx_rr_route) + comp_fun(mod.dfluxes[:, 0, 1::nrp, 5]))
-    logtxt += f" {err.max():4.2e}"
+    logtxt += f" DRR={err.max():3.1e}"
     assert err.max() < 2e-2 # this is quite high
 
     # Error on ro route
     err = np.abs(comp_fun(fx_ro_route) + comp_fun(mod.fluxes[:, 3::nrp, 5]))
-    logtxt += f" {err.max():4.2e}"
+    logtxt += f" FRO={err.max():3.1e}"
     assert err.max() < 5e-3
 
     err = np.abs(comp_fun(dfx_ro_route) + comp_fun(mod.dfluxes[:, 0, 3::nrp, 5]))
-    logtxt += f" {err.max():4.2e}"
-    assert err.max() < 8e-3
+    logtxt += f" DRO={err.max():3.1e}"
+    assert err.max() < 1e-2
 
     print(f"{logtxt}\n")

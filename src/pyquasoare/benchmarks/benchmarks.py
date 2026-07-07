@@ -194,7 +194,7 @@ def gradbench_linrouting_tangent(timestep, qin, x0, thetas, dthetas):
     return states, dstates, qout, dqout
 
 
-def gradbench_quadrouting(timestep, qin, x0, gammas):
+def gradbench_quadrouting(timestep, qin, x0, gammas, out=None):
     timestep = np.float64(timestep)
     gammas = np.ascontiguousarray(gammas).astype(np.float64)
     qin = np.ascontiguousarray(qin).astype(np.float64)
@@ -202,8 +202,12 @@ def gradbench_quadrouting(timestep, qin, x0, gammas):
     nval = qin.shape[0]
     nreaches = len(gammas)
     x0 = np.array([x0] * nreaches)
-    states = np.empty((nval, nreaches))
-    qout = np.empty((nval, nreaches))
+
+    if out is None:
+        states = np.empty((nval, nreaches))
+        qout = np.empty((nval, nreaches))
+    else:
+        states, qout = out
 
     ierr = c_pyquasoare_benchmarks.gradbench_quadrouting(timestep, x0,
                                                          gammas, qin,
@@ -214,7 +218,7 @@ def gradbench_quadrouting(timestep, qin, x0, gammas):
     return states, qout
 
 
-def gradbench_quadrouting_tangent(timestep, qin, x0, gammas, dgammas):
+def gradbench_quadrouting_tangent(timestep, qin, x0, gammas, dgammas, out=None):
     timestep = np.float64(timestep)
     gammas = np.ascontiguousarray(gammas).astype(np.float64)
     dgammas = np.ascontiguousarray(dgammas).astype(np.float64)
@@ -223,10 +227,14 @@ def gradbench_quadrouting_tangent(timestep, qin, x0, gammas, dgammas):
     nval = qin.shape[0]
     nreaches = len(gammas)
     x0 = np.array([x0] * nreaches)
-    states = np.empty((nval, nreaches))
-    dstates = np.empty((nval, nreaches))
-    qout = np.empty((nval, nreaches))
-    dqout = np.empty((nval, nreaches))
+
+    if out is None:
+        states = np.empty((nval, nreaches))
+        dstates = np.empty((nval, nreaches))
+        qout = np.empty((nval, nreaches))
+        dqout = np.empty((nval, nreaches))
+    else:
+        states, dstates, qout, dqout = out
 
     ierr = c_pyquasoare_benchmarks.gradbench_quadrouting_d(timestep, x0,
                                                            gammas,
@@ -336,7 +344,8 @@ def gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
 
 def gradbench_semidist(timestep, pin, ein, x0, areas,
                        gammas_rr_prod, gammas_rr_route,
-                       gammas_ro_route, demands_rr_route):
+                       gammas_ro_route, demands_rr_route,
+                       out=None):
     timestep = np.float64(timestep)
     areas = areas.astype(np.float64)
     gammas_rr_prod = gammas_rr_prod.astype(np.float64)
@@ -353,12 +362,18 @@ def gradbench_semidist(timestep, pin, ein, x0, areas,
     x0_rr_prod = x0
     x0_rr_route = x0
     x0_ro_route = x0
-    states_rr_prod = np.empty((nval, nreaches))
-    states_rr_route = np.empty((nval, nreaches))
-    states_ro_route = np.empty((nval, nreaches))
-    qout_rr_prod =  np.empty((nval, nreaches))
-    qout_rr_route = np.empty((nval, nreaches))
-    qout_ro_route = np.empty((nval, nreaches))
+
+    if out is None:
+        states_rr_prod = np.empty((nval, nreaches))
+        states_rr_route = np.empty((nval, nreaches))
+        states_ro_route = np.empty((nval, nreaches))
+        qout_rr_prod =  np.empty((nval, nreaches))
+        qout_rr_route = np.empty((nval, nreaches))
+        qout_ro_route = np.empty((nval, nreaches))
+    else:
+        states_rr_prod, states_rr_route, \
+        states_ro_route, qout_rr_prod, \
+        qout_rr_route, qout_ro_route = out
 
     ierr = c_pyquasoare_benchmarks.gradbench_semidist(timestep,
                                                       x0_rr_prod,
@@ -391,7 +406,8 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
                                gammas_ro_route,
                                dgammas_ro_route,
                                demands_rr_route,
-                               ddemands_rr_route):
+                               ddemands_rr_route,
+                               out=None):
     timestep = np.float64(timestep)
     areas = areas.astype(np.float64)
     gammas_rr_prod = gammas_rr_prod.astype(np.float64)
@@ -412,18 +428,26 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
     x0_rr_prod = x0
     x0_rr_route = x0
     x0_ro_route = x0
-    states_rr_prod = np.empty((nval, nreaches))
-    dstates_rr_prod = np.empty((nval, nreaches))
-    states_rr_route = np.empty((nval, nreaches))
-    dstates_rr_route = np.empty((nval, nreaches))
-    states_ro_route = np.empty((nval, nreaches))
-    dstates_ro_route = np.empty((nval, nreaches))
-    qout_rr_prod =  np.empty((nval, nreaches))
-    dqout_rr_prod =  np.empty((nval, nreaches))
-    qout_rr_route = np.empty((nval, nreaches))
-    dqout_rr_route = np.empty((nval, nreaches))
-    qout_ro_route = np.empty((nval, nreaches))
-    dqout_ro_route = np.empty((nval, nreaches))
+    if out is None:
+        states_rr_prod = np.empty((nval, nreaches))
+        dstates_rr_prod = np.empty((nval, nreaches))
+        states_rr_route = np.empty((nval, nreaches))
+        dstates_rr_route = np.empty((nval, nreaches))
+        states_ro_route = np.empty((nval, nreaches))
+        dstates_ro_route = np.empty((nval, nreaches))
+        qout_rr_prod =  np.empty((nval, nreaches))
+        dqout_rr_prod =  np.empty((nval, nreaches))
+        qout_rr_route = np.empty((nval, nreaches))
+        dqout_rr_route = np.empty((nval, nreaches))
+        qout_ro_route = np.empty((nval, nreaches))
+        dqout_ro_route = np.empty((nval, nreaches))
+    else:
+        states_rr_prod, dstates_rr_prod, \
+        states_rr_route, dstates_rr_route, \
+        states_ro_route, dstates_ro_route, \
+        qout_rr_prod, dqout_rr_prod, \
+        qout_rr_route, dqout_rr_route, \
+        qout_ro_route, dqout_ro_route = out
 
     ierr = c_pyquasoare_benchmarks.gradbench_semidist_d(timestep,
                                                         x0_rr_prod,
@@ -466,6 +490,3 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
         dqout_rr_route, \
         qout_ro_route, \
         dqout_ro_route
-
-
-
