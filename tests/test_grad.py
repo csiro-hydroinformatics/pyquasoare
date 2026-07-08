@@ -49,6 +49,13 @@ def indicator(x, xmin, xmax):
 def comp_fun(x, x0=1e-2):
     return x0 * np.asinh(x / x0)
 
+def eff(x, y, nu=1.):
+    tx = comp_fun(x, nu)
+    ty = comp_fun(y, nu)
+    txm = tx.mean()
+    return ((ty - tx)**2).sum() / ((tx - txm)**2).sum()
+
+
 FLUX_FUNCTIONS = {
     "gr4jprodquad": [
         lambda x: 1 - np.minimum(x, 1)**2,
@@ -799,7 +806,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
     x, dx, fx, dfx = out
 
-    eps = 1e-6
+    eps = 1e-2 # becomes worse if eps < 1e-12, optimal for 1e-2
     gammas_m = gammas.copy()
     gammas_m[0] = gamma - eps
     gammas_p = gammas.copy()
@@ -817,6 +824,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
                                                gammas_p, out=(xn[2], fxn[2]))
     dtn = time.time() - t0
 
+    dx_n = (xp - xm) / eps / 2
     dfx_n = (fxp - fxm) / eps / 2
 
     # run quasoare
@@ -843,59 +851,64 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     dtq = time.time() - t0
 
     if debug_mode:
-        istart = -noriginal
-        yb = fx[istart:, 0]
-        ybm = fxm[istart:, :]
-        ybp = fxp[istart:, :]
+        # Benchmark data
+        xb = x[:, 0]
+        dxb = dx[:, 0]
+        yb = fx[:, 0]
+        dyb = dfx[:, 0]
 
+        # Quasoare data
+        xq = mod.x[:, 0]
+        dxq = mod.dx[:, 0, 0]
         yq = -mod.fluxes[:, 0, 5]
-
-        dyb = dfx[istart:, 0]
-        dyn = dfx_n[istart:, 0]
         dyq = -mod.dfluxes[:, 0, 0, 5]
 
-        yq = yq[istart:]
-        dyq = dyq[istart:]
+        # num diff data
+        dxn = dx_n[:, 0]
+        dyn = dfx_n[:, 0]
 
         import matplotlib.pyplot as plt
-        fig, axs = plt.subplots(ncols=2, nrows=2,
+        fig, axs = plt.subplots(ncols=2, nrows=4,
                                 sharex=True, layout="constrained",
-                                figsize=(17, 7))
-        for imod in range(2):
-            ax = axs[0, imod]
-            ax.plot(yb, "k-", label="benchmark")
-            title = "Difference" if imod == 0 else "Quasoare"
-            if imod == 0:
-                #ax.plot(ybp, "k--", label="bench +")
-                #ax.plot(ybm, "k:", label="bench -")
-                emax = np.nan
+                                figsize=(17, 9))
+        for ivar in range(2):
+            if ivar == 0:
+                wb, dwb, wn, dwn, wq, dwq = xb, dxb, xb, dxn, xq, dxq
+                title = "storage"
             else:
-                ax.plot(yq, "k--", label="quasoare")
-                emax = np.abs(yq - yb).max()
+                wb, dwb, wn, dwn, wq, dwq = yb, dyb, yb, dyn, yq, dyq
+                title = "outflow"
 
-            ax.set(title=f"{title} sim errmax={emax:3.3e}")
+            istart = -noriginal
+            wb, dwb, wn, dwn, wq, dwq = [v[istart:] for v in
+                                         [wb, dwb, wn, dwn, wq, dwq]]
+
+            ax = axs[0, ivar]
+            ax.plot(wb, "k-", label="benchmark")
+            ax.plot(wq, "k--", label="quasoare")
+
+            emax_q = eff(wb, wq, 1e-4)
+            ax.set(title=f"{title}: Qerr={emax_q:2.1e}")
             ax.legend(loc=1)
 
-            ax = axs[1, imod]
-            ax.plot(dyb, "k-", label="benchmark")
+            ax = axs[1, ivar]
+            ax.plot(wq - wb, "k--", label="quasoare", lw=0.9, color="0.5")
+            ax.legend(loc=1)
 
-            if imod == 0:
-                dy = dyn
-            else:
-                dy = dyq
+            ax = axs[2, ivar]
+            ax.plot(dwb, "k-", label="benchmark")
+            ax.plot(dwq, "k--", label="quasoare")
+            ax.plot(dwn, "-", label="numerical", color="tab:blue")
 
-            ax.plot(dy, "k--", label=title.lower())
-            ax.set(title=f"{title} grad")
-
-            tax = ax.twinx()
-            tax.plot(dy - dyb, "-", color="0.6", lw=0.8)
-            y0, y1 = tax.get_ylim()
-            y1 = max(y1, abs(y0))
-            tax.set_ylim((-y1, y1))
-
-            emax = np.abs(dy - dyb).max()
-            title = f"{title} diff errmax={emax:3.3e}"
+            emax_q = eff(dwb, dwq, 1e-4)
+            emax_n = eff(dwb, dwn, 1e-4)
+            title = f"{title} gradient: Qerr={emax_q:2.1e} Nerr={emax_n:2.1e}"
             ax.set(title=title)
+            ax.legend(loc=1)
+
+            ax = axs[3, ivar]
+            ax.plot(dwq - dwb, "k--", label="quasoare", lw=0.9, color="0.5")
+            ax.plot(dwn - dwb, "-", label="numerical", lw=0.9, color="tab:blue")
             ax.legend(loc=1)
 
         plt.show()
