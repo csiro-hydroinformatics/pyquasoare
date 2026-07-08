@@ -806,27 +806,6 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
     x, dx, fx, dfx = out
 
-    eps = 1e-2 # becomes worse if eps < 1e-12, optimal for 1e-2
-    gammas_m = gammas.copy()
-    gammas_m[0] = gamma - eps
-    gammas_p = gammas.copy()
-    gammas_p[0] = gamma + eps
-
-    xn = np.empty((3, nval, 1))
-    fxn = np.empty((3, nval, 1))
-
-    t0 = time.time()
-    x, fx = benchmarks.gradbench_quadrouting(timestep, qin, x0,
-                                             gammas, out=(xn[0], fxn[0]))
-    xm, fxm = benchmarks.gradbench_quadrouting(timestep, qin, x0,
-                                               gammas_m, out=(xn[1], fxn[1]))
-    xp, fxp = benchmarks.gradbench_quadrouting(timestep, qin, x0,
-                                               gammas_p, out=(xn[2], fxn[2]))
-    dtn = time.time() - t0
-
-    dx_n = (xp - xm) / eps / 2
-    dfx_n = (fxp - fxm) / eps / 2
-
     # run quasoare
     errors = "raise"
     mod = gradients.MultiReservoirModel(1, errors=errors)
@@ -850,6 +829,22 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     mod.run()
     dtq = time.time() - t0
 
+    # numerical diff on quasoare
+    modm = mod.clone()
+    modp = mod.clone()
+
+    eps = 1e-3 # becomes worse if eps < 1e-12, optimal for 1e-2
+    modm.gammas = gamma - eps
+    modp.gammas = gamma + eps
+
+    t0 = time.time()
+    modm.run()
+    modp.run()
+    dtn = time.time() - t0
+
+    dx_n = (modp.x - modm.x) / eps / 2
+    dfx_n = (modp.fluxes - modm.fluxes) / eps / 2
+
     if debug_mode:
         # Benchmark data
         xb = x[:, 0]
@@ -865,7 +860,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
         # num diff data
         dxn = dx_n[:, 0]
-        dyn = dfx_n[:, 0]
+        dyn = -dfx_n[:, 0, 5]
 
         import matplotlib.pyplot as plt
         fig, axs = plt.subplots(ncols=2, nrows=4,
@@ -887,8 +882,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.plot(wb, "k-", label="benchmark")
             ax.plot(wq, "k--", label="quasoare")
 
-            emax_q = eff(wb, wq, 1e-4)
-            ax.set(title=f"{title}: Qerr={emax_q:2.1e}")
+            atol = 1e-5
+            eff_q = eff(wb, wq, atol)
+            ax.set(title=f"{title} perf: q={eff_q:2.1e}")
             ax.legend(loc=1)
 
             ax = axs[1, ivar]
@@ -900,9 +896,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.plot(dwq, "k--", label="quasoare")
             ax.plot(dwn, "-", label="numerical", color="tab:blue")
 
-            emax_q = eff(dwb, dwq, 1e-4)
-            emax_n = eff(dwb, dwn, 1e-4)
-            title = f"{title} gradient: Qerr={emax_q:2.1e} Nerr={emax_n:2.1e}"
+            eff_q = eff(dwb, dwq, atol)
+            eff_n = eff(dwb, dwn, atol)
+            title = f"{title} gradient perf: q={eff_q:2.1e} n={eff_n:2.1e}"
             ax.set(title=title)
             ax.legend(loc=1)
 
@@ -914,21 +910,21 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
         plt.show()
         import pdb; pdb.set_trace()
 
-    errf = np.abs(comp_fun(fx[:, 0]) + comp_fun(mod.fluxes[:, 0, 5]))
+    atol = 1e-5
+    eff_fx = eff(fx[:, 0], -mod.fluxes[:, 0, 5], atol)
+    eff_dfx = eff(dfx[:, 0], -mod.dfluxes[:, 0, 0, 5], atol)
+    eff_dfxn = eff(dfx[:, 0], -dfx_n[:, 0, 5], atol)
 
-    errdf = np.abs(comp_fun(dfx[:, 0]) + comp_fun(mod.dfluxes[:, 0, 0, 5]))
-    errdfn = np.abs(comp_fun(dfx[:, 0]) - comp_fun(dfx_n[:, 0]))
+    print(f"\nTime : dtq={dtq:2.1e} dtn={dtn:2.1e} / ratio={dtq/dtn:0.1e}")
+    print(f"Flux  perf: q={eff_fx:2.1e}")
+    print(f"dFlux perf: q={eff_dfx:2.1e} n={eff_dfxn:2.1e} / ratio={eff_dfx/eff_dfxn:0.1e}")
 
-    print(f"\nTime : dtq={dtq:2.2e} dtn={dtn:2.2e} / ratio={dtq/dtn:0.1e}")
-    print(f"Flux : erq={errf.max():2.2e}")
-    print(f"dFlux: erq={errdf.max():2.2e} ern={errdfn.max():2.2e} / ratio={errdf.max()/errdfn.max():0.1e}")
-
-    assert errf.max() < 2e-3
-    assert errdf.max() < 2e-3
-    #assert errdf.max() < errdfn.max() * 10
+    assert eff_fx < 2e-4
+    assert eff_dfx < 5e-3
+    assert eff_dfx < eff_dfxn * 1.05
 
     assert dtq < dtb * 30
-    assert dtq < dtn * 15
+    assert dtq < dtn * 0.66
 
 
 @pytest.mark.parametrize("gamma", [10, 1000])
