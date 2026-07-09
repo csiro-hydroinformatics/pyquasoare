@@ -1,13 +1,24 @@
 from pathlib import Path
 
+import pandas as pd
+
 from hydrodiy.io import csv
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-SITEIDS = ["203004", "203005", "203014", "203024", \
-                "203060", "203900"]
 TIMESTEPS = ["daily", "hourly"]
+
+
+def get_stations():
+    fs = FTEST.parent / "data" / "sites.csv"
+    stations, _ = csv.read_csv(fs, dtype={"STATIONID": str},
+                               index_col="STATIONID")
+    return stations.iloc[:, :6]
+
+
+SITEIDS = get_stations().index.to_list()
+
 
 def get_data(siteid, timestep):
     errmess = f"Cannot find siteid {siteid}"
