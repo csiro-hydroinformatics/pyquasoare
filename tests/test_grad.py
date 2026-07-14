@@ -38,7 +38,7 @@ FLUX_SCALINGS = [
     [1., 1., 1.2]
     ]
 VARIABLE_IDS = [0, 1, 2, 3]
-NUMDIFF_EPS = 1e-5
+NUMDIFF_EPS = 1e-6
 
 def fixed(x, x0):
     return x0 * np.ones_like(x)
@@ -484,14 +484,13 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dx_v = dx[:, vid]
         dfx_v = dfx[:, vid]
 
+        eps = NUMDIFF_EPS
         if vid == 0:
-            eps = gamma * 1e-4
             gamma_m = gamma - eps
             gamma_p = gamma + eps
             coefs_lin_m = coefs_lin
             coefs_lin_p = coefs_lin
         else:
-            eps = NUMDIFF_EPS
             gamma_m, gamma_p = gamma, gamma
             coefs_lin_m = coefs_lin.copy()
             coefs_lin_m[vid - 1] *= (1 - eps)
@@ -513,6 +512,15 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
         dx_err =  np.abs(comp_fun(dx_v) - comp_fun(dx_n))
         dfx_err =  np.abs(comp_fun(dfx_v) - comp_fun(dfx_n))
+
+        if debug_mode:
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(ncols=3, nrows=2)
+            for ifx, ax in enumerate(axs.flat):
+                ax.plot(dfx_v[:, ifx])
+                ax.plot(dfx_n[:, ifx])
+            plt.show()
+            import pdb; pdb.set_trace()
 
         # eliminates nskip values : difficult to explain the difference
         # between numerical diff and our method for certain timesteps sometimes.

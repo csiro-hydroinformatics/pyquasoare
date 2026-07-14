@@ -61,8 +61,13 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0.)
         ],
     "openwater": [
-        lambda x: np.where((x > 0.) & (x < 1.), 1., 0.),
-        lambda x: np.where((x > 0.) & (x < 1.), 1., 0.),
+        lambda x: np.where(x < 1., 1., 0.),
+        lambda x: np.where(x > 0., 1., 0.),
+        lambda x: np.zeros_like(x)
+        ],
+    "openwatersmooth": [
+        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + 1e-4), 0.),
+        lambda x: np.where(x > 0., x / np.sqrt(x**2 + 1e-4), 0.),
         lambda x: np.zeros_like(x)
         ]
 }
@@ -96,7 +101,6 @@ def grad_reservoir(alphas, gamma,
                    fluxes=None,
                    dfluxes=None,
                    niter=None,
-                   dQstars_ext=None,
                    errors="ignore"):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
@@ -214,9 +218,6 @@ def grad_reservoir(alphas, gamma,
         dfluxes = np.zeros((nval, nvariables, NFLUXES_OUTPUTS),
                            dtype=np.float64)
 
-    if dQstars_ext is None:
-        dQstars_ext = np.zeros((nvariables, NFLUXES_INPUTS), dtype=np.float64)
-
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors,
                                             alphas,
@@ -225,7 +226,6 @@ def grad_reservoir(alphas, gamma,
                                             flux_scalings,
                                             x0,
                                             Qstars,
-                                            dQstars_ext,
                                             coefs_linear,
                                             niter,
                                             x,
