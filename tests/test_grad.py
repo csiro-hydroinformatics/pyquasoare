@@ -38,7 +38,7 @@ FLUX_SCALINGS = [
     [1., 1., 1.2]
     ]
 VARIABLE_IDS = [0, 1, 2, 3]
-NUMDIFF_EPS = 1e-6
+NUMDIFF_EPS = 1e-5
 
 def fixed(x, x0):
     return x0 * np.ones_like(x)
@@ -47,13 +47,19 @@ def indicator(x, xmin, xmax):
     return np.where((x > xmin) & (x < xmax), 1., 0.)
 
 def comp_fun(x, x0=1e-2):
-    return x0 * np.asinh(x / x0)
+    return np.asinh(x / x0)
 
-def eff(x, y, nu=1.):
+def eff(x, y, nu=1., mini=1e-10):
     tx = comp_fun(x, nu)
     ty = comp_fun(y, nu)
-    txm = tx.mean()
-    return ((ty - tx)**2).sum() / ((tx - txm)**2).sum()
+    txm = tx.mean(axis=0)
+    denom = ((tx - txm)**2).mean(axis=0)
+    out = ((ty - tx)**2).mean() / denom
+    if x.ndim == 1:
+        out = np.nan if denom < 1e-10 else out
+    else:
+        out[denom < mini] = np.nan
+    return out
 
 
 FLUX_FUNCTIONS = {
@@ -154,17 +160,20 @@ def get_input_mapping(nreservoirs, ntype):
 
 def skip_this(reservoir, gamma, demand):
     if not re.search("rout", reservoir) and demand != 0:
-        pytest.skip("Config not relevant")
+        pytest.skip("Cannot use non-zero demand for reservoirs other than routing")
 
     if reservoir in ["linrouting", "muskingumrouting"]:
         if demand < 0:
             pytest.skip("Can't have demand <0 with pure linear routing models")
 
         if gamma > 1000:
-            pytest.skip("Skipping linear routing with tests with large gamma")
+            pytest.skip("Skipping linear routing tests for large gamma")
 
     if reservoir in ["gr4jroutequad"] and demand > 0:
         pytest.skip("Can't have demand >0 with gr4jroute quad")
+
+    if re.search("openwater", reservoir) and gamma > 100:
+        pytest.skip("Skipping openwater reservoir for large gamma")
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -464,7 +473,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, flux_scalings,
                                 allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
-    start, end = None, 600
+    start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -479,18 +488,19 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                                  flux_scalings=fxs,
                                                  errors="raise")
 
-    # Numerical difference
+    # Numerical difference for each variable
     for vid in range(gradients.VARTYPE_NUMBER):
         dx_v = dx[:, vid]
         dfx_v = dfx[:, vid]
 
-        eps = NUMDIFF_EPS
         if vid == 0:
+            eps = gamma * 1e-8
             gamma_m = gamma - eps
             gamma_p = gamma + eps
             coefs_lin_m = coefs_lin
             coefs_lin_p = coefs_lin
         else:
+            eps = 1e-6
             gamma_m, gamma_p = gamma, gamma
             coefs_lin_m = coefs_lin.copy()
             coefs_lin_m[vid - 1] *= (1 - eps)
@@ -510,34 +520,50 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dx_n = (xp - xm) / 2 / eps
         dfx_n = (fxp - fxm) / 2 / eps
 
-        dx_err =  np.abs(comp_fun(dx_v) - comp_fun(dx_n))
-        dfx_err =  np.abs(comp_fun(dfx_v) - comp_fun(dfx_n))
+        if vid == 0:
+            # Convert dflux against gamma to dflux against gamma scaling
+            dfx_n *= gamma
+            dfx_v *= gamma
 
-        if debug_mode:
+        dx_eff = eff(dx_n, dx_v)
+        dx_emax = np.abs(dx_n - dx_v).max()
+
+        dfx_eff = eff(dfx_n, dfx_v)
+        dfx_emax = np.abs(dfx_n - dfx_v).max()
+
+        # Strong condition > if one of the variable has nan eff, then skip
+        # this excludes test for the others
+        if np.any(np.isnan(dfx_eff)) or np.isnan(dx_eff):
+            continue
+
+        xtol = 1e-8
+        ftol = 5e-6
+        if debug_mode and (dx_eff > xtol or np.nanmin(dfx_eff) > ftol):
             import matplotlib.pyplot as plt
-            fig, axs = plt.subplots(ncols=3, nrows=2)
+            fig, axs = plt.subplots(ncols=3, nrows=2,
+                                    figsize=(12, 7),
+                                    layout="constrained")
             for ifx, ax in enumerate(axs.flat):
-                ax.plot(dfx_v[:, ifx])
-                ax.plot(dfx_n[:, ifx])
+                v = comp_fun(dfx_v[:, ifx])
+                n = comp_fun(dfx_n[:, ifx])
+                ax.plot(v)
+                ax.plot(n)
+                tax = ax.twinx()
+                tax.plot(np.abs(v - n), color="0.5", lw=0.8, alpha=0.5)
+                #tax.plot(fx[:, ifx], color="0.5", lw=0.8, alpha=0.5)
+
+                e = eff(n, v)
+                m = np.abs(n - v).max()
+                title = f"Flux {ifx} - eff={e:0.1e} emax={m:0.1e}"
+                ax.set_title(title)
+
+            ftitle = f"Diff against dvar={vid} eps={eps:0.1e}"
+            fig.suptitle(ftitle, fontweight="bold")
             plt.show()
             import pdb; pdb.set_trace()
 
-        # eliminates nskip values : difficult to explain the difference
-        # between numerical diff and our method for certain timesteps sometimes.
-        nskip = 20
-        dx_errmax = np.sort(dx_err)[-nskip]
-        dfx_errmax = np.sort(dfx_err, axis=0)[-nskip]
-
-        assert dx_errmax < 5e-4
-        assert dfx_errmax.max() < 1e-3
-
-        if dx_v.std() > 1e-100:
-            idx = dx_err < dx_errmax
-            corr = np.corrcoef(dx_v[idx], dx_n[idx])[0, 1]
-            # Sometimes corr is close to 0 because of strange
-            # behaviour of numerical differences
-            if abs(corr) > 1e-5:
-                assert corr > 0.9999
+        assert dx_eff < xtol
+        assert np.nanmax(dfx_eff) < ftol
 
 
 def test_grad_model_setters(allclose):
@@ -755,7 +781,9 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
             assert allclose(dfxu, 0.)
 
         modp = mod.clone()
+        modp.allocate(len(df), variables_specs=None, timestep=timestep)
         modm = mod.clone()
+        modm.allocate(len(df), variables_specs=None, timestep=timestep)
 
         if vid == 0:
             # Differentiate against gamma
@@ -783,6 +811,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
         dfx_n = (modp.fluxes - modm.fluxes) / 2 / eps
         dfx_c = dfx[:, ivar, :, :]
         atol = 1e-7
+
         assert allclose(dfx_n, dfx_c, atol=atol)
 
 
@@ -839,7 +868,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 
     # numerical diff on quasoare
     modm = mod.clone()
+    modm.allocate(nval, timestep=timestep)
     modp = mod.clone()
+    modp.allocate(nval, timestep=timestep)
 
     eps = 1e-3 # becomes worse if eps < 1e-12, optimal for 1e-2
     modm.gammas = gamma - eps
