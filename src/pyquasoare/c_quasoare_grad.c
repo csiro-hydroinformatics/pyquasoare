@@ -583,7 +583,9 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 
         for(inp = 0; inp < nfxi; inp++) {
             idx_dq = nfxi * dvar + inp;
-            if(dvar == QUASOARE_GRAD_VARTYPE_CAPACITY)
+
+            if(dvar == QUASOARE_GRAD_VARTYPE_CAPACITY
+                    && inp == QUASOARE_GRAD_IFLUX_DRAINAGE)
                 dQstars_ext[idx_dq] = -1. / timestep;
             else
                 dQstars_ext[idx_dq] = 0;
@@ -739,9 +741,26 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
             /* initialise the derivatives of the 3 inputs
              * to the current reservoir against all
              * independent variables */
-            for(dvar = 0; dvar < nvariables; dvar ++)
-                for(inp = 0; inp < nfxi; inp++)
-                    dQstars_ext[nfxi * dvar + inp] = 0;
+            for(dvar = 0; dvar < nvariables; dvar ++) {
+                dvar_res_id = variables_reservoir_id[dvar];
+                dvar_type_id = variables_type_id[dvar];
+
+                if(dvar_res_id >= nreservoirs || dvar_res_id < 0)
+                   return QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS;
+
+                for(inp = 0; inp < nfxi; inp++) {
+                    idx_dq = nfxi * dvar + inp;
+
+                    /* Variable belongs to the current reservoir.
+                     * Only non zero derivative is drainage flux
+                     * against capacity Γ */
+                    if(dvar_type_id == QUASOARE_GRAD_VARTYPE_CAPACITY
+                            && inp == QUASOARE_GRAD_IFLUX_DRAINAGE)
+                        dQstars_ext[idx_dq] = -1. / timestep;
+                    else
+                        dQstars_ext[idx_dq] = 0;
+                }
+            }
 
             /* Get reservoir capacity */
             gamma = gammas[res];
@@ -818,9 +837,6 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                     dvar_res_id = variables_reservoir_id[dvar];
                     dvar_type_id = variables_type_id[dvar];
 
-                    if(dvar_res_id >= nreservoirs || dvar_res_id < 0)
-                       return QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS;
-
                     /* Locate the flux derivative from the
                      * upstream reservoir and its output flux */
                     idx_df = nfxo  * (resup_id + nreservoirs * dvar) + resup_ofx_id;
@@ -844,13 +860,6 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          */
                         dQstars_ext[idx_dq] += input_weight * dfluxes[idx_df];
 
-                    } else {
-                        /* Variable belongs to the current reservoir.
-                         * Only non zero derivative is derivative against capacity Γ */
-                        if(dvar_type_id == QUASOARE_GRAD_VARTYPE_CAPACITY) {
-                            /* Locate the Qstars derivative */
-                            dQstars_ext[idx_dq] = -1. / timestep;
-                        }
                     }
                 }
             }

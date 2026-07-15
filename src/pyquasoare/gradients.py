@@ -41,7 +41,8 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0)**4 / 3.
         ],
     "gr4jroute": [
-        lambda x: 0.9 * np.ones_like(x),
+        # Safety on gr4j route store to avoid blow up if demand > 0
+        lambda x: 0.9 * np.where(x < 2., 1., 0.),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
         ],
