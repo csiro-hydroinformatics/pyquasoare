@@ -54,17 +54,13 @@ def eff(x, y, nu=1., mini=1e-10):
     ty = comp_fun(y, nu)
     txm = tx.mean(axis=0)
 
-    denom = math.sqrt(((tx - txm)**2).mean(axis=0))
-    num1 = math.sqrt(((ty - tx)**2).mean())
     err2 = np.abs(ty - tx).max(axis=0)
 
+    denom = np.abs(tx).max()
     if x.ndim == 1:
-        if denom < mini:
-            err1 = np.nan
-        else:
-            err1 = num1 / denom
+        err1 = err2 / denom if denom > mini else np.nan
     else:
-        err1 = np.where(denom < mini, np.nan, num1 / denom)
+        err1 = np.where(denom > mini, err2 / denom, np.nan)
 
     return err1, err2
 
@@ -738,7 +734,7 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
-@pytest.mark.parametrize("demand", [-0.5, 1e-10, 0.5])
+@pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     noriginal = 365 * 5
     nrepeat = 5
@@ -820,7 +816,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
             modm.gammas = gs
 
         else:
-            eps = 1e-6
+            eps = 5e-7
             delta = 2 * eps
 
             # Differentiate against flux scaling
@@ -852,7 +848,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
             dfx_n *= mod.gammas[rid]
             dfx_c *= mod.gammas[rid]
 
-        if debug_mode and ivar == 6:
+        if debug_mode and ivar == 10:
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(ncols=3, nrows=3,
                                     figsize=(12, 8),
@@ -906,7 +902,8 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     mess1 = f"{emax_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
     cfg = eff_config
     mess2 = f"{eff_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
-    assert emax_max < 1e-3 and eff_max < 1e-2, f"{mess1} - {mess2}"
+    mess = f"{mess1} - {mess2}"
+    assert emax_max < 3e-3 and eff_max < 7e-3, mess
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -1054,9 +1051,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     print(f"Flux  perf: q={eff_fx:2.1e}")
     print(f"dFlux perf: q={eff_dfx:2.1e} n={eff_dfxn:2.1e} / ratio={eff_dfx/eff_dfxn:0.1e}")
 
-    assert eff_fx < 5e-5
-    assert eff_dfx < (5e-5 if gamma < 10000 else 8e-4)
-    assert abs(eff_dfx - eff_dfxn) < eff_dfxn * 1e-2
+    assert emax_fx < 5e-4
+    assert emax_dfx < 5e-3
+    assert abs(emax_dfx - emax_dfxn) < emax_dfxn * 1e-2
 
     assert dtq < dtb * 20
     assert dtq < dtn

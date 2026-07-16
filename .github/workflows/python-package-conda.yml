@@ -34,7 +34,7 @@ jobs:
         run: |
           set -e
           uv run --locked pytest --doctest-modules src
-          uv run --locked pytest --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
+          uv run --locked pytest -s --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
  
       - name: Parse coverage report and create badge
         run: |
