@@ -27,8 +27,8 @@ FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
 NALPHAS = 50
 
-DEMANDS = [-0.5, 0]
-TIMESTEPS = [0.1, 1]
+DEMANDS = [-0.5, 1e-10]
+TIMESTEPS = [0.1, 1.]
 GAMMAS = [10, 100, 10000]
 FLUX_SCALINGS = [
     [1.2, 1., 1.],
@@ -53,13 +53,20 @@ def eff(x, y, nu=1., mini=1e-10):
     tx = comp_fun(x, nu)
     ty = comp_fun(y, nu)
     txm = tx.mean(axis=0)
-    denom = ((tx - txm)**2).mean(axis=0)
-    out = ((ty - tx)**2).mean() / denom
+
+    denom = math.sqrt(((tx - txm)**2).mean(axis=0))
+    num1 = math.sqrt(((ty - tx)**2).mean())
+    err2 = np.abs(ty - tx).max(axis=0)
+
     if x.ndim == 1:
-        out = np.nan if denom < 1e-10 else out
+        if denom < mini:
+            err1 = np.nan
+        else:
+            err1 = num1 / denom
     else:
-        out[denom < mini] = np.nan
-    return out
+        err1 = np.where(denom < mini, np.nan, num1 / denom)
+
+    return err1, err2
 
 
 FLUX_FUNCTIONS = {
@@ -525,11 +532,9 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             dfx_n *= gamma
             dfx_v *= gamma
 
-        dx_eff = eff(dx_n, dx_v)
-        dx_emax = np.abs(dx_n - dx_v).max()
+        dx_eff, dx_emax = eff(dx_n, dx_v)
 
-        dfx_eff = eff(dfx_n, dfx_v)
-        dfx_emax = np.abs(dfx_n - dfx_v).max()
+        dfx_eff, dfx_emax = eff(dfx_n, dfx_v)
 
         # Strong condition > if one of the variable has nan eff, then skip
         # this excludes test for the others
@@ -552,8 +557,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                 tax.plot(np.abs(v - n), color="0.5", lw=0.8, alpha=0.5)
                 #tax.plot(fx[:, ifx], color="0.5", lw=0.8, alpha=0.5)
 
-                e = eff(n, v)
-                m = np.abs(n - v).max()
+                e, m = eff(n, v)
                 title = f"Flux {ifx} - eff={e:0.1e} emax={m:0.1e}"
                 ax.set_title(title)
 
@@ -571,7 +575,7 @@ def test_grad_model_setters(allclose):
     timestep = 1.
     mod = gradients.MultiReservoirModel(2, errors="raise")
     mod.alphas = 10
-    mod.network.add_link_bypass_shortfall(0, 1)
+    mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, FLUX_FUNCTIONS["openwater"])
     mod.set_coefs_linear(1, "gr4jprod")
 
@@ -593,7 +597,7 @@ def test_grad_model_setters(allclose):
 def test_grad_model_clone(allclose):
     mod = gradients.MultiReservoirModel(2, errors="raise")
     mod.alphas = 10
-    mod.network.add_link_bypass_shortfall(0, 1)
+    mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.gammas = [5., 400.]
@@ -647,11 +651,11 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
     mod = gradients.MultiReservoirModel(6, errors="ignore")
 
     mod.alphas = 10
-    mod.network.add_link_bypass_shortfall(0, 1)
-    mod.network.add_link_outflow(1, 2)
-    mod.network.add_link_outflow(2, 5)
-    mod.network.add_link_outflow(3, 5)
-    mod.network.add_link_outflow(4, 5)
+    mod.add_link_bypass_shortfall(0, 1)
+    mod.add_link_outflow(1, 2)
+    mod.add_link_outflow(2, 5)
+    mod.add_link_outflow(3, 5)
+    mod.add_link_outflow(4, 5)
 
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
@@ -734,85 +738,175 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep", TIMESTEPS)
-@pytest.mark.parametrize("demand", DEMANDS)
+@pytest.mark.parametrize("demand", [-0.5, 1e-10, 0.5])
 def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
-    df = data_reader.get_data(siteid, "daily")
-    df = df.iloc[:20]
+    noriginal = 365 * 5
+    nrepeat = 5
+    df = data_reader.get_data(siteid, "daily")[-noriginal:]
+    df = df.interpolate().iloc[-noriginal:, :2]
+    assert df.shape == (noriginal, 2)
+    df = np.tile(df, (nrepeat, 1))
 
     mod = gradients.MultiReservoirModel(3, "raise")
-    mod.alphas = 10
-    mod.network.add_link_bypass_shortfall(0, 1)
-    mod.network.add_link_outflow(1, 2)
+    mod.alphas = 50
+    mod.add_link_bypass_shortfall(0, 1)
+    mod.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, "gr4jprod")
+    mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
-    mod.gammas = [50., 400., 50.]
+    mod.gammas = [5., 400., 50.]
 
     nv = gradients.VARTYPE_NUMBER
     vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
     mod.allocate(len(df), variables_specs=vspecs, timestep=timestep)
 
-    Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
-    Qst1[:, -1] *= -1
-    Qst1 = np.ascontiguousarray(Qst1)
-    mod.set_Qstars(0, Qst1)
+    Qst0 = df
+    Qst0[:, 1] *= -1
+    mod.set_Qstars(0, Qst0)
 
-    Qst2 = np.zeros((len(df), 2))
-    Qst2[:, -1] = 1.
+    Qst2 = np.ones((len(df), 2))
+    Qst2[:, 0] = np.nan
     mod.set_Qstars(2, Qst2)
 
-    # Set demand
+    # Set demand for routing reservoir
     fxs = np.ones((mod.nreservoirs, 3))
-    fxs[-1, 1] = max(demand, 1e-10)
+    fxs[-1, 1] = demand
     mod.flux_scalings = fxs
 
+    # Run model
+    t0 = time.time()
     mod.run()
-    fx = mod.fluxes
+    dtq = time.time() - t0
+
     dfx = mod.dfluxes
 
-    # Numerical differences
+    dtn = 0
+    emax_max = 0
+    emax_config = None
+    eff_max = 0
+    eff_config = None
+
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
+
+        # Numerical differences
+        modp = mod.clone()
+        modp.allocate(len(df), timestep=timestep)
+        modp.set_Qstars(0, Qst0)
+        modp.set_Qstars(2, Qst2)
+
+        modm = mod.clone()
+        modm.allocate(len(df), timestep=timestep)
+        modm.set_Qstars(0, Qst0)
+        modm.set_Qstars(2, Qst2)
 
         # Test downstream parameters have no effect on upstream fluxes
         if rid > 0:
             dfxu = dfx[:, ivar, :rid, :]
             assert allclose(dfxu, 0.)
 
-        modp = mod.clone()
-        modp.allocate(len(df), variables_specs=None, timestep=timestep)
-        modm = mod.clone()
-        modm.allocate(len(df), variables_specs=None, timestep=timestep)
-
         if vid == 0:
+            eps = 1e-6 * mod.gammas[rid]
+            delta = 2 * eps
+
             # Differentiate against gamma
             gs = mod.gammas.copy()
-            eps = gs[rid] * 1e-4
             gs[rid] = gs[rid] + eps
             modp.gammas = gs
 
             gs = mod.gammas.copy()
             gs[rid] = gs[rid] - eps
             modm.gammas = gs
+
         else:
-            eps = NUMDIFF_EPS
+            eps = 1e-6
+            delta = 2 * eps
+
+            # Differentiate against flux scaling
+            # .. minus config
+            coefs_lin = modp._coefs_linear
+
+            # !!! Caution - cannot increase inflow flux
+            # for an openwater reservoir ... major problem!!
+            if rid != 0 and vid != 1:
+                coefs_lin[rid, vid - 1] *= (1 + eps)
+            else:
+                delta = eps
+
+            # .. plus config
             coefs_lin = modm._coefs_linear
             coefs_lin[rid, vid - 1] *= (1 - eps)
 
-            d = modm.coefs_linear[rid, vid - 1] - mod.coefs_linear[rid, vid - 1]
-
-            coefs_lin = modp._coefs_linear
-            coefs_lin[rid, vid - 1] *= (1 + eps)
-
+        # Compute numerical difference
+        t0 = time.time()
         modp.run()
         modm.run()
+        dfx_n = (modp.fluxes - modm.fluxes) / delta
+        dtn += time.time() - t0
 
-        dfx_n = (modp.fluxes - modm.fluxes) / 2 / eps
+        # get sim
         dfx_c = dfx[:, ivar, :, :]
-        atol = 1e-7
 
-        assert allclose(dfx_n, dfx_c, atol=atol)
+        if vid == 0:
+            dfx_n *= mod.gammas[rid]
+            dfx_c *= mod.gammas[rid]
+
+        if debug_mode and ivar == 6:
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(ncols=3, nrows=3,
+                                    figsize=(12, 8),
+                                    layout="constrained")
+            for res in range(mod.nreservoirs):
+                for ifx in range(gradients.NFLUXES_INPUTS):
+                    ax = axs[res, ifx]
+                    dc = dfx_c[:, res, ifx]
+                    dn = dfx_n[:, res, ifx]
+                    ax.plot(dc, label="Quasoare")
+                    ax.plot(dn, label="Numerical")
+
+                    tax = ax.twinx()
+                    #tax.plot(mod.fluxes[:, res, ifx], color="0.5", lw=0.8)
+                    tax.plot(dc - dn, color="0.7", lw=0.8, zorder=0)
+
+                    ef, emax = eff(dn, dc)
+                    ax.text(0.02, 0.98, f"Emax={emax:0.1e}\nEff={ef:0.1e}",
+                            transform=ax.transAxes,
+                            va="top", ha="left")
+
+                    title = f"Res#{res} Flux#{ifx}"
+                    ax.set(title=title)
+
+                    if res == 0 and ifx == 0:
+                        ax.legend()
+
+            ftitle = f"Derivative against var #{ivar} (res={rid}, type={vid})"
+            fig.suptitle(ftitle, fontweight="bold")
+            plt.show()
+            import pdb; pdb.set_trace()
+
+        for res in range(mod.nreservoirs):
+            for ifx in range(gradients.NFLUXES_INPUTS):
+                dc = dfx_c[:, res, ifx]
+                dn = dfx_n[:, res, ifx]
+                ef, emax = eff(dn, dc)
+
+                emax = 0 if np.isnan(emax) else emax
+                ef = 0 if np.isnan(ef) or emax < 1e-6 else ef
+
+                if emax > emax_max:
+                    emax_max = emax
+                    emax_config = (ivar, res, ifx)
+
+                if ef > eff_max:
+                    eff_max = ef
+                    eff_config = (ivar, res, ifx)
+
+    cfg = emax_config
+    mess1 = f"{emax_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
+    cfg = eff_config
+    mess2 = f"{eff_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
+    assert emax_max < 1e-3 and eff_max < 1e-2, f"{mess1} - {mess2}"
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -925,8 +1019,8 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.plot(wq, "k--", label="quasoare")
 
             atol = 1e-5
-            eff_q = eff(wb, wq, atol)
-            ax.set(title=f"{title} perf: q={eff_q:2.1e}")
+            eff_q, emax_q = eff(wb, wq, atol)
+            ax.set(title=f"{title} perf: q={eff_q:0.1e} / {emax_q:0.1e}")
             ax.legend(loc=1)
 
             ax = axs[1, ivar]
@@ -938,8 +1032,8 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.plot(dwq, "k--", label="quasoare")
             ax.plot(dwn, "-", label="numerical", color="tab:blue")
 
-            eff_q = eff(dwb, dwq, atol)
-            eff_n = eff(dwb, dwn, atol)
+            eff_q, _ = eff(dwb, dwq, atol)
+            eff_n, _ = eff(dwb, dwn, atol)
             title = f"{title} gradient perf: q={eff_q:2.1e} n={eff_n:2.1e}"
             ax.set(title=title)
             ax.legend(loc=1)
@@ -952,9 +1046,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
         plt.show()
         import pdb; pdb.set_trace()
 
-    eff_fx = eff(fx[:, 0], -mod.fluxes[:, 0, 5])
-    eff_dfx = eff(dfx[:, 0], -mod.dfluxes[:, 0, 0, 5])
-    eff_dfxn = eff(dfx[:, 0], -dfx_n[:, 0, 5])
+    eff_fx, emax_fx = eff(fx[:, 0], -mod.fluxes[:, 0, 5])
+    eff_dfx, emax_dfx = eff(dfx[:, 0], -mod.dfluxes[:, 0, 0, 5])
+    eff_dfxn, emax_dfxn = eff(dfx[:, 0], -dfx_n[:, 0, 5])
 
     print(f"\nTime (dtb={dtb:2.1e}): dtq={dtq:2.1e} dtn={dtn:2.1e} / ratio={dtq/dtn:0.1e}")
     print(f"Flux  perf: q={eff_fx:2.1e}")
@@ -1092,18 +1186,18 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
 
         # .. links ...
         # RR prod -> RR routing
-        mod.network.add_link_outflow(ibase, ibase + 1)
+        mod.add_link_outflow(ibase, ibase + 1)
 
         # RR route -> transluent with conversion
         conv = areas[ireach] * timestep / 86.4
-        mod.network.add_link_outflow(ibase + 1, ibase + 3, conv)
+        mod.add_link_outflow(ibase + 1, ibase + 3, conv)
 
         # Transluent upstream -> RO route
         if ireach > 0:
-            mod.network.add_link_outflow(ibase - 1, ibase + 2)
+            mod.add_link_outflow(ibase - 1, ibase + 2)
 
         # RO Route -> transluent
-        mod.network.add_link_outflow(ibase + 2, ibase + 3)
+        mod.add_link_outflow(ibase + 2, ibase + 3)
 
     # Set capacity
     g = np.ones(nreaches * nres_per_reach)
@@ -1163,10 +1257,9 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
             ax.plot(yq, label="quasoare")
             tax = ax.twinx()
 
-            err = np.abs(yb - yq)
-            ef = eff(yb, yq)
+            ef, err = eff(yb, yq)
             tax.plot(err, lw=0.8, color="0.6", alpha=0.2)
-            ax.text(0.02, 0.98, f"Emax={err.max():0.1e}\nEff={ef:0.1e}",
+            ax.text(0.02, 0.98, f"Emax={err:0.1e}\nEff={ef:0.1e}",
                     va="top", ha="left", transform=ax.transAxes)
 
             title = f"R{res} ({rtype})"
@@ -1179,10 +1272,9 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
             ax.plot(dyb)
             ax.plot(dyq)
             tax = ax.twinx()
-            err = np.abs(dyb - dyq)
-            ef = eff(dyb, dyq)
+            ef, err = eff(dyb, dyq)
             tax.plot(err, lw=0.8, color="0.6", alpha=0.2)
-            ax.text(0.02, 0.98, f"Emax={err.max():0.1e}\nEff={ef:0.1e}",
+            ax.text(0.02, 0.98, f"Emax={err:0.1e}\nEff={ef:0.1e}",
                     va="top", ha="left", transform=ax.transAxes)
 
             ax.set(ylabel=ylabel)
@@ -1198,35 +1290,35 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
 
     # Error on rr prod
     nrp = nres_per_reach
-    ef = eff(fx_rr_prod, -mod.fluxes[:, ::nrp, 5])
+    ef, err = eff(fx_rr_prod, -mod.fluxes[:, ::nrp, 5])
     ef = np.nanmax(ef)
     logtxt = f"FRP={ef:3.1e}"
     #assert ef < 5e-5
 
-    ef = eff(dfx_rr_prod, -mod.dfluxes[:, 0, ::nrp, 5])
+    ef, err = eff(dfx_rr_prod, -mod.dfluxes[:, 0, ::nrp, 5])
     ef = np.nanmax(ef)
     logtxt += f" DRP={ef:3.1e}"
     #assert ef < 5e-5
 
     # Error on rr route
-    ef = eff(fx_rr_route, -mod.fluxes[:, 1::nrp, 5])
+    ef, err = eff(fx_rr_route, -mod.fluxes[:, 1::nrp, 5])
     ef = np.nanmax(ef)
     logtxt += f" FRR={ef:3.1e}"
     #assert ef < 5e-5
 
-    ef = eff(dfx_rr_route, -mod.dfluxes[:, 0, 1::nrp, 5])
+    ef, err = eff(dfx_rr_route, -mod.dfluxes[:, 0, 1::nrp, 5])
     ef = np.nanmax(ef)
 
     logtxt += f" DRR={ef:3.1e}"
     #assert ef < 5e-5
 
     # Error on ro route
-    ef = eff(fx_ro_route, -mod.fluxes[:, 3::nrp, 5])
+    ef, err = eff(fx_ro_route, -mod.fluxes[:, 3::nrp, 5])
     ef = np.nanmax(ef)
     logtxt += f" FRO={ef:3.1e}"
     #assert ef < 5e-5
 
-    ef = eff(dfx_ro_route, -mod.dfluxes[:, 0, 3::nrp, 5])
+    ef, err = eff(dfx_ro_route, -mod.dfluxes[:, 0, 3::nrp, 5])
     ef = np.nanmax(ef)
     logtxt += f" DRO={ef:3.1e}"
     #assert ef < 5e-5

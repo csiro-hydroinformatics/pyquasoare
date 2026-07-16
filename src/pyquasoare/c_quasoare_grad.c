@@ -755,7 +755,8 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                     /* Variable belongs to the current reservoir.
                      * Only non zero derivative is drainage flux
                      * against capacity Γ */
-                    if(dvar_type_id == QUASOARE_GRAD_VARTYPE_CAPACITY
+                    if(dvar_res_id == current_reservoir_id
+                            && dvar_type_id == QUASOARE_GRAD_VARTYPE_CAPACITY
                             && inp == QUASOARE_GRAD_IFLUX_DRAINAGE)
                         dQstars_ext[idx_dq] = -1. / timestep;
                     else
@@ -855,9 +856,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          * for upstream reservoirs first. Hence the reservoir
                          * order needs to be upstream -> downstream
                          */
-
-                        // WRONG - THIS LINE IS CREATING BUGS...
-                        //dQstars_ext[idx_dq] += input_weight * dfluxes[idx_up_df];
+                        dQstars_ext[idx_dq] += input_weight * dfluxes[idx_up_df];
                     }
                     /* Other cases of reservoirs (i.e. reservoirs
                      * downstream or identical to current reservoir)
@@ -912,6 +911,11 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
                 for(dvar = 0; dvar < nvariables; dvar++) {
                     dx[idx_dx + dvar] = c_get_nan();
+
+                    for(res = 0; res < nreservoirs; res ++) {
+                        for(out = 0; out < nfxo; out ++)
+                            dfluxes[idx_df + res * nfxo + out] = c_get_nan();
+                    }
                 }
 
                 if(errors == 1)
