@@ -42,12 +42,13 @@ FLUX_FUNCTIONS = {
         ],
     "gr4jroute": [
         # Safety on gr4j route store to avoid blow up if demand > 0
-        lambda x: 0.9 * np.where(x < 2., 1., 0.),
+        lambda x: 0.9 * np.where(x < 1., 1., 0.),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
         ],
     "gr2mroute": [
-        lambda x: np.ones_like(x),
+        # Safety on gr2m route store to avoid blow up if demand > 0
+        lambda x: np.where(x < 1., 1., 0.),
         lambda x: np.maximum(x, 0.),
         lambda x: np.maximum(x, 0.)**2
         ],
@@ -67,8 +68,8 @@ FLUX_FUNCTIONS = {
         lambda x: np.zeros_like(x)
         ],
     "openwatersmooth": [
-        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + 1e-4), 0.),
-        lambda x: np.where(x > 0., x / np.sqrt(x**2 + 1e-4), 0.),
+        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + (5e-2)**2), 0.),
+        lambda x: np.where(x > 0., x / np.sqrt(x**2 + (5e-2)**2), 0.),
         lambda x: np.zeros_like(x)
         ]
 }
@@ -384,8 +385,9 @@ class Network():
         nipmd = INPUT_MAPPING_LASTDIM
 
         ipm = self._input_mapping
-        if ipm is not None:
-            return ipm
+        ipmw = self._input_mapping_weights
+        if ipm is not None and ipmw is not None:
+            return ipm, ipmw
 
         ipm = np.zeros((nres, nres * nout, nipmd), dtype=np.int32)
         ipm[:, :, 0] = INPUT_MAPPING_MISSINGRESERVOIRID
@@ -542,8 +544,13 @@ class MultiReservoirModel():
     def alphas(self, value):
         nres = self.nreservoirs
         if isinstance(value, int):
-            value = np.repeat(np.linspace(0, 1, value)[None, :],
-                              self.nreservoirs, axis=0)
+            eps = 1e-4
+            al = np.concatenate([[-eps, 0., eps],
+                                 np.linspace(2 * eps, 1 - 2 * eps, value - 6),
+                                 [1. - eps, 1., 1 + eps]])
+            value = np.repeat(al[None, :],
+                              self.nreservoirs,
+                              axis=0)
 
         if value.shape[0] != nres:
             errmsg = f"Expected flux_scalings.shape[0] = {nres}."\
@@ -594,6 +601,27 @@ class MultiReservoirModel():
                 raise ValueError(errmsg)
 
             self._flux_scalings = value.astype(np.float64)
+
+    def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
+                 downstream_reservoir_id, downstream_potential_flux_id,
+                 weight):
+        self.network.add_link(upstream_reservoir_id, upstream_output_flux_id,
+                              downstream_reservoir_id, downstream_potential_flux_id,
+                              weight)
+
+    def add_link_outflow(self, upstream_reservoir_id,
+                         downstream_reservoir_id,
+                         conversion_factor=1.):
+        self.network.add_link_outflow(upstream_reservoir_id,
+                                      downstream_reservoir_id,
+                                      conversion_factor)
+
+    def add_link_bypass_shortfall(self, upstream_reservoir_id,
+                                  downstream_reservoir_id,
+                                  conversion_factor=1.):
+        self.network.add_link_bypass_shortfall(upstream_reservoir_id,
+                                               downstream_reservoir_id,
+                                               conversion_factor)
 
     def set_coefs_linear(self, reservoir_id, flux_functions):
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
