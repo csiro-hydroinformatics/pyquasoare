@@ -68,8 +68,8 @@ FLUX_FUNCTIONS = {
         lambda x: np.zeros_like(x)
         ],
     "openwatersmooth": [
-        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + (5e-2)**2), 0.),
-        lambda x: np.where(x > 0., x / np.sqrt(x**2 + (5e-2)**2), 0.),
+        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + (1e-2)**2), 0.),
+        lambda x: np.where(x > 0., x / np.sqrt(x**2 + (1e-2)**2), 0.),
         lambda x: np.zeros_like(x)
         ]
 }
@@ -544,6 +544,10 @@ class MultiReservoirModel():
     def alphas(self, value):
         nres = self.nreservoirs
         if isinstance(value, int):
+            if value < 8:
+                errmsg = f"Expected number of alphas >= 8, got {value}."
+                raise ValueError(errmsg)
+
             eps = 1e-4
             al = np.concatenate([[-eps, 0., eps],
                                  np.linspace(2 * eps, 1 - 2 * eps, value - 6),
@@ -654,7 +658,7 @@ class MultiReservoirModel():
 
         if Qstars.shape != (self.ntimesteps, NFLUXES_POTENTIAL):
             errmsg = "Expected Qstars.shape to be"\
-                     + f" ({self.ntimestep}, {NFLUXES_POTENTIAL}),"\
+                     + f" ({self.ntimesteps}, {NFLUXES_POTENTIAL}),"\
                      + f" got {Qstars.shape}."
             raise ValueError(errmsg)
 
