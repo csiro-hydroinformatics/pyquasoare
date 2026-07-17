@@ -667,7 +667,7 @@ def test_reservoir_equation_gr4j(siteid, X1, allclose):
     df = data_reader.get_data(siteid, "daily")
     df = df.loc[start:end]
     nval = len(df)
-    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]])
 
     # Run approximate solution + exclude PR and AE
     s0 = X1 / 2
@@ -711,7 +711,7 @@ def test_reservoir_equation_gr4j(siteid, X1, allclose):
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 def test_reservoir_interception(siteid, allclose):
     df = data_reader.get_data(siteid, "daily")
-    P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
+    P, E = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values[:300].T
     Pclip = np.maximum(P - E, 0.)
     Eclip = np.maximum(E - P, 0.)
 

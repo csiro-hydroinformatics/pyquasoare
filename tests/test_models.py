@@ -155,7 +155,7 @@ def test_quad_model_perturb(allclose):
     df = data_reader.get_data(siteid, "daily")
     df = df.loc[start:end]
     nval = len(df)
-    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]])
     climdiff = inputs[:, 0]-inputs[:, 1]
     scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
                                 np.maximum(-climdiff, 0.)/X1,
@@ -194,7 +194,7 @@ def test_quad_model_states_min_max(allclose):
     df = data_reader.get_data(siteid, "daily")
     df = df.loc[start:end]
     nval = len(df)
-    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]])
     climdiff = inputs[:, 0]-inputs[:, 1]
     scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
                                 np.maximum(-climdiff, 0.)/X1,
@@ -241,7 +241,7 @@ def test_routing_convergence(allclose):
 def test_reservoir_interception(allclose):
     siteid = "203900"
     df = data_reader.get_data(siteid, "daily")
-    P, E = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values[:300].T
+    P, E = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values[:300].T
 
     theta = 0.1
     scalings = np.column_stack([P/theta, E/theta])
