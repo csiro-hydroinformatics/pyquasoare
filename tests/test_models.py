@@ -45,7 +45,8 @@ def test_quad_model_errors(allclose):
     df = data_reader.get_data(siteid, "daily")
     df = df.loc[start:end]
     nval = len(df)
-    inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+    cols = ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]
+    inputs = np.ascontiguousarray(df.loc[:, cols])
     climdiff = inputs[:, 0]-inputs[:, 1]
     scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
                                 np.maximum(-climdiff, 0.)/X1,
@@ -90,7 +91,8 @@ def test_quad_model(allclose):
         df = data_reader.get_data(siteid, "daily")
         df = df.loc[start:end]
         nval = len(df)
-        inputs = np.ascontiguousarray(df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]])
+        cols = ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]
+        inputs = np.ascontiguousarray(df.loc[:, cols])
         climdiff = inputs[:, 0]-inputs[:, 1]
         errmax_max = 0.
         errbalmax_max = 0.
