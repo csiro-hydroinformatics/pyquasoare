@@ -24,6 +24,7 @@ cdef extern from 'c_quasoare_grad.h':
     cdef unsigned int QUASOARE_GRAD_IFLUX_OUTFLOW
 
     unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
+                         unsigned int positive_potential_inflow,
                          double *alphas,
                          double timestep,
                          double gamma,
@@ -44,6 +45,7 @@ cdef extern from 'c_quasoare_grad.h':
 
     unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
                          unsigned int errors,
+                         unsigned int positive_potential_inflow,
                          double *alphas,
                          double timestep,
                          double gamma,
@@ -59,6 +61,7 @@ cdef extern from 'c_quasoare_grad.h':
 
     unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
                      unsigned int errors,
+                     unsigned int positive_potential_inflow,
                      double *alphas,
                      double timestep,
                      double *gammas,
@@ -132,6 +135,7 @@ def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, is_model):
 
 
 def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
+                   unsigned int positive_potential_inflow,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
@@ -195,6 +199,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
 
     # Run C code
     return c_grad_integrate(nalphas, nreservoirs, nvariables,
+                           positive_potential_inflow,
                            <double*> np.PyArray_DATA(alphas),
                            timestep,
                            gamma,
@@ -214,6 +219,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                            <double*> np.PyArray_DATA(dfluxes))
 
 def grad_reservoir(int errors,
+                   unsigned int positive_potential_inflow,
                    np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    double timestep,
                    double gamma,
@@ -270,6 +276,7 @@ def grad_reservoir(int errors,
 
     # Run C code
     return c_grad_reservoir(nalphas, nval, errors,
+                            positive_potential_inflow,
                             <double*> np.PyArray_DATA(alphas),
                             timestep,
                             gamma,
@@ -285,6 +292,7 @@ def grad_reservoir(int errors,
 
 
 def grad_model(int errors,
+               unsigned int positive_potential_inflow,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
                double timestep,
                np.ndarray[double, ndim=1, mode='c'] gammas not None,
@@ -377,6 +385,7 @@ def grad_model(int errors,
 
     # Run C code
     return c_grad_model(nalphas, nreservoirs, nvariables, nval, errors,
+                        positive_potential_inflow,
                         <double*> np.PyArray_DATA(alphas),
                         timestep,
                         <double*> np.PyArray_DATA(gammas),
