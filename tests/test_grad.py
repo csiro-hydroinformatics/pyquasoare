@@ -274,7 +274,6 @@ def test_grad_integrate_error():
     # Configure problem
     niter = np.zeros(1, dtype=np.int32)
     x = np.zeros(1, dtype=np.float64)
-
     nres = 1
     ipm = np.zeros((nres, nres * gradients.NFLUXES_OUTPUTS,
                     gradients.INPUT_MAPPING_LASTDIM),
@@ -300,6 +299,7 @@ def test_grad_integrate_error():
     timestep = 1.
     gamma = 100.
 
+    posinf = 1
     rid = 0
     vrid = np.array([0] * nvars, dtype=np.int32)
     vtid = np.array([0] * nvars, dtype=np.int32)
@@ -307,29 +307,40 @@ def test_grad_integrate_error():
     dqst = np.zeros((nvars, gradients.NFLUXES_INPUTS))
     fxs = np.ones(3)
     t0 = 0.
-    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+    # .. error due to negative potential inflow
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 112
 
+    # .. disables the previous error
+    posinf = 0
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
+                                            ipm, ipmw, qst, dqst, fxs, coefs_lin,
+                                            vrid, vtid, niter, x, dx, fx, dfx)
+    assert ierr == 0
+
+    # .. error due to negative flux function
     qst = np.ones(2)
     coefs_lin[0] *= -1
-    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 111
 
+    # .. error due to zero reservoir capacity
     coefs_lin[0] *= -1
     gamma = 0
-    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 113
 
+    # .. error due to zero flux scaling
     gamma = 100.
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(3)
-    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+    ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 604
@@ -343,6 +354,7 @@ def test_grad_integrate_error():
 def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     skip_this(reservoir, gamma, demand)
     start, end = -300, None
+    posinf = 1
     Qstars, scalings = get_data(siteid, reservoir, timestep,
                                 gamma, demand, start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -381,7 +393,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
 
         # Lin
         qst = np.ascontiguousarray(Qstars[i])
-        ierr = c_pyquasoare_grad.grad_integrate(nres, rid, alphas, timestep, gamma,
+        ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                                 ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                                 vrid, vtid,
                                                 niter2, x, dx, fx, dfx)

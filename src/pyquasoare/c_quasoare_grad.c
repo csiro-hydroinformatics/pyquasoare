@@ -130,6 +130,7 @@ int c_grad_coefs_derivative(double timestep, unsigned int type_id,
  * dfluxes : vector of nvariables × 6 x nreservoirs
  * */
 int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
+                     unsigned int positive_potential_inflow,
                      double * alphas,
                      double timestep,
                      double gamma,
@@ -221,7 +222,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     int jalpha = c_find_alpha(nalphas, alphas, x_start);
 
     /* Check data */
-    if(Qstars[0] < 0)
+    if(Qstars[0] < 0 && positive_potential_inflow > 0)
         return QUASOARE_NEGATIVE_POTENTIAL_INFLOW_FLUX;
 
     if(gamma <= 0)
@@ -538,6 +539,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
 int c_grad_reservoir(int nalphas, unsigned int nval,
                      unsigned int errors,
+                     unsigned int positive_potential_inflow,
                      double * alphas,
                      double timestep,
                      double gamma,
@@ -601,6 +603,7 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 
         /* Integrate ode */
         ierr = c_grad_integrate(nalphas, nreservoirs, nvariables,
+                                positive_potential_inflow,
                                 alphas, timestep,
                                 gamma,
                                 input_mapping,
@@ -647,6 +650,7 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 
 int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
                  unsigned int errors,
+                 unsigned int positive_potential_inflow,
                  double * alphas,
                  double timestep,
                  double * gammas,
@@ -871,6 +875,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
             /* Integrate ode */
             //fprintf(stdout, "\t=> Integrate\n");
             ierr = c_grad_integrate(nalphas, nreservoirs, nvariables,
+                                    positive_potential_inflow,
                                     &(alphas[idx_a]),
                                     timestep,
                                     gamma,

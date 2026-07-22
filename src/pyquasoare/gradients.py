@@ -103,6 +103,7 @@ def grad_reservoir(alphas, gamma,
                    fluxes=None,
                    dfluxes=None,
                    niter=None,
+                   positive_potential_inflow=True,
                    errors="ignore"):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
@@ -164,6 +165,8 @@ def grad_reservoir(alphas, gamma,
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
         If None, the arrays are allocated during every function run.
+    positive_potential_inflow: bool
+        Verifies that potential inflows are always positive.
     errors: str
         - if 'ignore', then skip over error during time step integration
         - if 'raise', throw a ValueError.
@@ -200,6 +203,7 @@ def grad_reservoir(alphas, gamma,
     errors_check(errors)
     nval = Qstars.shape[0]
     nvariables = VARTYPE_NUMBER
+    positive_potential_inflow = int(positive_potential_inflow)
 
     if flux_scalings is None:
         flux_scalings = np.ones(NFLUXES_INPUTS)
@@ -222,6 +226,7 @@ def grad_reservoir(alphas, gamma,
 
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors,
+                                            positive_potential_inflow,
                                             alphas,
                                             timestep,
                                             gamma,
@@ -256,9 +261,11 @@ def grad_model(alphas, gammas,
                dfluxes=None,
                niter=None,
                dQstars_ext=None,
+               positive_potential_inflow=True,
                errors="ignore"):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
+    positive_potential_inflow = int(positive_potential_inflow)
 
     if variables_reservoir_id is None:
         variables_reservoir_id = np.arange(nreservoirs, dtype=np.int32)
@@ -285,6 +292,7 @@ def grad_model(alphas, gammas,
 
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_model(ierrors,
+                                        positive_potential_inflow,
                                         alphas,
                                         timestep,
                                         gammas,
