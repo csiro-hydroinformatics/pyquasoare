@@ -547,7 +547,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
         xtol = 1e-5
         ftol = 1e-5
-        if debug_mode and (dx_eff > xtol or np.min(dfx_eff) > ftol):
+        if debug_mode and (dx_eff > xtol or np.max(dfx_eff) > ftol):
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(ncols=3, nrows=2,
                                     figsize=(12, 7),
@@ -555,8 +555,8 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             for ifx, ax in enumerate(axs.flat):
                 v = comp_fun(dfx_v[:, ifx])
                 n = comp_fun(dfx_n[:, ifx])
-                ax.plot(v)
-                ax.plot(n)
+                ax.plot(v, label="QuaSoARe")
+                ax.plot(n, label="Diff")
                 tax = ax.twinx()
                 tax.plot(np.abs(v - n), color="0.5", lw=0.8, alpha=0.5)
                 #tax.plot(fx[:, ifx], color="0.5", lw=0.8, alpha=0.5)
@@ -564,6 +564,8 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                 e, m = eff(n, v)
                 title = f"Flux {ifx} - eff={e:0.1e} emax={m:0.1e}"
                 ax.set_title(title)
+                if ifx == 0:
+                    ax.legend()
 
             ftitle = f"Diff against dvar={vid} eps={eps:0.1e}"
             fig.suptitle(ftitle, fontweight="bold")
