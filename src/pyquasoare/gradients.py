@@ -23,6 +23,8 @@ IFLUX_BYPASS = c_pyquasoare_grad.IFLUX_BYPASS
 IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
 IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
 
+def thresh_smooth(x, eps):
+    return  np.maximum(x, 0) / np.sqrt(x**2 + eps**2)
 
 FLUX_FUNCTIONS = {
     "transluent": [
@@ -31,24 +33,24 @@ FLUX_FUNCTIONS = {
         lambda x: x * 0.
         ],
     "gr4jprod": [
-        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: 1 - np.clip(x, 0, 1)**2,
         lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
         lambda x: 4**3/9**4 * np.maximum(x, 0)**5
         ],
     "gr2mprod": [
-        lambda x: 1 - np.minimum(x, 1)**2,
+        lambda x: 1 - np.clip(x, 0, 1)**2,
         lambda x: np.clip(x, 0, 1) * (2 - np.clip(x, 0, 1)),
         lambda x: np.maximum(x, 0)**4 / 3.
         ],
     "gr4jroute": [
         # Safety on gr4j route store to avoid blow up if demand > 0
-        lambda x: 0.9 * np.where(x < 1., 1., 0.),
+        lambda x: 0.9 * thresh_smooth(1 - x, 1e-3) * thresh_smooth(x , 1e-3),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
         ],
     "gr2mroute": [
         # Safety on gr2m route store to avoid blow up if demand > 0
-        lambda x: np.where(x < 1., 1., 0.),
+        lambda x: thresh_smooth(1 - x, 1e-3) * thresh_smooth(x , 1e-3),
         lambda x: np.maximum(x, 0.),
         lambda x: np.maximum(x, 0.)**2
         ],
@@ -68,8 +70,8 @@ FLUX_FUNCTIONS = {
         lambda x: np.zeros_like(x)
         ],
     "openwatersmooth": [
-        lambda x: np.where(x < 1., (1 - x) / np.sqrt((1 - x)**2 + (1e-2)**2), 0.),
-        lambda x: np.where(x > 0., x / np.sqrt(x**2 + (1e-2)**2), 0.),
+        lambda x: thresh_smooth(1 - x, 1e-2),
+        lambda x: thresh_smooth(x, 1e-2),
         lambda x: np.zeros_like(x)
         ]
 }
