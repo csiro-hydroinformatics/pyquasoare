@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from hydrodiy.io import csv, iutils, hyruns
+from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
 from pyquasoare.benchmarks import benchmarks
@@ -37,6 +38,7 @@ spec.loader.exec_module(data_reader)
 
 np.random.seed(5446)
 
+MODEL_TIMESTEP = 1.
 
 FLUX_FUNCTIONS = {
     "gr4jprodquad": [
@@ -51,10 +53,22 @@ FLUX_FUNCTIONS = {
         ],
 }
 
-def get_options():
+def forwardP(x):
+    return np.sqrt(np.sqrt(x))
+
+def backwardP(y):
+    return np.maximum(y, 0.)**4
+
+def forwardE(x):
+    return x
+
+def backwardE(y):
+    return np.maximum(y, 0.)
+
+def get_options(debug=False):
     timestep = "daily"
-    duration_base = 5
-    duration_total = 100
+    duration_base = 100
+    duration_repeat = 5
 
     stationids = data_reader.SITEIDS
     nreaches = [1, 5, 10, 20, 50, 100]
@@ -69,12 +83,16 @@ def get_options():
     gamma_rr_std = 0.1
     gamma_ro_means = [0.1, 1., 10.]
     gamma_ro_std = 0.1
+    demand_mean = -0.5
+    demand_std = 0.2
 
     opm = hyruns.OptionManager(duration_base=duration_base,
-                               duration_total=duration_total,
+                               duration_repeat=duration_repeat,
                                gamma_rr_std=gamma_rr_std,
                                gamma_ro_std=gamma_ro_std,
                                timestep=timestep,
+                               demand_mean=demand_mean,
+                               demand_std=demand_std,
                                nrepeat=nrepeat,
                                nbatch=nbatch)
 
@@ -126,44 +144,32 @@ def get_logger(config, script_paths):
 def get_data(config, script_paths, logger):
     stationid = config.task.stationid
     stations = data_reader.get_stations()
-    area = 0.
+    area = stations.loc[stationid, "CATCHMENTAREA[km2]"]
 
     nval = config.options.context["duration_base"] * 365
-    ntot = config.options.context["duration_total"] * 365
+    ntot = config.options.context["duration_repeat"] * 365
     nreps = ntot // nval
 
     timestep = config.options.context["timestep"]
-    data = data_reader.get_data(stationid, timestep)
-    hydroclim = np.tile(data.iloc[-nval:, :2], (nreps, 1))
-    hydroclim = pd.DataFrame(hydroclim, columns=["P", "PET"])
+    hydroclim = data_reader.get_data(stationid, timestep, nval=None)
+    hydroclim = hydroclim.rename(columns={
+        "RAINFALL[mm_day-1]": "P",
+        "PET[mm_day-1]": "PET"
+        })
+    hydroclim = hydroclim.loc[:, ["P", "PET"]]
 
     data = namedtuple("Data", ["hydroclim", "area"])(hydroclim, area)
 
     return data
 
 
-def process(config, script_paths, logger, data):
-    # Define job
-    batch = config.task.batch
+def configure_model(config, area):
     nreaches = config.task.nreaches
-    gamma_rr_mean = config.task.gamma_rr_mean
-    gamma_rr_std = config.options.context["gamma_rr_std"]
-    gamma_ro_mean = config.task.gamma_rr_mean
-    gamma_ro_std = config.options.context["gamma_ro_std"]
-    nbatch = config.options.context["nbatch"]
-    nrepeat = config.options.context["nrepeat"]
-    ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
-    grad_method = config.task.grad_method
-    nalphas = config.task.nalphas
-
-    # Get data
-    hydroclim = data.hydroclim
-
-    # Configure model
     nres_per_reach = 4
     nres = nres_per_reach * nreaches
     mod = gradients.MultiReservoirModel(nres, errors="raise")
-    mod.alphas = nalphas
+    mod.alphas = config.task.nalphas
+
     for ireach in range(nreaches):
         ibase = nres_per_reach * ireach
         # RR prod = ibase
@@ -183,22 +189,129 @@ def process(config, script_paths, logger, data):
         # Set Transluent coefs
         mod.set_coefs_linear(ibase + 3, "transluent")
 
-    # Loop through random repeat
-    for ibatch in ibatches:
-        # RR reservoir capacity
-        gammas = gamma_rr_mean * (1 + np.random.normal(scale=gamma_rr_std, size=nres))
+        # .. links ...
+        # RR prod -> RR routing
+        mod.add_link_outflow(ibase, ibase + 1)
 
-        # .. transluent capacity
-        gammas[::4] = 1.
+        # RR route -> transluent with conversion
+        conv = area * MODEL_TIMESTEP / 86.4
+        mod.add_link_outflow(ibase + 1, ibase + 3, conv)
 
-        # .. RO reservoir capacity
-        # .. estimates qmean
+        # Transluent upstream -> RO route
+        if ireach > 0:
+            mod.add_link_outflow(ibase - 1, ibase + 2)
 
-        #gammas[::3] =
+    return mod
 
+
+def allocate_model(config, hydroclim, area, mod):
+    nval = len(hydroclim)
+    mod.allocate(nval, timestep=MODEL_TIMESTEP)
+
+    # Set 0 flow inputs for first reach
+    Qstars = np.zeros((nval, 2))
+    mod.set_Qstars(3, Qstars)
+
+    # Transform inputs
+    tP = forwardP(hydroclim[:, 0])
+    rhoP = pd.Series(tP).autocorr()
+    alphaP = math.sqrt(1 - rhoP**2) * tP.std() / 10
+
+    tE = forwardE(hydroclim[:, 1])
+    rhoE = pd.Series(tE).autocorr()
+    alphaE = math.sqrt(1 - rhoE**2) * tE.std() / 10
+
+    # Set inputs
+    nreaches = config.task.nreaches
+    nres_per_reach = 4
+    for ireach in range(nreaches):
+        # Reach input noise
+        # .. rainfall
+        nu = np.random.normal(scale=rhoP, size=nval)
+        errP = armodels.armodel_sim(alphaP, nu)
+        Qstars[:, 0] = backwardP(tP + errP)
+
+        # .. PET
+        nu = np.random.normal(scale=rhoE, size=nval)
+        errE = 1 + armodels.armodel_sim(alphaE, nu)
+        Qstars[:, 1] = backwardE(tE + errE)
+
+        ibase = ireach * nres_per_reach
+        mod.set_Qstars(ibase, Qstars)
+
+
+def process(config, script_paths, logger, data):
+    # Setup up model
+    area = data.area
+    mod = configure_model(config, area)
+
+    # Allocate model
+    context = config.options.context
+    dbase = context["duration_base"]
+    drep = context["duration_repeat"]
+    n = dbase * 365
+    hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
+    allocate_model(config, hclim, area, mod)
 
     import pdb; pdb.set_trace()
 
+
+    # Define job
+    batch = config.task.batch
+    nreaches = config.task.nreaches
+    gamma_rr_mean = config.task.gamma_rr_mean
+    gamma_rr_std = config.options.context["gamma_rr_std"]
+    gamma_ro_mean = config.task.gamma_rr_mean
+    gamma_ro_std = config.options.context["gamma_ro_std"]
+    nbatch = config.options.context["nbatch"]
+    nrepeat = config.options.context["nrepeat"]
+    ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
+    grad_method = config.task.grad_method
+    nalphas = config.task.nalphas
+
+    for irepeat in range(nrepeat):
+        # Set reservoirs
+        gammas = np.zeros(nres)
+        # .. RR prod reservoir
+        s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
+        grr_prod = gamma_rr_mean * s
+        gammas[::4] = grr_prod
+
+        # .. RR route reservoir
+        s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
+        grr_route = gamma_rr_mean / 10. * s
+        gammas[1::4] = grr_route
+
+        # .. RO reservoir
+        factor = Pmean * area * np.arange(1, nreaches + 1) / 86.4 * gamma_ro_mean
+        s = (1 + np.random.normal(scale=gamma_ro_std, size=nreaches))
+        gro_route = factor * s
+        gammas[2::4] = gro_route
+
+        # .. transluent capacity
+        gammas[3::4] = 1.
+
+        # Run benchmark
+        t0 = time.time()
+        out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
+                                                    grr_prod,
+                                                    dgammas_rr_prod,
+                                                    grr_route,
+                                                    dgammas_rr_route,
+                                                    gro_route,
+                                                    dgammas_ro_route,
+                                                    drr_route,
+                                                    ddemands_rr_route)
+        dtb = time.time() - t0
+        x_rr_prod, dx_rr_prod, \
+            x_rr_route, dx_rr_route, \
+            x_ro_route, dx_ro_route, \
+            fx_rr_prod, dfx_rr_prod, \
+            fx_rr_route, dfx_rr_route, \
+            fx_ro_route, dfx_ro_route = out
+
+
+        import pdb; pdb.set_trace()
 
 
 if __name__ == "__main__":
