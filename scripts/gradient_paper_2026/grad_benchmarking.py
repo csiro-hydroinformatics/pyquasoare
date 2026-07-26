@@ -11,6 +11,7 @@
 
 import sys
 import os
+import time
 import re
 import json
 import math
@@ -169,6 +170,7 @@ def configure_model(config, area):
     nres = nres_per_reach * nreaches
     mod = gradients.MultiReservoirModel(nres, errors="raise")
     mod.alphas = config.task.nalphas
+    mod.area = area
 
     for ireach in range(nreaches):
         ibase = nres_per_reach * ireach
@@ -201,16 +203,29 @@ def configure_model(config, area):
         if ireach > 0:
             mod.add_link_outflow(ibase - 1, ibase + 2)
 
+    mod.nreaches = nreaches
+    mod.nres_per_reach = nres_per_reach
+
     return mod
 
 
-def allocate_model(config, hydroclim, area, mod):
+def allocate_model(mod, hydroclim):
     nval = len(hydroclim)
-    mod.allocate(nval, timestep=MODEL_TIMESTEP)
+
+    # .. gradients against all capacities
+    vspecs = [[res, 0] for res in range(mod.nreservoirs)]
+
+    mod.allocate(nval, timestep=MODEL_TIMESTEP,
+                 variables_specs=vspecs)
+
+    mod.Pmean = hydroclim[:, 0].mean()
 
     # Set 0 flow inputs for first reach
-    Qstars = np.zeros((nval, 2))
-    mod.set_Qstars(3, Qstars)
+    Qstars0 = np.zeros((nval, 2))
+    mod.set_Qstars(3, Qstars0)
+
+    Qstars1 = np.nan * np.zeros((nval, 2))
+    Qstars1[:, 1] = 1.
 
     # Transform inputs
     tP = forwardP(hydroclim[:, 0])
@@ -222,86 +237,118 @@ def allocate_model(config, hydroclim, area, mod):
     alphaE = math.sqrt(1 - rhoE**2) * tE.std() / 10
 
     # Set inputs
-    nreaches = config.task.nreaches
-    nres_per_reach = 4
-    for ireach in range(nreaches):
+    for ireach in range(mod.nreaches):
         # Reach input noise
         # .. rainfall
         nu = np.random.normal(scale=rhoP, size=nval)
         errP = armodels.armodel_sim(alphaP, nu)
-        Qstars[:, 0] = backwardP(tP + errP)
+        Qstars0[:, 0] = backwardP(tP + errP)
 
         # .. PET
         nu = np.random.normal(scale=rhoE, size=nval)
         errE = 1 + armodels.armodel_sim(alphaE, nu)
-        Qstars[:, 1] = backwardE(tE + errE)
+        Qstars0[:, 1] = backwardE(tE + errE)
 
-        ibase = ireach * nres_per_reach
-        mod.set_Qstars(ibase, Qstars)
+        ibase = ireach * mod.nres_per_reach
+        mod.set_Qstars(ibase, Qstars0)
 
-
-def process(config, script_paths, logger, data):
-    # Setup up model
-    area = data.area
-    mod = configure_model(config, area)
-
-    # Allocate model
-    context = config.options.context
-    dbase = context["duration_base"]
-    drep = context["duration_repeat"]
-    n = dbase * 365
-    hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
-    allocate_model(config, hclim, area, mod)
-
-    import pdb; pdb.set_trace()
+        # Reach loss qstar
+        mod.set_Qstars(ibase + 1, Qstars1)
 
 
-    # Define job
-    batch = config.task.batch
-    nreaches = config.task.nreaches
+def set_parameters(config, mod):
+    # Model charac
+    nreaches = mod.nreaches
+    nrp = mod.nres_per_reach
+    nres = nrp * nreaches # 3 reservoirs per reaches
+
+    # Param moments
     gamma_rr_mean = config.task.gamma_rr_mean
     gamma_rr_std = config.options.context["gamma_rr_std"]
     gamma_ro_mean = config.task.gamma_rr_mean
     gamma_ro_std = config.options.context["gamma_ro_std"]
+
+    gammas = np.zeros(nres)
+    # .. RR prod reservoir
+    s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
+    grr_prod = gamma_rr_mean * s
+    gammas[::nrp] = grr_prod
+
+    # .. RR route reservoir
+    s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
+    grr_route = gamma_rr_mean / 10. * s
+    gammas[1::nrp] = grr_route
+
+    # .. RO reservoir
+    factor = mod.Pmean * mod.area * np.arange(1, nreaches + 1) / 86.4 * gamma_ro_mean
+    s = (1 + np.random.normal(scale=gamma_ro_std, size=nreaches))
+    gro_route = factor * s
+    gammas[2::nrp] = gro_route
+
+    # .. transluent capacity
+    gammas[3::nrp] = 1.
+
+    mod.gammas = gammas
+
+    # Demand moments
+    demand_mean = config.options.context["demand_mean"]
+    demand_std = config.options.context["demand_std"]
+    dem = np.random.normal(size=nreaches, loc=demand_mean, scale=demand_std)
+    mod.flux_scalings[1::nrp, 1] = dem
+
+    return grr_prod, grr_route, gro_route, dem
+
+
+def process(config, script_paths, logger, data):
+    # Setup up model
+    mod = configure_model(config, data.area)
+
+    # Allocate model with extended hydroclim data
+    context = config.options.context
+    dbase = context["duration_base"]
+    drep = 1 if config.debug else context["duration_repeat"]
+    n = dbase * 365
+    hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
+    allocate_model(mod, hclim)
+
+    # Define job
+    batch = config.task.batch
     nbatch = config.options.context["nbatch"]
     nrepeat = config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
+
+    # initialise gradient data
     grad_method = config.task.grad_method
-    nalphas = config.task.nalphas
+
+    nreaches = config.task.nreaches
+    dgrr_prod = np.zeros(nreaches)
+    dgrr_route = np.zeros(nreaches)
+    dgro_route = np.zeros(nreaches)
+    ddemrr_route = np.zeros(nreaches)
+
+    areas = np.ones(nreaches) * mod.area
+    x0 = 0.5
 
     for irepeat in range(nrepeat):
-        # Set reservoirs
-        gammas = np.zeros(nres)
-        # .. RR prod reservoir
-        s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
-        grr_prod = gamma_rr_mean * s
-        gammas[::4] = grr_prod
-
-        # .. RR route reservoir
-        s = (1 + np.random.normal(scale=gamma_rr_std, size=nreaches))
-        grr_route = gamma_rr_mean / 10. * s
-        gammas[1::4] = grr_route
-
-        # .. RO reservoir
-        factor = Pmean * area * np.arange(1, nreaches + 1) / 86.4 * gamma_ro_mean
-        s = (1 + np.random.normal(scale=gamma_ro_std, size=nreaches))
-        gro_route = factor * s
-        gammas[2::4] = gro_route
-
-        # .. transluent capacity
-        gammas[3::4] = 1.
+        grr_prod, grr_route, gro_route, demrr_route = set_parameters(config, mod)
 
         # Run benchmark
+        pin = mod.Qstars[:, ::mod.nres_per_reach, 0]
+        ein = mod.Qstars[:, ::mod.nres_per_reach, 1]
+
+        nres = mod.nreservoirs
         t0 = time.time()
-        out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
-                                                    grr_prod,
-                                                    dgammas_rr_prod,
-                                                    grr_route,
-                                                    dgammas_rr_route,
-                                                    gro_route,
-                                                    dgammas_ro_route,
-                                                    drr_route,
-                                                    ddemands_rr_route)
+        for res in range(nres):
+            out = benchmarks.gradbench_semidist_tangent(MODEL_TIMESTEP,
+                                                        pin, ein, x0, areas,
+                                                        grr_prod,
+                                                        dgrr_prod,
+                                                        grr_route,
+                                                        dgrr_route,
+                                                        gro_route,
+                                                        dgro_route,
+                                                        demrr_route,
+                                                        ddemrr_route)
         dtb = time.time() - t0
         x_rr_prod, dx_rr_prod, \
             x_rr_route, dx_rr_route, \
@@ -311,7 +358,9 @@ def process(config, script_paths, logger, data):
             fx_ro_route, dfx_ro_route = out
 
 
-        import pdb; pdb.set_trace()
+        t0 = time.time()
+        mod.run()
+        dtq = time.time() - t0
 
 
 if __name__ == "__main__":
