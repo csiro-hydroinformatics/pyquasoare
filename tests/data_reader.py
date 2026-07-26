@@ -31,4 +31,5 @@ def get_data(siteid, timestep, nval=365 * 5):
     if nval is None:
         return df
     else:
+        nval = nval * 24 if timestep == "hourly" else nval
         return df.iloc[-nval:]
