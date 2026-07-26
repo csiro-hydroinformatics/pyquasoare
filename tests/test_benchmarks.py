@@ -28,7 +28,7 @@ LOGGER = iutils.get_logger("benchmarks", flog=FTEST / "test_benchmarks.log")
 def test_benchmarks_error(allclose):
     siteid = data_reader.SITEIDS[0]
     df = data_reader.get_data(siteid, "daily")
-    inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    inputs = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     X1, s0 = 1., 1./2
     with pytest.raises(ValueError, match="gr4jprod"):
         gp = benchmarks.gr4jprod(1, X1, s0, inputs)
@@ -63,7 +63,7 @@ def test_benchmarks_error(allclose):
 def test_gr4jprod_nsubdiv(allclose):
     siteid = data_reader.SITEIDS[0]
     df = data_reader.get_data(siteid, "daily")
-    inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    inputs = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     X1 = 500
     s0 = X1/2
     gp1 = benchmarks.gr4jprod(1, X1, s0, inputs)
@@ -80,7 +80,7 @@ def test_gr4jprod_vs_gr4j(allclose):
     for isite, siteid in enumerate(data_reader.SITEIDS):
         # Get climate data
         df = data_reader.get_data(siteid, "daily")
-        inputs = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+        inputs = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
         Pi = np.maximum(inputs[:, 0]-inputs[:, 1], 0)
         Ei = np.maximum(inputs[:, 1]-inputs[:, 0], 0)
 
@@ -134,7 +134,7 @@ def test_gr4jprod_vs_numerical(allclose):
     for isite, siteid in enumerate(data_reader.SITEIDS):
         df = data_reader.get_data(siteid, "daily")
         # just 2022 because it takes too much time otherwise
-        inputs = df.loc["2022", ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+        inputs = df.loc["2022", ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
 
         # scalings
         nval = len(inputs)
@@ -251,51 +251,53 @@ def test_nonlinrouting_vs_splitting(allclose):
             assert allclose(sim, expected, atol=1e-5, rtol=1e-4)
 
 
-def test_nonlinrouting_vs_numerical(allclose):
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("nu", [1.5, 2., 5.])
+def test_nonlinrouting_vs_numerical(siteid, nu, allclose):
     timestep = 3600.
-    nus = [1.5, 2., 5.]
     nsubdiv = 50000
     LOGGER.info("")
 
     errmax_max = 0.
-    for nu in nus:
-        fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
+    fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
 
-        for isite, siteid in enumerate(data_reader.SITEIDS):
-            df = data_reader.get_data(siteid, "hourly")
-            df = df.loc["2022-02-20": "2022-03-10"]
+    df = data_reader.get_data(siteid, "hourly")
+    tmax = df.iloc[:, 1].idxmax()
+    start = tmax - pd.DateOffset(days=5)
+    end = tmax + pd.DateOffset(days=10)
+    df = df.loc[start: end]
 
-            inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
-            q0 = inflows.quantile(0.9)
-            inflows = inflows.values
+    inflows = df.loc[:, "STREAMFLOW_UP[m3/sec]"].interpolate()
+    q0 = inflows.quantile(0.9)
+    inflows = inflows.values
 
-            # Stored volumne in 24h
-            theta = q0*24*timestep
+    # Stored volumne in 24h
+    theta = q0*24*timestep
 
-            errmax_max = 0.
-            s0 = 0.
-            sim = benchmarks.nonlinrouting(nsubdiv, timestep, theta,\
-                                        nu, q0, s0, inflows)
+    errmax_max = 0.
+    s0 = 0.
+    sim = benchmarks.nonlinrouting(nsubdiv, timestep, theta,
+                                   nu, q0, s0, inflows)
 
-            # Numerical simulation
-            nval = len(sim)
-            scalings = np.column_stack([inflows/theta, \
-                                    q0/theta*np.ones(nval)])
+    # Numerical simulation
+    nval = len(sim)
+    scalings = np.column_stack([inflows/theta,
+                                q0 / theta*np.ones(nval)])
 
-            niter, s1, numerical = slow.numerical_model(fluxes, dfluxes, \
-                                                            scalings, s0/theta, \
-                                                            timestep)
-            # .. scale back
-            numerical = -numerical[:, 1]*theta/timestep
+    niter, s1, numerical = slow.numerical_model(fluxes, dfluxes,
+                                                scalings, s0 / theta,
+                                                timestep)
+    # .. scale back
+    numerical = -numerical[:, 1] * theta / timestep
 
-            # .. error
-            errmax = np.abs(sim-numerical).max()
-            errmax_max = max(errmax, errmax_max)
-            assert allclose(numerical, sim, atol=1e-4, rtol=1e-5)
+    # .. error
+    errmax = np.abs(sim - numerical).max()
+    errmax_max = max(errmax, errmax_max)
+    assert allclose(numerical, sim, atol=1e-4, rtol=1e-5)
 
-            mess = f"nonlinrouting vs num /site {isite+1}:"\
-                    +f" errmax={errmax_max:3.3e}"
-            LOGGER.info(mess)
+    mess = f"nonlinrouting vs num /site {siteid}:"\
+            +f" errmax={errmax_max:3.3e}"
+    LOGGER.info(mess)
 
 
 
