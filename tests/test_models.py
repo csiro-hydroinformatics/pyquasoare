@@ -275,10 +275,10 @@ def test_in_place_computing(allclose):
     fluxes, dfluxes = benchmarks.nonlinrouting_fluxes_noscaling(nu)
     nalphas = 5
     alphas = np.linspace(0, 3., nalphas)
-    coefs =approx.quad_coefficient_matrix(fluxes, alphas)
+    coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
     # Intialise two scalings
-    scalings = np.column_stack([inflows, q0*np.ones(nval)])
+    scalings_ref = np.column_stack([inflows, q0 * np.ones(nval)])
 
     # Initialise outputs
     niter = np.zeros(nval, dtype=np.int32)
@@ -291,15 +291,15 @@ def test_in_place_computing(allclose):
 
     for ith, theta in enumerate(np.linspace(5e6, 5e7, nsims)):
         # Adjust scalings depending on paramter values
-        scalings /= theta
+        scalings = scalings_ref / theta
 
         # Run model in place (i.e. no new array allocation)
         models.quad_model(alphas, scalings, coefs,
                           s0, timestep,
                           niter=niter, fluxes=fx, s1=s1)
-        sims[:, ith] = -fx[:, 1]*theta/timestep
+        sims[:, ith] = -fx[:, 1] * theta / timestep
 
         scalings *= theta
 
     # Check that simulations are different
-    assert (sims.std(axis=1)>10).sum()>100
+    assert (sims.std(axis=1) > 10).sum() > 100
