@@ -62,8 +62,8 @@ fd = froot.parent.parent / "data" / "daily" / f"hydrodata_{siteid}.csv"
 df, _ = csv.read_csv(fd, index_col=0, parse_dates=True)
 nval = len(df)
 day = df.index
-rain = df.loc[:, "RAINFALL[mm/day]"].values
-evap = df.loc[:, "PET[mm/day]"].values
+rain = df.loc[:, "RAINFALL[mm_day-1]"].values
+evap = df.loc[:, "PET[mm_day-1]"].values
 
 # Generates random parameter samples
 nsamples = 5
