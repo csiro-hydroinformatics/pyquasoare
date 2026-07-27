@@ -74,7 +74,7 @@ def get_options(debug=False):
     stationids = data_reader.SITEIDS
     nreaches = [1, 5, 10, 20, 50, 100]
     grad_methods = ["DIFF1", "DIFF2", "QUASOARE"]
-    nalphas = [10, 50, 100, 200, 500, 1000]
+    nalphas = [10, 100, 1000]
 
     nrepeat = 100
     nbatch = 5
@@ -321,14 +321,41 @@ def process(config, script_paths, logger, data):
     grad_method = config.task.grad_method
 
     nreaches = config.task.nreaches
-    dgrr_prod = np.zeros(nreaches)
-    dgrr_route = np.zeros(nreaches)
-    dgro_route = np.zeros(nreaches)
+    nres = mod.nreservoirs
+    nres_per_reach = mod.nres_per_reach
+
+    dgrr_prod = np.zeros((nres, nreaches))
+    k = np.arange(nreaches) * nres_per_reach
+    dgrr_prod[k, k] = 1
+
+    dgrr_route = np.zeros((nres, nreaches))
+    dgrr_route[k + 1, k] = 1
+
+    dgro_route = np.zeros((nres, nreaches))
+    dgro_route[k + 2, k] = 1
+
     ddemrr_route = np.zeros(nreaches)
 
     areas = np.ones(nreaches) * mod.area
     x0 = 0.5
 
+    # initialise benchmark data
+    nval = len(hclim)
+    x_rr_prod = np.empty((nrepeat, nval, nreaches))
+    dx_rr_prod = np.empty((nrepeat, nres, nval, nreaches))
+    x_rr_route = np.empty((nrepeat, nval, nreaches))
+    dx_rr_route = np.empty((nrepeat, nres, nval, nreaches))
+    x_ro_route = np.empty((nrepeat, nval, nreaches))
+    dx_ro_route = np.empty((nrepeat, nres, nval, nreaches))
+
+    fx_rr_prod = np.empty((nrepeat, nval, nreaches))
+    dfx_rr_prod = np.empty((nrepeat, nres, nval, nreaches))
+    fx_rr_route = np.empty((nrepeat, nval, nreaches))
+    dfx_rr_route = np.empty((nrepeat, nres, nval, nreaches))
+    fx_ro_route = np.empty((nrepeat, nval, nreaches))
+    dfx_ro_route = np.empty((nrepeat, nres, nval, nreaches))
+
+    # repeat experiment
     for irepeat in range(nrepeat):
         grr_prod, grr_route, gro_route, demrr_route = set_parameters(config, mod)
 
@@ -336,31 +363,34 @@ def process(config, script_paths, logger, data):
         pin = mod.Qstars[:, ::mod.nres_per_reach, 0]
         ein = mod.Qstars[:, ::mod.nres_per_reach, 1]
 
-        nres = mod.nreservoirs
         t0 = time.time()
         for res in range(nres):
-            out = benchmarks.gradbench_semidist_tangent(MODEL_TIMESTEP,
-                                                        pin, ein, x0, areas,
-                                                        grr_prod,
-                                                        dgrr_prod,
-                                                        grr_route,
-                                                        dgrr_route,
-                                                        gro_route,
-                                                        dgro_route,
-                                                        demrr_route,
-                                                        ddemrr_route)
-        dtb = time.time() - t0
-        x_rr_prod, dx_rr_prod, \
-            x_rr_route, dx_rr_route, \
-            x_ro_route, dx_ro_route, \
-            fx_rr_prod, dfx_rr_prod, \
-            fx_rr_route, dfx_rr_route, \
-            fx_ro_route, dfx_ro_route = out
+            out = x_rr_prod[irepeat], dx_rr_prod[irepeat, res], \
+                x_rr_route[irepeat], dx_rr_route[irepeat, res], \
+                x_ro_route[irepeat], dx_ro_route[irepeat, res], \
+                fx_rr_prod[irepeat], dfx_rr_prod[irepeat, res], \
+                fx_rr_route[irepeat], dfx_rr_route[irepeat, res], \
+                fx_ro_route[irepeat], dfx_ro_route[irepeat, res], \
 
+            benchmarks.gradbench_semidist_tangent(MODEL_TIMESTEP,
+                                                  pin, ein, x0, areas,
+                                                  grr_prod,
+                                                  dgrr_prod[res],
+                                                  grr_route,
+                                                  dgrr_route[res],
+                                                  gro_route,
+                                                  dgro_route[res],
+                                                  demrr_route,
+                                                  ddemrr_route,
+                                                  out)
+        dtb = time.time() - t0
 
         t0 = time.time()
         mod.run()
         dtq = time.time() - t0
+
+        import pdb; pdb.set_trace()
+
 
 
 if __name__ == "__main__":
