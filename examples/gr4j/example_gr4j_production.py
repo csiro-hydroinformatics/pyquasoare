@@ -58,8 +58,8 @@ fd = froot.parent.parent / "data" / "daily" / f"hydrodata_{siteid}.csv"
 df, _ = csv.read_csv(fd, index_col=0, parse_dates=True)
 nval = len(df)
 time = df.index
-rain = df.loc[:, "RAINFALL[mm/day]"]
-evap = df.loc[:, "PET[mm/day]"]
+rain = df.loc[:, "RAINFALL[mm_day-1]"]
+evap = df.loc[:, "PET[mm_day-1]"]
 
 # Remove interception from inputs similarly to what is
 # done in GR4J
