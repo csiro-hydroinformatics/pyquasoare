@@ -66,18 +66,18 @@ def forwardE(x):
 def backwardE(y):
     return np.maximum(y, 0.)
 
-def get_options(debug=False):
+def get_options():
     timestep = "daily"
     duration_base = 100
     duration_repeat = 5
 
     stationids = data_reader.SITEIDS
-    nreaches = [1, 5, 10, 20, 50, 100]
-    grad_methods = ["DIFF1", "DIFF2", "QUASOARE"]
+    nreaches = [1, 10, 100]
     nalphas = [10, 100, 1000]
+    numdiff_eps = [1e-3, 1e-5, 1e-7]
 
     nrepeat = 100
-    nbatch = 5
+    nbatch = 1
     batches = np.arange(nbatch)
 
     gamma_rr_means = [10, 100, 1000]
@@ -101,9 +101,9 @@ def get_options(debug=False):
                                stationid=stationids,
                                nreaches=nreaches,
                                nalphas=nalphas,
+                               numdiff_eps=numdiff_eps,
                                gamma_rr_mean=gamma_rr_means,
-                               gamma_ro_mean=gamma_ro_means,
-                               grad_method=grad_methods)
+                               gamma_ro_mean=gamma_ro_means)
     return opm
 
 
@@ -209,12 +209,14 @@ def configure_model(config, area):
     return mod
 
 
-def allocate_model(mod, hydroclim):
+def allocate_model(mod, hydroclim, grad=True):
     nval = len(hydroclim)
 
     # .. gradients against all capacities
-    vspecs = [[res, 0] for res in range(mod.nreservoirs)]
-
+    if grad:
+        vspecs = [[res, 0] for res in range(mod.nreservoirs)]
+    else:
+        vspecs = None
     mod.allocate(nval, timestep=MODEL_TIMESTEP,
                  variables_specs=vspecs)
 
@@ -244,10 +246,10 @@ def allocate_model(mod, hydroclim):
         errP = armodels.armodel_sim(alphaP, nu)
         Qstars0[:, 0] = backwardP(tP + errP)
 
-        # .. PET
+        # .. PET (negative -> demand!)
         nu = np.random.normal(scale=rhoE, size=nval)
         errE = 1 + armodels.armodel_sim(alphaE, nu)
-        Qstars0[:, 1] = backwardE(tE + errE)
+        Qstars0[:, 1] = -backwardE(tE + errE)
 
         ibase = ireach * mod.nres_per_reach
         mod.set_Qstars(ibase, Qstars0)
@@ -301,15 +303,21 @@ def set_parameters(config, mod):
 
 def process(config, script_paths, logger, data):
     # Setup up model
-    mod = configure_model(config, data.area)
+    modref = configure_model(config, data.area)
+    # .. difference models
+    modlow = configure_model(config, data.area)
+    modhigh = configure_model(config, data.area)
 
     # Allocate model with extended hydroclim data
+    debug = config.debug
     context = config.options.context
-    dbase = context["duration_base"]
-    drep = 1 if config.debug else context["duration_repeat"]
+    dbase = 10 if debug else context["duration_base"]
+    drep = 1 if debug else context["duration_repeat"]
     n = dbase * 365
     hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
-    allocate_model(mod, hclim)
+    allocate_model(modref, hclim)
+    allocate_model(modlow, hclim, False)
+    allocate_model(modhigh, hclim, False)
 
     # Define job
     batch = config.task.batch
@@ -318,11 +326,9 @@ def process(config, script_paths, logger, data):
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise gradient data
-    grad_method = config.task.grad_method
-
     nreaches = config.task.nreaches
-    nres = mod.nreservoirs
-    nres_per_reach = mod.nres_per_reach
+    nres = modref.nreservoirs
+    nres_per_reach = modref.nres_per_reach
 
     dgrr_prod = np.zeros((nres, nreaches))
     k = np.arange(nreaches) * nres_per_reach
@@ -336,7 +342,7 @@ def process(config, script_paths, logger, data):
 
     ddemrr_route = np.zeros(nreaches)
 
-    areas = np.ones(nreaches) * mod.area
+    areas = np.ones(nreaches) * modref.area
     x0 = 0.5
 
     # initialise benchmark data
@@ -355,15 +361,26 @@ def process(config, script_paths, logger, data):
     fx_ro_route = np.empty((nrepeat, nval, nreaches))
     dfx_ro_route = np.empty((nrepeat, nres, nval, nreaches))
 
+    # initialise numerical difference data
+    numdiff_eps = config.task.numdiff_eps
+    dfluxes_diff = modref.dfluxes.copy()
+
     # repeat experiment
     for irepeat in range(nrepeat):
-        grr_prod, grr_route, gro_route, demrr_route = set_parameters(config, mod)
+        grr_prod, grr_route, gro_route, demrr_route = \
+                set_parameters(config, modref)
+        modlow.gammas = modref.gammas
+        modlow.flux_scalings = modref.flux_scalings
+
+        modhigh.gammas = modref.gammas
+        modhigh.flux_scalings = modref.flux_scalings
 
         # Run benchmark
-        pin = mod.Qstars[:, ::mod.nres_per_reach, 0]
-        ein = mod.Qstars[:, ::mod.nres_per_reach, 1]
+        pin = modref.Qstars[:, ::modref.nres_per_reach, 0]
+        ein = modref.Qstars[:, ::modref.nres_per_reach, 1]
 
         t0 = time.time()
+        # .. run tangent code for the capacity of reach reservoir
         for res in range(nres):
             out = x_rr_prod[irepeat], dx_rr_prod[irepeat, res], \
                 x_rr_route[irepeat], dx_rr_route[irepeat, res], \
@@ -383,12 +400,34 @@ def process(config, script_paths, logger, data):
                                                   demrr_route,
                                                   ddemrr_route,
                                                   out)
-        dtb = time.time() - t0
+        dt_bench = time.time() - t0
 
+        # Run Quasoare
         t0 = time.time()
-        mod.run()
-        dtq = time.time() - t0
+        modref.run()
+        dt_quas = time.time() - t0
 
+        # Run numerical difference
+        # .. run diff for the capacity of reach reservoir
+        t0 = time.time()
+        for res in range(nres):
+            # Run low model
+            modlow.gammas[res] = modref.gammas[res] - numdiff_eps
+            modlow.run()
+
+            modhigh.gammas[res] = modref.gammas[res] + numdiff_eps
+            modhigh.run()
+
+            # Compute flux gradient
+            dfluxes_diff[:, res, :, :] = (modhigh.fluxes - modlow.fluxes) / 2 / numdiff_eps
+
+            # Reset
+            modlow.gammas[res] = modref.gammas[res]
+            modhigh.gammas[res] = modref.gammas[res]
+
+        dt_diff = time.time() - t0
+
+        # Compute perf
         import pdb; pdb.set_trace()
 
 
