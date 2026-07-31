@@ -77,13 +77,51 @@ FLUX_FUNCTIONS = {
 }
 
 
-def get_alphas(nalphas, eps=1e-5, amax=1., nalphas_above_one=10, nreservoirs=1):
-    alphas = [-eps, 0., eps] \
-             + np.linspace(2 * eps, 1 - 2 * eps, nalphas - 6).tolist() \
+def get_alphas(nalphas, amin=0, amax=1.,
+               prop_above_one=0.25,
+               nreservoirs=1,
+               eps=1e-5):
+    if eps <= 0:
+        errmsg = f"Expected eps > 0, got {eps:0.1e}"
+        raise ValueError(errmsg)
+
+    if amax < 1:
+        errmsg = f"Expected amax >= 1, got {amax:0.1e}"
+        raise ValueError(errmsg)
+
+    if amin >= amax:
+        errmsg = f"Expected amin < amax, got {amin:0.1e} / {amax:0.2e}"
+        raise ValueError(errmsg)
+
+    has_above = True
+    if abs(amax - 1) < 1e-10:
+        nabove = 0
+        has_above = False
+    else:
+        nabove = int((nalphas - 6) * prop_above_one)
+
+    # Lower portion
+    n1 = nalphas - 6 - nabove
+    if n1 < 2:
+        errmsg = f"nalphas ({nalphas}) is too low"\
+                 + f" or prop_above_one ({prop_above_one}) is too high"
+        raise ValueError(errmsg)
+
+    alphas = [amin - eps, amin, amin + eps] \
+             + np.linspace(amin + 2 * eps, 1 - 2 * eps, n1).tolist() \
              + [1 - eps, 1., 1 + eps]
-    if amax > 1.:
-        alphas += np.linspace(1 + 2 * eps, nalphas_above_one, 6).tolist()
-    return np.repeat(np.array(alphas)[None, :], nreservoirs, axis=0)
+
+    # Portion above 1
+    if has_above:
+        alphas += np.linspace(1 + 2 * eps, amax, nabove).tolist()
+
+    alphas = np.repeat(np.array(alphas)[None, :], nreservoirs, axis=0)
+
+    if alphas.shape != (nreservoirs, nalphas):
+        errmsg = "Error in alphas generation"
+        raise ValueError(errmsg)
+
+    return alphas
 
 
 def lin_coefficient_matrix(funs, alphas):
@@ -126,7 +164,6 @@ def grad_reservoir(alphas, gamma,
     Q[4] = Qstar[1] - Q[1]   # Inflow bypass around the reservoir
     Q[5] = Qstar[2] - Q[2]   # Demand shortfall
     Q[6] = - Q[4] + Q[3]       # Total outflow
-
 
     The flux functions fi are approximated by piecewise linear
     interpolation functions that are defined by
@@ -503,12 +540,17 @@ class Network():
 
 
 class MultiReservoirModel():
-    def __init__(self, nreservoirs, errors="ignore"):
+    def __init__(self, nreservoirs, nalphas=10, errors="ignore"):
         self._network = Network(nreservoirs)
         self._errors = errors
         self._gammas = None
+
         self._flux_scalings = np.ones((nreservoirs, NFLUXES_INPUTS))
-        self._alphas = None
+
+        self.nalphas = nalphas
+        self._alphas = get_alphas(nalphas,
+                                  nreservoirs=nreservoirs)
+
         self._coefs_linear = None
 
         self.variables_reservoir_id = None
@@ -523,6 +565,16 @@ class MultiReservoirModel():
         self.niter = None
         self.timestep = None
         self.ntimesteps = None
+
+    def check_reservoir_id(self, reservoir_id):
+        if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
+            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
+            raise ValueError(errmsg)
+
+    def check_allocated(self):
+        if self.Qstars is None:
+            errmsg = "Qstars is not allocated. Run 'allocate'."
+            raise ValueError(errmsg)
 
     @property
     def errors(self):
@@ -549,29 +601,6 @@ class MultiReservoirModel():
         if al is None:
             raise ValueError("alphas are not set.")
         return al
-
-    @alphas.setter
-    def alphas(self, value):
-        nres = self.nreservoirs
-        if isinstance(value, int):
-            if value < 8:
-                errmsg = f"Expected number of alphas >= 8, got {value}."
-                raise ValueError(errmsg)
-
-            eps = 1e-4
-            al = np.concatenate([[-eps, 0., eps],
-                                 np.linspace(2 * eps, 1 - 2 * eps, value - 6),
-                                 [1. - eps, 1., 1 + eps]])
-            value = np.repeat(al[None, :],
-                              self.nreservoirs,
-                              axis=0)
-
-        if value.shape[0] != nres:
-            errmsg = f"Expected flux_scalings.shape[0] = {nres}."\
-                     + f" Got {value.shape[0]}."
-            raise ValueError(errmsg)
-
-        self._alphas = value.astype(np.float64)
 
     @property
     def gammas(self):
@@ -637,10 +666,18 @@ class MultiReservoirModel():
                                                downstream_reservoir_id,
                                                conversion_factor)
 
+    def set_alphas(self, reservoir_id,
+                   amin=0., amax=1., eps=1e-5,
+                   prop_above_one=0.25):
+        self.check_reservoir_id(reservoir_id)
+        al = get_alphas(self.nalphas, amin, amax,
+                        prop_above_one=prop_above_one,
+                        nreservoirs=1, eps=eps)
+        self._alphas[reservoir_id] = al
+
+
     def set_coefs_linear(self, reservoir_id, flux_functions):
-        if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
-            errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
-            raise ValueError(errmsg)
+        self.check_reservoir_id(reservoir_id)
 
         sf = str(flux_functions)
         if sf in FLUX_FUNCTIONS:
@@ -658,10 +695,7 @@ class MultiReservoirModel():
         self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
 
     def set_Qstars(self, reservoir_id, Qstars):
-        if self.Qstars is None:
-            errmsg = "Qstars is not allocated. Run 'allocate'."
-            raise ValueError(errmsg)
-
+        self.check_allocated()
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
             raise ValueError(errmsg)
@@ -709,18 +743,17 @@ class MultiReservoirModel():
 
     def clone(self):
         mcl = MultiReservoirModel(self.nreservoirs,
+                                  self.nalphas,
                                   self.errors)
         mcl._network = self.network.clone()
-        mcl._gammas = self.gammas
-        mcl._flux_scalings = self.flux_scalings
-        mcl._alphas = self.alphas
-        mcl._coefs_linear = self.coefs_linear
 
         attrns = [
             "variables_reservoir_id",
             "variables_type_id",
             "_coefs_linear",
             "_flux_scalings",
+            "_alphas",
+            "_gammas",
             "Qstars",
             "x0",
             "x",
@@ -740,6 +773,8 @@ class MultiReservoirModel():
         return mcl
 
     def run(self):
+        self.check_allocated()
+
         # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
 
