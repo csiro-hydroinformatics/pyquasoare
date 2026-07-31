@@ -176,6 +176,28 @@ def skip_this(reservoir, gamma, demand):
         pytest.skip("Skipping openwater reservoir for large gamma")
 
 
+@pytest.mark.parametrize("nalphas", [10, 500])
+@pytest.mark.parametrize("amin", [0., 0.5])
+@pytest.mark.parametrize("amax", [0.5, 1., 5.])
+@pytest.mark.parametrize("prop_above_one", [0.0, 0.5, 0.9])
+def test_get_alphas(nalphas, amin, amax, prop_above_one):
+    if amax < 1:
+        with pytest.raises(ValueError, match="amax >="):
+            al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
+                                      prop_above_one=prop_above_one)
+        return
+
+    if nalphas == 10 and prop_above_one == 0.9 and amax > 1:
+        with pytest.raises(ValueError, match="too low"):
+            al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
+                                      prop_above_one=prop_above_one)
+        return
+
+
+    al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
+                              prop_above_one=prop_above_one)
+
+
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", [10])
@@ -600,7 +622,6 @@ def test_grad_model_setters(allclose):
     siteid = "203014"
     timestep = 1.
     mod = gradients.MultiReservoirModel(2, errors="raise")
-    mod.alphas = 10
     mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, FLUX_FUNCTIONS["openwater"])
     mod.set_coefs_linear(1, "gr4jprod")
@@ -622,7 +643,6 @@ def test_grad_model_setters(allclose):
 
 def test_grad_model_clone(allclose):
     mod = gradients.MultiReservoirModel(2, errors="raise")
-    mod.alphas = 10
     mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
@@ -676,7 +696,6 @@ def test_grad_model_clone(allclose):
 def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
     mod = gradients.MultiReservoirModel(6, errors="ignore")
 
-    mod.alphas = 10
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
     mod.add_link_outflow(2, 5)
@@ -773,8 +792,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
     assert df.shape == (noriginal, 2)
     df = np.tile(df, (nrepeat, 1))
 
-    mod = gradients.MultiReservoirModel(3, "raise")
-    mod.alphas = 20
+    mod = gradients.MultiReservoirModel(3, 20, "raise")
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
 
@@ -983,13 +1001,10 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
 
     # run quasoare
     errors = "raise"
-    mod = gradients.MultiReservoirModel(1, errors=errors)
-
     # super careful with alphas around 0!!!!!
     nalphas = 500
-    nu = 1e-4
-    alphas = np.array([-nu, 0., nu] + np.linspace(2 * nu, x.max(), nalphas - 3).tolist())
-    mod.alphas = alphas[None, :]
+    mod = gradients.MultiReservoirModel(1, nalphas, errors=errors)
+
     mod.set_coefs_linear(0, "quadrouting")
     mod.gammas = gamma
 
