@@ -179,23 +179,16 @@ def skip_this(reservoir, gamma, demand):
 @pytest.mark.parametrize("nalphas", [10, 500])
 @pytest.mark.parametrize("amin", [0., 0.5])
 @pytest.mark.parametrize("amax", [0.5, 1., 5.])
-@pytest.mark.parametrize("prop_above_one", [0.0, 0.5, 0.9])
-def test_get_alphas(nalphas, amin, amax, prop_above_one):
-    if amax < 1:
-        with pytest.raises(ValueError, match="amax >="):
-            al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
-                                      prop_above_one=prop_above_one)
+@pytest.mark.parametrize("nreservoirs", [1, 10])
+def test_get_alphas(nalphas, amin, amax, nreservoirs):
+    if amax <= amin:
+        with pytest.raises(ValueError, match="2eps"):
+            al = gradients.get_alphas(nalphas, amin=amin, amax=amax)
         return
-
-    if nalphas == 10 and prop_above_one == 0.9 and amax > 1:
-        with pytest.raises(ValueError, match="too low"):
-            al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
-                                      prop_above_one=prop_above_one)
-        return
-
 
     al = gradients.get_alphas(nalphas, amin=amin, amax=amax,
-                              prop_above_one=prop_above_one)
+                              nreservoirs=nreservoirs)
+    assert al.shape == (nreservoirs, nalphas)
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
