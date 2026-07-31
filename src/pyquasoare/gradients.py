@@ -78,50 +78,26 @@ FLUX_FUNCTIONS = {
 
 
 def get_alphas(nalphas, amin=0, amax=1.,
-               prop_above_one=0.25,
                nreservoirs=1,
                eps=1e-5):
     if eps <= 0:
         errmsg = f"Expected eps > 0, got {eps:0.1e}"
         raise ValueError(errmsg)
 
-    if amax < 1:
-        errmsg = f"Expected amax >= 1, got {amax:0.1e}"
+    a0 = amin + 2 * eps
+    a1 = amax - 2 * eps
+    if a0 >= a1:
+        errmsg = f"Expected amin + 2eps < amax - 2eps, got {a0:0.1e} / {a1:0.2e}"
         raise ValueError(errmsg)
 
-    if amin >= amax:
-        errmsg = f"Expected amin < amax, got {amin:0.1e} / {amax:0.2e}"
-        raise ValueError(errmsg)
-
-    has_above = True
-    if abs(amax - 1) < 1e-10:
-        nabove = 0
-        has_above = False
-    else:
-        nabove = int((nalphas - 6) * prop_above_one)
-
-    # Lower portion
-    n1 = nalphas - 6 - nabove
-    if n1 < 2:
-        errmsg = f"nalphas ({nalphas}) is too low"\
-                 + f" or prop_above_one ({prop_above_one}) is too high"
+    if nalphas < 8:
+        errmsg = f"Expected nalphas >= 8, got {nalphas}"
         raise ValueError(errmsg)
 
     alphas = [amin - eps, amin, amin + eps] \
-             + np.linspace(amin + 2 * eps, 1 - 2 * eps, n1).tolist() \
-             + [1 - eps, 1., 1 + eps]
-
-    # Portion above 1
-    if has_above:
-        alphas += np.linspace(1 + 2 * eps, amax, nabove).tolist()
-
-    alphas = np.repeat(np.array(alphas)[None, :], nreservoirs, axis=0)
-
-    if alphas.shape != (nreservoirs, nalphas):
-        errmsg = "Error in alphas generation"
-        raise ValueError(errmsg)
-
-    return alphas
+             + np.linspace(a0, a1, nalphas - 6).tolist() \
+             + [amax - eps, amax, amax + eps]
+    return np.repeat(np.array(alphas)[None, :], nreservoirs, axis=0)
 
 
 def lin_coefficient_matrix(funs, alphas):
@@ -667,14 +643,11 @@ class MultiReservoirModel():
                                                conversion_factor)
 
     def set_alphas(self, reservoir_id,
-                   amin=0., amax=1., eps=1e-5,
-                   prop_above_one=0.25):
+                   amin=0., amax=1., eps=1e-5):
         self.check_reservoir_id(reservoir_id)
         al = get_alphas(self.nalphas, amin, amax,
-                        prop_above_one=prop_above_one,
                         nreservoirs=1, eps=eps)
         self._alphas[reservoir_id] = al
-
 
     def set_coefs_linear(self, reservoir_id, flux_functions):
         self.check_reservoir_id(reservoir_id)
