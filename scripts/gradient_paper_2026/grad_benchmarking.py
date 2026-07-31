@@ -66,31 +66,38 @@ def forwardE(x):
 def backwardE(y):
     return np.maximum(y, 0.)
 
-def forwardPerf(x, x0=1):
+def forwardasinh(x, x0=1):
     return np.asinh(x / x0) * x0
-
-def backwardPerf(y, x0=1):
-    return np.sinh(y / x0) * x0
 
 def random_scalings(sigma, nval, s0=1e-2):
     return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
-def compute_flux_error(bench, alt):
+def compute_flux_error(bench, alt, transform=None):
     nreaches = bench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.arange(3)[None, :]).ravel()
-    err = np.abs(alt[:, ires, 5] - bench[:, ires, 5])
-    return err
+    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
+    fa = alt[:, ires, 5]
+    fb = bench[:, ires, 5]
+    if transform is not None:
+        fw = forward_asinh if transform=="asinh" else lambda x: x
+        fb = fw(fb)
+        fa = fw(fa)
 
-def compute_dflux_error(dbench, dalt, gammas):
+    return np.abs(fa - fb)
+
+def compute_dflux_error(dbench, dalt, gammas, transform=None):
     nreaches = dbench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.arange(3)[None, :]).ravel()
+    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
 
     # .. multiply err by gamma to get a dflux error with the dimension
     # of a flux
-    gams = gammas[ires]
-    err = gams[None, :] * np.abs(dalt[:, ires, ires, 5] - dbench[:, ires, ires, 5])
+    dfb = dbench[:, ires, ires, 5] * gammas[None, ires]
+    dfa = dalt[:, ires, ires, 5] * gammas[None, ires]
+    if transform:
+        fw = forward_asinh if transform=="asinh" else lambda x: x
+        dfb = fw(dfb)
+        dfa = fw(dfa)
 
-    return err
+    return np.abs(dfb - dfa)
 
 
 def get_options():
@@ -366,7 +373,7 @@ def process(config, script_paths, logger, data):
     # Define job
     batch = config.task.batch
     nbatch = config.options.context["nbatch"]
-    nrepeat = config.options.context["nrepeat"]
+    nrepeat = 10 if config.debug else config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise gradient data
@@ -391,19 +398,19 @@ def process(config, script_paths, logger, data):
 
     # initialise benchmark data
     nval = len(hclim)
-    x_rr_prod = np.empty((nval, nreaches))
-    dx_rr_prod = np.empty((nres, nval, nreaches))
-    x_rr_route = np.empty((nval, nreaches))
-    dx_rr_route = np.empty((nres, nval, nreaches))
-    x_ro_route = np.empty((nval, nreaches))
-    dx_ro_route = np.empty((nres, nval, nreaches))
+    x_rr_prod = np.zeros((nval, nreaches))
+    dx_rr_prod = np.zeros((nres, nval, nreaches))
+    x_rr_route = np.zeros((nval, nreaches))
+    dx_rr_route = np.zeros((nres, nval, nreaches))
+    x_ro_route = np.zeros((nval, nreaches))
+    dx_ro_route = np.zeros((nres, nval, nreaches))
 
-    fx_rr_prod = np.empty((nval, nreaches))
-    dfx_rr_prod = np.empty((nres, nval, nreaches))
-    fx_rr_route = np.empty((nval, nreaches))
-    dfx_rr_route = np.empty((nres, nval, nreaches))
-    fx_ro_route = np.empty((nval, nreaches))
-    dfx_ro_route = np.empty((nres, nval, nreaches))
+    fx_rr_prod = np.zeros((nval, nreaches))
+    dfx_rr_prod = np.zeros((nres, nval, nreaches))
+    fx_rr_route = np.zeros((nval, nreaches))
+    dfx_rr_route = np.zeros((nres, nval, nreaches))
+    fx_ro_route = np.zeros((nval, nreaches))
+    dfx_ro_route = np.zeros((nres, nval, nreaches))
 
     fluxes_bench = modref.fluxes.copy()
     fluxes_bench.fill(np.nan)
@@ -414,6 +421,14 @@ def process(config, script_paths, logger, data):
     numdiff_eps = config.task.numdiff_eps
     dfluxes_diff1 = modref.dfluxes.copy()
     dfluxes_diff2 = modref.dfluxes.copy()
+
+    # initialise perf results
+    mnames = ["bench", "diff1", "diff2", "quasoare"]
+    cc = [f"runtime_{m}" for m in mnames]
+    cc += [f"fx_errmax_quasoare"]
+    cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
+    results = pd.DataFrame(0., index=np.arange(nrepeat),
+                           columns=cc)
 
     # repeat experiment
     for irepeat in range(nrepeat):
@@ -475,7 +490,7 @@ def process(config, script_paths, logger, data):
                 for resg in range(nres):
                     dfluxes_bench[:, resg, res, 5] = -dfx_rr_route[resg, :, ireach]
 
-            elif ires_in_reach == 2:
+            elif ires_in_reach == 3:
                 # .. fluxes
                 fluxes_bench[:, res, 5] = -fx_ro_route[:, ireach]
                 # .. fluxes grad
@@ -551,31 +566,27 @@ def process(config, script_paths, logger, data):
         dt_diff2 = time.time() - t0
 
         # Compute perf
-        # .. fluxes
+        results.loc[irepeat, "runtime_bench"] = dt_bench
+        results.loc[irepeat, "runtime_diff1"] = dt_diff1
+        results.loc[irepeat, "runtime_diff2"] = dt_diff2
+        results.loc[irepeat, "runtime_quasoare"] = dt_quas
+
         fx_err = compute_flux_error(fluxes_bench, modref.fluxes)
+        results.loc[irepeat, "fx_errmax_quasoare"] = fx_err.max()
+
         dfx_err = compute_dflux_error(dfluxes_bench, modref.dfluxes,
                                       modref.gammas)
+        results.loc[irepeat, "dfx_errmax_quasoare"] = dfx_err.max()
 
-        # Weird -- exploring
-        _, _, _, fx1, dfx1 = gradients.grad_reservoir(modref.alphas[0],
-                                                      modref.gammas[0],
-                                                      np.ascontiguousarray(modref.Qstars[:, 0]),
-                                                      np.ascontiguousarray(modref.coefs_linear[0]))
-        sc = modref.flux_scalings[1, 1]
-        qst2 = np.column_stack([-fx1[:, -1], sc * np.ones(nval)])
-        _, _, _, fx2, dfx2 = gradients.grad_reservoir(modref.alphas[1],
-                                                      modref.gammas[1],
-                                                      qst2,
-                                                      np.ascontiguousarray(modref.coefs_linear[1]))
+        dfx_err = compute_dflux_error(dfluxes_bench, dfluxes_diff1,
+                                      modref.gammas)
+        results.loc[irepeat, "dfx_errmax_diff1"] = dfx_err.max()
 
-        import matplotlib.pyplot as plt
-        plt.close("all")
-        fig, ax = plt.subplots()
-        ax.plot(-modref.fluxes[:, 2, 5])
-        ax.plot(-fluxes_bench[:, 2, 5])
-        plt.show()
-        import pdb; pdb.set_trace()
+        dfx_err = compute_dflux_error(dfluxes_bench, dfluxes_diff2,
+                                      modref.gammas)
+        results.loc[irepeat, "dfx_errmax_diff2"] = dfx_err.max()
 
+    import pdb; pdb.set_trace()
 
 
 if __name__ == "__main__":
