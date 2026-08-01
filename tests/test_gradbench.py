@@ -483,5 +483,49 @@ def test_gradbench_semidist_tangent(gamma, demand, timestep, nreaches,
                 assert rho > 1 - 1e-2
 
 
+def test_gradbench_rainfallrunoff_tangent_specific():
+    fz = FTEST / "test_data_gradbench_semidist.npz"
+    data = np.load(fz)
+    timestep = data["timestep"]
+    #pin = data["pin"][5130:5160, 0]
+    #ein = data["ein"][5130:5160, 0]
+    pin = data["pin"][:, 0]
+    ein = data["ein"][:, 0]
+    x0 = data["x0"]
+    areas = data["areas"][0]
+    grr_prod = data["grr_prod"][0]
+    grr_route = data["grr_route"][0]
+    gro_route = data["gro_route"][0]
+    demrr_route = data["demrr_route"][0]
 
+    dgrr_prod = 1.
+    dgrr_route = 0.
+    dgro_route = 0.
+    ddemrr_route = 0.
+    eps = 1e-3
+    out0 = benchmarks.gradbench_rainfall_runoff_tangent(timestep, pin,
+                                                        ein, x0,
+                                                        grr_prod,
+                                                        dgrr_prod,
+                                                        grr_route,
+                                                        dgrr_route,
+                                                        demrr_route,
+                                                        ddemrr_route)
+    grr_prod1 = grr_prod - eps
+    out1 = benchmarks.gradbench_rainfall_runoff(timestep, pin,
+                                                ein, x0,
+                                                grr_prod1,
+                                                grr_route,
+                                                demrr_route)
+    grr_prod2 = grr_prod + eps
+    out2 = benchmarks.gradbench_rainfall_runoff(timestep, pin,
+                                                ein, x0,
+                                                grr_prod2,
+                                                grr_route,
+                                                demrr_route)
 
+    dfx = out0[5]
+    dfx_num = (out2[2] - out1[2]) / eps / 2
+    err = np.abs(dfx - dfx_num)
+
+    assert err.max() < 3e-3

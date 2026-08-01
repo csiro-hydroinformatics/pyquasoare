@@ -5,7 +5,9 @@
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
 int gb_rr_notnull_c(double x) {
-    return (x < 0 || x > 0 ? 1 : 0);
+    //return (x < 0 || x > 0 ? 1 : 0);
+    // see c_gradbench_rainfall_runoff.c
+    return fabs(x) > QUASOARE_GRAD_BENCH_ZEROTHRESH ? 1 : 0;
 }
 
 int gb_rr_isnull_c(double x) {
@@ -36,7 +38,7 @@ double gb_rr_omega_fun_d(double x, double xd, double Delta, double *
    with respect to varying inputs: a b c
    Plus diff mem management of: constants:in
 */
-int gb_rr_constants_d(double a, double ad, double b, double bd, double c, 
+int gb_rr_constants_d(double a, double ad, double b, double bd, double c,
         double cd, double constants[4], double constantsd[4]) {
     /* Delta (not very robust numerically, see c_quasoare_core for
      * a better formulation */
@@ -81,7 +83,7 @@ int gb_rr_constants_d(double a, double ad, double b, double bd, double c,
    with respect to varying inputs: s0 constants[0:4-1] a b c
    Plus diff mem management of: constants:in
 */
-double gb_rr_forward_d(double a, double ad, double b, double bd, double c, 
+double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
         double cd, double constants[4], double constantsd[4], double timestep,
         double s0, double s0d, double *gb_rr_forward) {
     double s1 = 0;
@@ -162,7 +164,7 @@ double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
  computes integral of x and x^2 over [0, ?] */
 double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
         double cd, double constants[4], double constantsd[4], double timestep,
-        double s0, double s0d, double s1, double s1d, double integ[2], double 
+        double s0, double s0d, double s1, double s1d, double integ[2], double
         integd[2]) {
     double tau = timestep;
     double tau2 = tau*tau;
@@ -259,8 +261,8 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
    with respect to varying inputs: gamma *flux x0 *state
    Plus diff mem management of: flux:in state:in
 */
-int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep, 
-        double gamma, double gammad, double x0, double x0d, double *state, 
+int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
+        double gamma, double gammad, double x0, double x0d, double *state,
         double *stated, double *flux, double *fluxd) {
     double temp;
     int ii1;
@@ -297,7 +299,7 @@ int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
     double integd[2];
     for (ii1 = 0; ii1 < 2; ++ii1)
         integd[ii1] = 0.0;
-    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep, 
+    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep,
                         x0, x0d, x1, x1d, integ, integd);
     temp = integ[1]/timestep;
     temp0 = qstar1 + 64.*gamma/(6561.*timestep);
@@ -313,8 +315,8 @@ int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
                 *state
    Plus diff mem management of: flux:in state:in
 */
-int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2, 
-        double qstar2d, double timestep, double gamma, double gammad, double 
+int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
+        double qstar2d, double timestep, double gamma, double gammad, double
         x0, double x0d, double *state, double *stated, double *flux, double *
         fluxd) {
     /* Quasaore coefficients
@@ -350,7 +352,7 @@ int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
     for (ii1 = 0; ii1 < 2; ++ii1)
         integd[ii1] = 0.0;
     bd = 0.0;
-    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep, 
+    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep,
                         x0, x0d, x1, x1d, integ, integd);
     *fluxd = 0.1*qstar1d + 0.25*(integ[1]*gammad+gamma*integd[1])/(timestep*
         timestep);
@@ -370,10 +372,10 @@ int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
                 states_rr_route:in states_rr_prod:in
 */
 int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
-        , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, 
+        , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd,
         double gamma_rr_route, double gamma_rr_routed, double demand_rr_route,
         double demand_rr_routed, double *pin, double *ein, double *
-        states_rr_prod, double *states_rr_prodd, double *states_rr_route, 
+        states_rr_prod, double *states_rr_prodd, double *states_rr_route,
         double *states_rr_routed, double *qout_rr_prod, double *qout_rr_prodd,
         double *qout_rr_route, double *qout_rr_routed) {
     int j;
@@ -400,8 +402,8 @@ int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
         /* Run routing */
         qid = qout_rr_prodd[j];
         qi = qout_rr_prod[j];
-        rr_route_runtimestep_d(qi, qid, demand_rr_route, demand_rr_routed, 
-                               timestep, gamma_rr_route, gamma_rr_routed, 
+        rr_route_runtimestep_d(qi, qid, demand_rr_route, demand_rr_routed,
+                               timestep, gamma_rr_route, gamma_rr_routed,
                                x0_rr_route, x0_rr_routed, &(states_rr_route[j]
                                ), &(states_rr_routed[j]), &(qout_rr_route[j]),
                                &(qout_rr_routed[j]));

@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+
+#include "c_gradbench_rainfall_runoff.h"
+
 int rr_prod_runtimestep(double qstar1, double qstar2, double timestep, double
     gamma, double x0, double *state, double *flux);
 int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,

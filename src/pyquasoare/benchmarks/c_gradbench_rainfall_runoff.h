@@ -7,6 +7,8 @@
 #include <string.h>
 #include <errno.h>
 
+#define QUASOARE_GRAD_BENCH_ZEROTHRESH 1e-6
+
 int rr_prod_runtimestep(double qstar1, double qstar2,
                        double timestep, double gamma,
                        double x0, double * state, double * flux);
