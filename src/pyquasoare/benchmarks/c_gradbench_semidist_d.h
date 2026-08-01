@@ -8,16 +8,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-int c_gradbench_semidist(int nval, int nreaches, double timestep, double 
-    x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double 
-    *gammas_rr_prod, double *gammas_rr_route, double *gammas_ro_route, double 
-    *demands_rr_route, double *pin, double *ein, double *states_rr_prod, 
-    double *states_rr_route, double *states_ro_route, double *qout_rr_prod, 
+
+#include "c_gradbench_rainfall_runoff.h"
+
+int c_gradbench_semidist(int nval, int nreaches, double timestep, double
+    x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double
+    *gammas_rr_prod, double *gammas_rr_route, double *gammas_ro_route, double
+    *demands_rr_route, double *pin, double *ein, double *states_rr_prod,
+    double *states_rr_route, double *states_ro_route, double *qout_rr_prod,
     double *qout_rr_route, double *qout_ro_route);
-int c_gradbench_semidist_d(int nval, int nreaches, double timestep, double 
-    x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double 
-    *gammas_rr_prod, double *gammas_rr_prodd, double *gammas_rr_route, double 
-    *gammas_rr_routed, double *gammas_ro_route, double *gammas_ro_routed, 
+int c_gradbench_semidist_d(int nval, int nreaches, double timestep, double
+    x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double
+    *gammas_rr_prod, double *gammas_rr_prodd, double *gammas_rr_route, double
+    *gammas_rr_routed, double *gammas_ro_route, double *gammas_ro_routed,
     double *demands_rr_route, double *demands_rr_routed, double *pin, double *
     ein, double *states_rr_prod, double *states_rr_prodd, double *
     states_rr_route, double *states_rr_routed, double *states_ro_route, double

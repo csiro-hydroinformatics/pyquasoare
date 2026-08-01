@@ -2,7 +2,14 @@
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
 int gb_rr_notnull(double x){
-    return x < 0 || x > 0 ? 1 : 0;
+    /* Quasoare has the following line
+     * return x < 0 || x > 0 ? 1 : 0;
+     *
+     * However, it was creating problem when the coefficient
+     * a is very close to 0 (~1e-10). As a result a threshold
+     * approach is preferred
+     */
+    return fabs(x) > QUASOARE_GRAD_BENCH_ZEROTHRESH ? 1 : 0;
 }
 
 int gb_rr_isnull(double x){
@@ -192,7 +199,6 @@ int c_gradbench_rainfall_runoff(int nval,
 
     /* Time series loop */
     for(j = 0; j < nval; j++) {
-
         /* Get inputs for production */
         pi = pin[j];
         ei = ein[j];
