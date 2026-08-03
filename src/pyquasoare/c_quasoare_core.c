@@ -262,13 +262,15 @@ int c_quad_fluxes_increment(int nfluxes,
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
     else if((isnull(a) && notnull(b))){
+        /* Eq B11 in Lerat (2025) */
         integS = (s1 - s0 - Cj * tau) / Bj;
+
+        /* Eq B12 in Lerat (2025) */
         integS2 = ((s1 * s1 - s0 * s0) / 2. - Cj * integS) / Bj;
     }
     else if (notnull(a)){
-        /* Integrate S only because S2 can be deducted from S
-         * and, hence, is not used in subsequent flux computation */
         if(isnull(Delta))
+            /* Eq B14 in Lerat (2025) */
             integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
         else {
             omega = c_omega_fun(qD * tau, Delta);
@@ -281,7 +283,12 @@ int c_quad_fluxes_increment(int nfluxes,
                 term1 = log(1 - signD * omega * omega) / 2. / a;
 
             term2 = -log(1 - a * (s0 - sbar) / qD * omega) / a;
+
+            /* Eq B15 in Lerat (2025) */
             integS = sbar * tau + term1 + term2;
+
+            /* Eq B13 in Lerat (2025) */
+            integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
     }
 
@@ -296,11 +303,7 @@ int c_quad_fluxes_increment(int nfluxes,
         cij = cj_vector[i];
         c_check += cij;
 
-        if(isnull(a))
-            fluxes[i] += aij * integS2 + bij * integS + cij * tau;
-        else
-            fluxes[i] += aij / a * (s1 - s0) + (bij - aij * b / a) * integS
-                         + (cij - aij * c / a) * tau;
+        fluxes[i] += aij * integS2 + bij * integS + cij * tau;
     }
 
     if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||

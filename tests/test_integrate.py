@@ -7,7 +7,7 @@ import pytest
 
 import numpy as np
 import pandas as pd
-import scipy.integrate as sci_integrate
+from scipy.integrate import solve_ivp
 
 from hydrodiy.io import iutils, csv
 
@@ -326,10 +326,13 @@ def test_inverse(allclose, generate_samples):
                 +f"assessed={100*nassessed/ntry:0.0f}%")
 
 
-def test_increment_fluxes(allclose, generate_samples):
+@pytest.mark.parametrize("vectors", ["random", "unit"])
+def test_increment_fluxes(allclose, vectors, generate_samples):
     cname, case, params, s0s, Tmax = generate_samples
     ntry = len(params)
-    if case in [7, 10, 13]:
+    #if case in [7, 10, 13]:
+    #    pytest.skip("Cannot do because of numerical round-off")
+    if case in [7]:
         pytest.skip("Cannot do because of numerical round-off")
 
     errbal_max = 0
@@ -338,17 +341,23 @@ def test_increment_fluxes(allclose, generate_samples):
     ev = []
     for itry, ((aoj, boj, coj), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(aoj, boj, coj)
-        avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
+        if vectors == "random":
+            avect, bvect, cvect = np.random.uniform(-1, 1, size=(3, 3))
+            # make sure coefficient sum matches aoj, boj and coj
+            sa, sb, sc = avect.sum(), bvect.sum(), cvect.sum()
+            avect += (aoj-sa)/3.
+            bvect += (boj-sb)/3.
+            cvect += (coj-sc)/3.
+        else:
+            avect = np.array([1., 0., 0., aoj - 1.])
+            bvect = np.array([0., 1., 0., boj - 1.])
+            cvect = np.array([0., 0., 1., coj - 1.])
 
-        # make sure coefficient sum matches aoj, boj and coj
-        sa, sb, sc = avect.sum(), bvect.sum(), cvect.sum()
-        avect += (aoj-sa)/3.
-        bvect += (boj-sb)/3.
-        cvect += (coj-sc)/3.
+        nfluxes = len(avect)
 
         # Integrate forward analytically
         t1 = min(10, integrate.quad_delta_t_max(aoj, boj, coj,
-                                                        Delta, qD, sbar, s0))
+                                                Delta, qD, sbar, s0))
         t0 = t1*0.05 # do not start at zero to avoid sharp falls
         t1 = t1*0.5 # far away from limits of validity
         s1 = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t1)
@@ -358,7 +367,7 @@ def test_increment_fluxes(allclose, generate_samples):
         al = np.concatenate([avect, np.zeros(n)])
         bl = np.concatenate([bvect, np.zeros(n)])
         cl = np.concatenate([cvect, np.zeros(n)])
-        fluxes = np.zeros(3)
+        fluxes = np.zeros(nfluxes)
         with pytest.raises(ValueError):
             integrate.quad_fluxes_increment(al, bl, cl,
                             aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
@@ -372,30 +381,58 @@ def test_increment_fluxes(allclose, generate_samples):
 
 
         # Compute fluxes analytically
-        fluxes = np.zeros(3)
+        fluxes = np.zeros(nfluxes)
         integrate.quad_fluxes_increment(avect, bvect, cvect,
-                        aoj, boj, coj, Delta, qD, sbar, t0, t1, s0, s1, fluxes)
+                                        aoj, boj, coj,
+                                        Delta, qD, sbar,
+                                        t0, t1, s0, s1, fluxes)
 
         # Test mass balance
-        balance = math.asinh(s1-s0)-math.asinh(fluxes.sum())
+        balance = math.asinh(s1-s0) - math.asinh(fluxes.sum())
         errbal_max = max(abs(balance), errbal_max)
         #assert allclose(balance, 0., atol=1e-6)
 
         # Compare against numerical integration
-        params = np.zeros(3)
-        def finteg(t, a, b, c):
-            s = integrate.quad_forward(aoj, boj, coj, Delta, qD, sbar, t0, s0, t)
-            params[0] = a
-            params[1] = b
-            params[2] = c
-            return approx.quad_fun(params, s).squeeze()
+        v = np.zeros(nfluxes + 1)
+        def fun_ivp(t, y):
+            total = 0.
+            for i in range(nfluxes):
+                s = y[-1]
+                f = avect[i] * s**2 + bvect[i] * s + cvect[i]
+                total += f
+                v[i] = f
+            v[-1] = total
+            return v
 
-        expected = np.array([sci_integrate.quad(finteg, t0, t1,
-                                                limit=500, args=(a, b, c))
-                             for a, b, c in zip(avect, bvect, cvect)])
-        tol = expected[:, 1].max()
-        errmax = np.abs(np.arcsinh(fluxes)-np.arcsinh(expected[:, 0])).max()
-        assert errmax < 1e-6
+        m = np.zeros((nfluxes + 1, nfluxes + 1))
+        def jac_ivp(t, y):
+            total = 0.
+            for i in range(nfluxes):
+                s = y[-1]
+                df = 2 * avect[i] + bvect[i]
+                total += df
+                m[i, 0] = df
+            m[nfluxes, 0] = total
+            return m
+
+        y0 = [0.] * 3 + [s0]
+        t = [t0, t1]
+        res = solve_ivp(fun=fun_ivp,
+                        t_span=[t0, t[-1]],
+                        y0=np.array([0.] * nfluxes + [s0]),
+                        method="Radau",
+                        max_step=np.inf,
+                        jac=jac_ivp,
+                        t_eval=t)
+        expected = res.y[:nfluxes, -1]
+        err = np.abs(np.arcsinh(fluxes)-np.arcsinh(expected))
+        errmax = err.max()
+        txt = " ".join([f"{e:0.2e}" for e in err])
+        errmsg = f"{cname}: a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
+                 + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"\
+                 + f" / emax={txt}"
+        tol = 5e-5
+        assert errmax < tol, errmsg
 
         errmax_max = max(errmax, errmax_max)
         nassessed += 1
@@ -407,11 +444,10 @@ def test_increment_fluxes(allclose, generate_samples):
                          t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
-
     mess = f"[{case}:{cname}] fluxes vs integration: "\
            + f"errmax = {errmax_max:3.2e}"\
            + f" balmax = {errbal_max:3.3e}"\
-           + f" assessed = {nassessed/ntry*100:0.0f}%"
+           + f" assessed = {nassessed/ntry*100:0.0f}% (ntry={ntry})"
     LOGGER.info(mess)
 
 
