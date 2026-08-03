@@ -54,51 +54,6 @@ FLUX_FUNCTIONS = {
         ],
 }
 
-def forwardP(x):
-    return np.log(x + 1)
-
-def backwardP(y):
-    return np.maximum(np.exp(y) - 1, 0.)
-
-def forwardE(x):
-    return x
-
-def backwardE(y):
-    return np.maximum(y, 0.)
-
-def forwardasinh(x, x0=1):
-    return np.asinh(x / x0) * x0
-
-def random_scalings(sigma, nval, s0=1e-2):
-    return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
-
-def compute_flux_error(bench, alt, transform=None):
-    nreaches = bench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
-    fa = alt[:, ires, 5]
-    fb = bench[:, ires, 5]
-    if transform is not None:
-        fw = forward_asinh if transform=="asinh" else lambda x: x
-        fb = fw(fb)
-        fa = fw(fa)
-
-    return np.abs(fa - fb)
-
-def compute_dflux_error(dbench, dalt, gammas, transform=None):
-    nreaches = dbench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
-
-    # .. multiply err by gamma to get a dflux error with the dimension
-    # of a flux
-    dfb = dbench[:, ires, ires, 5] * gammas[None, ires]
-    dfa = dalt[:, ires, ires, 5] * gammas[None, ires]
-    if transform:
-        fw = forward_asinh if transform=="asinh" else lambda x: x
-        dfb = fw(dfb)
-        dfa = fw(dfa)
-
-    return np.abs(dfb - dfa)
-
 
 def get_options():
     timestep = "daily"
@@ -221,12 +176,12 @@ def configure_model(config, area):
         conv = area * MODEL_TIMESTEP / 86.4
         mod.add_link_outflow(ibase + 1, ibase + 3, conv)
 
+        # RO route -> Transluent
+        mod.add_link_outflow(ibase + 2, ibase + 3)
+
         if ireach > 0:
             # Transluent upstream -> RO route
             mod.add_link_outflow(ibase - 1, ibase + 2)
-
-            # RO route -> Transluent
-            mod.add_link_outflow(ibase + 2, ibase + 3)
 
     mod.nreaches = nreaches
     mod.nres_per_reach = nres_per_reach
@@ -257,7 +212,6 @@ def set_coefs_linear(mod):
         mod.set_coefs_linear(ibase + 3, "transluent")
 
 
-
 def allocate_model(mod, hydroclim, grad=True):
     nval = len(hydroclim)
 
@@ -271,9 +225,12 @@ def allocate_model(mod, hydroclim, grad=True):
     mod.allocate(nval, timestep=MODEL_TIMESTEP,
                  variables_specs=vspecs)
 
+
+def set_qstars(mod, hydroclim):
     mod.Pmean = hydroclim[:, 0].mean()
 
     # Set 0 flow inputs for first reach
+    nval = len(hydroclim)
     Qstars0 = np.zeros((nval, 2))
     mod.set_Qstars(3, Qstars0)
 
@@ -350,6 +307,86 @@ def set_parameters(config, mod):
     return grr_prod, grr_route, gro_route, dem
 
 
+def forwardP(x):
+    return np.log(x + 1)
+
+
+def backwardP(y):
+    return np.maximum(np.exp(y) - 1, 0.)
+
+
+def forwardE(x):
+    return x
+
+
+def backwardE(y):
+    return np.maximum(y, 0.)
+
+
+def forwardasinh(x, x0=1):
+    return np.asinh(x / x0) * x0
+
+
+def random_scalings(sigma, nval, s0=1e-2):
+    return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
+
+
+def compute_flux_error(bench, alt, transform=None):
+    nreaches = bench.shape[1] // 4
+    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
+    fa = alt[:, ires, 5]
+    fb = bench[:, ires, 5]
+    if transform is not None:
+        fw = forward_asinh if transform=="asinh" else lambda x: x
+        fb = fw(fb)
+        fa = fw(fa)
+
+    return np.abs(fa - fb)
+
+
+def compute_dflux_error(dbench, dalt, transform=None):
+    nreaches = dbench.shape[1] // 4
+    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
+
+    # .. multiply err by gamma to get a dflux error with the dimension
+    # of a flux
+    dfb = dbench[:, ires, ires, 5]
+    dfa = dalt[:, ires, ires, 5]
+    if transform:
+        fw = forward_asinh if transform=="asinh" else lambda x: x
+        dfb = fw(dfb)
+        dfa = fw(dfa)
+
+    return np.abs(dfb - dfa)
+
+
+def convert_fluxes(area, nres_per_reach, gammas,
+                   fluxes, dfluxes):
+    nres = dfluxes.shape[2]
+    nreach = nres // nres_per_reach
+
+    fluxes_converted = fluxes.copy()
+
+    # Convert diff against capacity
+    # to diff against capacity scaling
+    g = gammas[None, None, :, None]
+    dfluxes_converted = dfluxes.copy() * g
+
+    # Convert m3/s to mm/day for the transluent reservoir
+    for ireach in range(nreach):
+        area_up = area * (ireach + 1)
+        ires_transluent = ireach * nres_per_reach + 3
+        factor = 86.4 * MODEL_TIMESTEP / area_up
+
+        fluxes_converted[:, ires_transluent] = \
+            factor * fluxes[:, ires_transluent]
+
+        dfluxes_converted[:, :, ires_transluent] = \
+            factor * dfluxes_converted[:, :, ires_transluent]
+
+    return fluxes_converted, dfluxes_converted
+
+
 def process(config, script_paths, logger, data):
     # Setup up model
     modref = configure_model(config, data.area)
@@ -361,7 +398,7 @@ def process(config, script_paths, logger, data):
     # Allocate model with extended hydroclim data
     debug = config.debug
     context = config.options.context
-    dbase = 1 if debug else context["duration_base"]
+    dbase = 20 if debug else context["duration_base"]
     drep = 1 if debug else context["duration_repeat"]
     n = dbase * 365
     hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
@@ -418,9 +455,9 @@ def process(config, script_paths, logger, data):
     dfluxes_bench.fill(np.nan)
 
     # initialise numerical difference data
-    numdiff_eps = config.task.numdiff_eps
-    dfluxes_diff1 = modref.dfluxes.copy()
-    dfluxes_diff2 = modref.dfluxes.copy()
+    numdiff_eps = 1e-2 if config.debug else config.task.numdiff_eps
+    dfluxes_diff1 = modref.dfluxes.copy() * np.nan
+    dfluxes_diff2 = modref.dfluxes.copy() * np.nan
 
     # initialise perf results
     mnames = ["bench", "diff1", "diff2", "quasoare"]
@@ -432,6 +469,13 @@ def process(config, script_paths, logger, data):
 
     # repeat experiment
     for irepeat in range(nrepeat):
+        logger.info(f"Repeat #{irepeat + 1} / {nrepeat}")
+        # Set random model inputs
+        set_qstars(modref, hclim)
+        modneutral.Qstars = modref.Qstars
+        modlow.Qstars = modref.Qstars
+        modhigh.Qstars = modref.Qstars
+
         grr_prod, grr_route, gro_route, demrr_route = \
                 set_parameters(config, modref)
 
@@ -565,25 +609,52 @@ def process(config, script_paths, logger, data):
 
         dt_diff2 = time.time() - t0
 
+        # Convert the routing fluxes in m3/s to mm/d
+        area, nrp, gams = modref.area, modref.nres_per_reach, modref.gammas
+        fluxes_quas_c, dfluxes_quas_c = convert_fluxes(area, nrp, gams,
+                                                       modref.fluxes,
+                                                       modref.dfluxes)
+        fluxes_bench_c, dfluxes_bench_c = convert_fluxes(area, nrp, gams,
+                                                         fluxes_bench,
+                                                         dfluxes_bench)
+        _, dfluxes_diff1_c = convert_fluxes(area, nrp, gams,
+                                            fluxes_bench,
+                                            dfluxes_diff1)
+
+        _, dfluxes_diff2_c = convert_fluxes(area, nrp, gams,
+                                            fluxes_bench,
+                                            dfluxes_diff2)
+
         # Compute perf
         results.loc[irepeat, "runtime_bench"] = dt_bench
         results.loc[irepeat, "runtime_diff1"] = dt_diff1
         results.loc[irepeat, "runtime_diff2"] = dt_diff2
         results.loc[irepeat, "runtime_quasoare"] = dt_quas
 
-        fx_err = compute_flux_error(fluxes_bench, modref.fluxes)
+        fx_err = compute_flux_error(fluxes_bench_c, fluxes_quas_c)
         results.loc[irepeat, "fx_errmax_quasoare"] = fx_err.max()
 
-        dfx_err = compute_dflux_error(dfluxes_bench, modref.dfluxes,
-                                      modref.gammas)
+        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c)
         results.loc[irepeat, "dfx_errmax_quasoare"] = dfx_err.max()
 
-        dfx_err = compute_dflux_error(dfluxes_bench, dfluxes_diff1,
-                                      modref.gammas)
+        if dfx_err.max() > 0.1:
+            err = np.abs(dfluxes_bench_c - dfluxes_quas_c)
+
+            import matplotlib.pyplot as plt
+            db = dfluxes_bench_c[:, 0, 0, 5]
+            dq = dfluxes_quas_c[:, 0, 0, 5]
+            fig, ax = plt.subplots()
+            ax.plot(db, label="bench")
+            ax.plot(dq, label="quas")
+            tax = ax.twinx()
+            tax.plot(db - dq, color="0.5", lw=0.8)
+            plt.show()
+            import pdb; pdb.set_trace()
+
+        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_diff1_c)
         results.loc[irepeat, "dfx_errmax_diff1"] = dfx_err.max()
 
-        dfx_err = compute_dflux_error(dfluxes_bench, dfluxes_diff2,
-                                      modref.gammas)
+        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_diff2_c)
         results.loc[irepeat, "dfx_errmax_diff2"] = dfx_err.max()
 
     import pdb; pdb.set_trace()
