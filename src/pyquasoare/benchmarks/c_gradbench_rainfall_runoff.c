@@ -2,14 +2,7 @@
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
 int gb_rr_notnull(double x){
-    /* Quasoare has the following line
-     * return x < 0 || x > 0 ? 1 : 0;
-     *
-     * However, it was creating problem when the coefficient
-     * a is very close to 0 (~1e-10). As a result a threshold
-     * approach is preferred
-     */
-    return fabs(x) > QUASOARE_GRAD_BENCH_ZEROTHRESH ? 1 : 0;
+     return x < 0 || x > 0 ? 1 : 0;
 }
 
 int gb_rr_isnull(double x){
@@ -89,12 +82,13 @@ double gb_rr_integrate_x(double a, double b, double c, double constants[4],
     double sbar = constants[3];
 
     double integS, integS2, omega, term1, term2;
+    double integSL, integS2L, eps_bar;
 
     if (gb_rr_isnull(a) && gb_rr_isnull(b)) {
         integS = s0 * tau + c * tau2 / 2;
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
-    else if((gb_rr_isnull(a) && gb_rr_notnull(b))){
+    else if(gb_rr_isnull(a) && gb_rr_notnull(b)){
         integS = (s1 - s0 - c * tau) / b;
         integS2 = ((s1 * s1 - s0 * s0) / 2. - c * integS) / b;
     }
@@ -115,8 +109,29 @@ double gb_rr_integrate_x(double a, double b, double c, double constants[4],
             integS = sbar * tau + term1 + term2;
         }
 
-        /* Eq B13 in Lerat (2025) */
-        integS2 = (s1 - s0 - b * integS - c * tau) / a;
+        /* Correction to handle very small a if b ≠ 0 */
+        if(a < 1e-5 && gb_rr_notnull(b)){
+            /* Assume that x = x1 + eps
+             * where
+             * dx/dt = ax^2 + bx + c
+             * dx1/dt = bx + c
+             * We obtain the following integrals for x1:
+             */
+            integSL = (s1 - s0 - c * tau) / b;
+            integS2L = ((s1 * s1 - s0 * s0) / 2. - c * integS) / b;
+
+            /* the average value of eps(t) over the timestep is:*/
+            eps_bar = (integS - integSL) / tau;
+
+            /* Hence
+             * ∫x^2 = ∫(x1+eps)^2 ≈ ∫x1^2 + 2∫x1 eps ≈ ∫x1^2 + 2 eps_bar ∫x1
+             */
+            integS2 = integS2L + 2 * eps_bar * integSL;
+
+        } else {
+            /* Eq B13 in Lerat (2025) */
+            integS2 = (s1 - s0 - b * integS - c * tau) / a;
+        }
     }
 
     integ[0] = integS;
@@ -199,6 +214,7 @@ int c_gradbench_rainfall_runoff(int nval,
 
     /* Time series loop */
     for(j = 0; j < nval; j++) {
+        fprintf(stdout, "\n\nt = %d\n", j);
         /* Get inputs for production */
         pi = pin[j];
         ei = ein[j];
