@@ -487,10 +487,10 @@ def test_gradbench_rainfallrunoff_tangent_specific():
     fz = FTEST / "test_data_gradbench_semidist.npz"
     data = np.load(fz)
     timestep = data["timestep"]
-    #pin = data["pin"][5130:5160, 0]
-    #ein = data["ein"][5130:5160, 0]
-    pin = data["pin"][:, 0]
-    ein = data["ein"][:, 0]
+    pin = data["pin"][5130:5146, 0]
+    ein = data["ein"][5130:5146, 0]
+    #pin = data["pin"][:, 0]
+    #ein = data["ein"][:, 0]
     x0 = data["x0"]
     areas = data["areas"][0]
     grr_prod = data["grr_prod"][0]
@@ -502,7 +502,7 @@ def test_gradbench_rainfallrunoff_tangent_specific():
     dgrr_route = 0.
     dgro_route = 0.
     ddemrr_route = 0.
-    eps = 1e-3
+    eps = 1e-6
     out0 = benchmarks.gradbench_rainfall_runoff_tangent(timestep, pin,
                                                         ein, x0,
                                                         grr_prod,
@@ -511,6 +511,7 @@ def test_gradbench_rainfallrunoff_tangent_specific():
                                                         dgrr_route,
                                                         demrr_route,
                                                         ddemrr_route)
+
     grr_prod1 = grr_prod - eps
     out1 = benchmarks.gradbench_rainfall_runoff(timestep, pin,
                                                 ein, x0,

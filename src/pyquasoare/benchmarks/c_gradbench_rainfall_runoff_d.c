@@ -5,9 +5,7 @@
 
 /* Functions copied from quasaore_core to simplify application of Tapenade */
 int gb_rr_notnull_c(double x) {
-    //return (x < 0 || x > 0 ? 1 : 0);
-    // see c_gradbench_rainfall_runoff.c
-    return fabs(x) > QUASOARE_GRAD_BENCH_ZEROTHRESH ? 1 : 0;
+    return (x < 0 || x > 0 ? 1 : 0);
 }
 
 int gb_rr_isnull_c(double x) {
