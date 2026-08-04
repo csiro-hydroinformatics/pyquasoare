@@ -148,18 +148,20 @@ def reservoir_function(request, selfun):
 def generate_samples(ntry, selcase, request):
     case = request.param
     assert case in list(range(1, NCASES+1))
-    if selcase>0 and case!=selcase:
+
+    if selcase > 0 and case != selcase:
         pytest.skip("Configuration skipped")
 
     Tmax = 20
 
     # Parameters
-    v0, v1 = -5*np.ones(3), np.ones(3)
+    v0, v1 = -5 * np.ones(3), np.ones(3)
 
     if case == 1:
         name = "a and b are zero"
         v0[:-1] = 0
         v1[:-1] = 0
+
     elif case == 2:
         name = "a is zero"
         v0[0] = 0
