@@ -9,9 +9,14 @@
 
 #include "c_quasoare_utils.h"
 
+double c_quad_expmxy(double x, double y);
+
 double c_quad_fun(double a, double b, double c, double s);
+
 double c_quad_grad(double a, double b, double c, double s);
+
 int c_quad_coefficients_tangent(double a, double b, double c, double sref, double coefs[3]);
+
 double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
 
 int c_quad_coefficients(int approx_opt, double a0, double a1,

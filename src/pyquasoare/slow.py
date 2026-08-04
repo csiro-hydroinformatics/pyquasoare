@@ -120,6 +120,14 @@ def omega_fun(x, Delta):
     return math.tan(x) if Delta < 0. else math.tanh(x)
 
 
+def quad_expmxy(x, y):
+    z = x * y
+    if abs(y) < 1e-10:
+        return x + 0.5 * x * z + (z * z * x) / 6.0
+
+    return math.expm1(z) / y
+
+
 def quad_fun(a, b, c, s):
     return (a*s+b)*s+c
 
@@ -159,13 +167,14 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
         s1 = s0+c*tau
 
     elif isnull(a) and notnull(b):
-        s1 = -c/b+(s0+c/b)*math.exp(b*tau) \
+        expmb = quad_expmxy(tau, b)
+        s1 = s0 * math.exp(b*tau) + expmb * c \
                     if abs(b*tau) > QUASOARE_EPS \
                     else s0*(1+b*tau)+c*tau
 
     else:
         if isnull(Delta):
-            s1 = sbar+(s0-sbar)/(1-a*tau*(s0-sbar))
+            s1 = sbar + (s0-sbar)/(1-a*tau*(s0-sbar))
         else:
             omega = omega_fun(qD*tau, Delta)
             signD = -1. if Delta < 0. else 1.

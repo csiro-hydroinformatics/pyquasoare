@@ -1,6 +1,28 @@
 #include "c_quasoare_core.h"
 
 /* Approximation functions */
+
+/* [exp(x*y) - 1] / y */
+double c_quad_expmxy(double x, double y) {
+    double z = x * y;
+    if(fabs(y) < 1e-8) {
+        return x + 0.5 * x * z + (z * z * x) / 6.0;
+    }
+    return expm1(z) / y;
+}
+
+/* log(1 - x*y) / y */
+double c_quad_logpxy(double x, double y) {
+    double z = x * y;
+    if(z >= 1.0)
+        return c_get_nan();
+
+    if(fabs(y) < 1e-8) {
+        return - x - 0.5 * x * z - (z * z * x) / 3.0;
+    }
+    return log1p(-z) / y;
+}
+
 double c_quad_fun(double a, double b, double c, double s){
     return notnan(s) ? (a * s + b) * s + c : c_get_nan();
 }
@@ -176,6 +198,7 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     double exparg = 0;
     double tau = t - t0;
     double signD = Delta < 0 ? -1. : 1.;
+    double expmb = 0;
 
     /* Obtain the maximum time for which integration remains valid */
     double delta_tmax = c_quad_delta_t_max(a, b, c, Delta, qD, sbar, s0);
@@ -191,8 +214,11 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     else if((isnull(a) && notnull(b))){
         exparg = b * tau;
+        /* Computes exp(tau * b) - 1) / b */
+        expmb = c_quad_expmxy(tau, b);
+
         s1 = fabs(exparg) < QUASOARE_EPS ? s0 * (1 + exparg) + c * tau
-            : -c / b +(s0 + c / b) * exp(exparg);
+            : s0 * exp(exparg) + expmb * c;
     }
     else{
         if(isnull(Delta)){
@@ -246,7 +272,11 @@ int c_quad_fluxes_increment(int nfluxes,
     double a = Aj, a_check = 0.;
     double b = Bj, b_check = 0.;
     double c = Cj, c_check = 0.;
-    double omega = 0., signD = 0., term1 = 0., term2 = 0.;
+    double c_b_ratio;
+    double expmb = 0., expm2b = 0.;
+    double omega = 0., signD = 0.;
+    double tmp = 0;
+    double term1 = 0., term2 = 0.;
     double integS = c_get_nan();
     double integS2 = c_get_nan();
 
@@ -262,34 +292,41 @@ int c_quad_fluxes_increment(int nfluxes,
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
     else if((isnull(a) && notnull(b))){
-        /* Eq B11 in Lerat (2025) */
-        integS = (s1 - s0 - Cj * tau) / Bj;
+        /* Rewrite of Eq B11 in Lerat (2025) for better numerical stability */
+        c_b_ratio = c / b;
+        expmb = c_quad_expmxy(tau, b); // (exp(b * tau) - 1) / b
+        integS = s0 * expmb + (expmb - tau) * c_b_ratio;
 
         /* Eq B12 in Lerat (2025) */
         integS2 = ((s1 * s1 - s0 * s0) / 2. - Cj * integS) / Bj;
+        expm2b = c_quad_expmxy(tau, 2 * b);
+        //integS2 = s0 * s0 * expm2b - 2 * s0 * c_b_ratio * expmb
+        //    + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb);
     }
     else if (notnull(a)){
-        if(isnull(Delta))
-            /* Eq B14 in Lerat (2025) */
-            integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
+        if(isnull(Delta)) {
+            /* Rewrite of Eq B14 in Lerat (2025) for better numerics */
+            integS = sbar * tau - c_quad_logpxy(tau * (s0 - sbar), a);
+        }
         else {
             omega = c_omega_fun(qD * tau, Delta);
             signD = Delta < 0 ? -1. : 1.;
 
             /* Special formula to avoid the case where omega == 1 */
-            if(qD * tau > 10 && Delta > 0)
+            if(qD * tau > 10 && Delta > 0) {
                 term1 = (log(2) - qD * tau) / a;
-            else
-                term1 = log(1 - signD * omega * omega) / 2. / a;
-
-            term2 = -log(1 - a * (s0 - sbar) / qD * omega) / a;
+            }
+            else {
+                term1 = log1p(- signD * omega * omega) / 2. / a;
+            }
+            term2 = -c_quad_logpxy((s0 - sbar) / qD * omega, a);
 
             /* Eq B15 in Lerat (2025) */
             integS = sbar * tau + term1 + term2;
-
-            /* Eq B13 in Lerat (2025) */
-            integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
+
+        /* Eq B13 in Lerat (2025) */
+        integS2 = (s1 - s0 - b * integS - c * tau) / a;
     }
 
     /* increment fluxes */

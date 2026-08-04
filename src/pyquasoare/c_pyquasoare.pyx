@@ -25,6 +25,7 @@ cdef extern from 'c_quasoare_utils.h':
 
 
 cdef extern from 'c_quasoare_core.h':
+    double c_quad_expmxy(double x, double y)
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
     double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
@@ -120,6 +121,10 @@ def get_error_message(int err_code):
     cdef char message[100]
     c_get_error_message(err_code, message)
     return message
+
+
+def quad_expmxy(double x, double y):
+    c_quad_expmxy(x, y)
 
 
 def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
