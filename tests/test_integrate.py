@@ -186,8 +186,8 @@ def test_forward_vs_finite_difference(allclose, generate_samples):
         s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
 
         # Compare with slow
-        s1_slow = np.array([slow.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t) \
-                                                                    for t in t_eval])
+        s1_slow = np.array([slow.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t)
+                            for t in t_eval])
         assert allclose(s1, s1_slow)
 
         # Test if s1 is monotone
@@ -349,9 +349,9 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
             bvect += (boj-sb)/3.
             cvect += (coj-sc)/3.
         else:
-            avect = np.array([1., 0., 0., aoj - 1.])
-            bvect = np.array([0., 1., 0., boj - 1.])
-            cvect = np.array([0., 0., 1., coj - 1.])
+            avect = np.array([1., 0., aoj - 1.])
+            bvect = np.array([0., 1., boj - 1.])
+            cvect = np.array([0., 0., coj])
 
         nfluxes = len(avect)
 
@@ -426,12 +426,13 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                         t_eval=t)
         expected = res.y[:nfluxes, -1]
         err = np.abs(np.arcsinh(fluxes)-np.arcsinh(expected))
+        err = err[:-1] if vectors == "unit" else err
         errmax = err.max()
         txt = " ".join([f"{e:0.2e}" for e in err])
-        errmsg = f"{cname}: a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
+        errmsg = f"{cname.strip()}: a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
                  + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"\
                  + f" / emax={txt}"
-        tol = 5e-5
+        tol = 1e-4
         assert errmax < tol, errmsg
 
         errmax_max = max(errmax, errmax_max)

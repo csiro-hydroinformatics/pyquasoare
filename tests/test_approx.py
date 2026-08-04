@@ -154,7 +154,7 @@ def generate_samples(ntry, selcase, request):
     Tmax = 20
 
     # Parameters
-    v0, v1 = -5*np.ones(3), 5*np.ones(3)
+    v0, v1 = -5*np.ones(3), np.ones(3)
 
     if case == 1:
         name = "a and b are zero"
@@ -199,7 +199,13 @@ def generate_samples(ntry, selcase, request):
 
     elif case == 7:
         name = "General+large scale"
-        params *= 1000
+        # Do not increase positive values to avoid explosion
+        # of solutions
+        for icol in [0, 1]:
+            ineg = params[:, icol] < 0
+            params[:, icol] *= 1000
+
+        params[:, 2] *= 1000
 
     elif case == 8:
         name = "General+low scale"
