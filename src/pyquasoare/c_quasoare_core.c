@@ -214,11 +214,13 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
     }
     else if((isnull(a) && notnull(b))){
         exparg = b * tau;
-        /* Computes exp(tau * b) - 1) / b */
-        expmb = c_quad_expmxy(tau, b);
-
-        s1 = fabs(exparg) < QUASOARE_EPS ? s0 * (1 + exparg) + c * tau
-            : s0 * exp(exparg) + expmb * c;
+        if(fabs(exparg) < QUASOARE_EPS) {
+            s1 = s0 * (1 + exparg) + c * tau;
+        } else {
+            /* Computes exp(tau * b) - 1) / b */
+            expmb = c_quad_expmxy(tau, b);
+            s1 = s0 * exp(exparg) + expmb * c;
+        }
     }
     else{
         if(isnull(Delta)){
@@ -292,16 +294,17 @@ int c_quad_fluxes_increment(int nfluxes,
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
     }
     else if((isnull(a) && notnull(b))){
-        /* Rewrite of Eq B11 in Lerat (2025) for better numerical stability */
         c_b_ratio = c / b;
         expmb = c_quad_expmxy(tau, b); // (exp(b * tau) - 1) / b
+        expm2b = c_quad_expmxy(tau, 2 * b);
+
+        /* Rewrite of Eq B11 in Lerat (2025) for improved numerics when a≈0 */
         integS = s0 * expmb + (expmb - tau) * c_b_ratio;
 
-        /* Eq B12 in Lerat (2025) */
-        integS2 = ((s1 * s1 - s0 * s0) / 2. - Cj * integS) / Bj;
-        expm2b = c_quad_expmxy(tau, 2 * b);
-        //integS2 = s0 * s0 * expm2b - 2 * s0 * c_b_ratio * expmb
-        //    + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb);
+        /* Rewrite of Eq B12 in Lerat (2025) for improved numerics when a≈0 */
+        integS2 = s0 * s0 * expm2b
+            + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb)
+            + 2 * s0 * c_b_ratio * (expm2b - expmb);
     }
     else if (notnull(a)){
         if(isnull(Delta)) {
