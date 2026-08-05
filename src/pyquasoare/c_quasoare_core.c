@@ -277,7 +277,8 @@ int c_quad_fluxes_increment(int nfluxes,
     double c_b_ratio;
     double expmb = 0., expm2b = 0.;
     double omega = 0., signD = 0.;
-    double tmp = 0;
+    double ex = 0., cst = 0., sq = 0.;
+    double B = 0., i1 = 0., i2 = 0.;
     double term1 = 0., term2 = 0.;
     double integS = c_get_nan();
     double integS2 = c_get_nan();
@@ -310,26 +311,44 @@ int c_quad_fluxes_increment(int nfluxes,
         if(isnull(Delta)) {
             /* Rewrite of Eq B14 in Lerat (2025) for better numerics */
             integS = sbar * tau - c_quad_logpxy(tau * (s0 - sbar), a);
+            /* Eq B13 in Lerat (2025) */
+            integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
         else {
-            omega = c_omega_fun(qD * tau, Delta);
-            signD = Delta < 0 ? -1. : 1.;
+            if (Delta > 0) {
+                sq = qD * 2;
+                ex = exp(sq * tau);
+                cst = (b + sq + ex * (sq - b)) / 2;
+                B = (2 * a * s0 + b - sq) / (2 * a * s0 + b + sq);
 
-            /* Special formula to avoid the case where omega == 1 */
-            if(qD * tau > 10 && Delta > 0) {
-                term1 = (log(2) - qD * tau) / a;
-            }
-            else {
-                term1 = log1p(- signD * omega * omega) / 2. / a;
-            }
-            term2 = -c_quad_logpxy((s0 - sbar) / qD * omega, a);
+                i1 = tau * sq + log(sq / cst) - log1p(s0 * (1 - ex) / cst * a);
+                i2 = sq * (i1 + B * (ex - 1) / (1 - B * ex) / (1 - B));
 
-            /* Eq B15 in Lerat (2025) */
-            integS = sbar * tau + term1 + term2;
+                integS =  -(sq + b) * tau / 2 / a + i1 / a;
+                integS2 = (b + sq) * (b + sq) / 4 * tau / a / a
+                    - (b + sq) * i1 / a / a + i2 / a / a;
+
+            } else {
+                omega = c_omega_fun(qD * tau, Delta);
+                signD = Delta < 0 ? -1. : 1.;
+
+                /* Special formula to avoid the case where omega == 1 */
+                if(qD * tau > 10 && Delta > 0) {
+                    term1 = (log(2) - qD * tau) / a;
+                }
+                else {
+                    term1 = log1p(- signD * omega * omega) / 2. / a;
+                }
+                term2 = -c_quad_logpxy((s0 - sbar) / qD * omega, a);
+
+                /* Eq B15 in Lerat (2025) */
+                integS = sbar * tau + term1 + term2;
+
+                /* Eq B13 in Lerat (2025) */
+                integS2 = (s1 - s0 - b * integS - c * tau) / a;
+            }
         }
 
-        /* Eq B13 in Lerat (2025) */
-        integS2 = (s1 - s0 - b * integS - c * tau) / a;
     }
 
     /* increment fluxes */

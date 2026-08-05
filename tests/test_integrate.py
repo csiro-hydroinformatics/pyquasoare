@@ -356,6 +356,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
     errmax_max = 0
     nassessed = 0
     ev = []
+    npos = 0
     for itry, ((aoj, boj, coj), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(aoj, boj, coj)
         if vectors == "random":
@@ -404,21 +405,25 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                                         t0, t1, s0, s1, fluxes)
 
         # Check
-        #a, b, c = aoj, boj, coj
-        #x0 = s0
-        #sq = qD * 2
-        #tau = t1 - t0
-        #e = math.exp(tau *sq)
-        #B = (2 * a  * x0 + b - sq) / (2 * a * x0 + b + sq)
+        if False: #Delta > 0:
+            a, b, c = aoj, boj, coj
+            sq = qD * 2
+            tau = t1 - t0
+            ex = math.exp(tau *sq)
+            cst = (b + sq + ex * (sq - b)) / 2;
+            B = (2 * a  * s0 + b - sq) / (2 * a * s0 + b + sq)
 
-        #left = fluxes[1]
-        #right = (sq - b) / a * tau / 2 + math.log((1 - B) / (1 - B * e)) / a
-        #assert allclose(left, right)
+            i1 = tau * sq + math.log(sq / cst) - math.log1p(s0 * (1 - ex) / cst * a)
+            i2 = sq * (i1 + B * (ex - 1) / (1 - B * ex) / (1 - B))
 
-        #right = (np.sign(b)*math.sqrt(1 - 4 * a * c / b**2) - 1) * b / a * tau / 2 \
-        #    + math.log((1 - B) / (1 - B * e)) / a
-        #assert allclose(left, right)
+            integS =  -(sq + b) * tau / 2 / a + i1 / a
+            assert allclose(integS, fluxes[1])
 
+            nums = [(b + sq)**2 / 4 * tau, -(b + sq) * i1, i2]
+            integS2 = (b + sq) * (b + sq) / 4 * tau / a / a \
+                - (b + sq) * i1 / a / a + i2 / a / a
+
+            assert allclose(integS2, fluxes[0])
 
         # Test mass balance
         balance = math.asinh(s1-s0) - math.asinh(fluxes.sum())
@@ -479,10 +484,14 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                          t0, t1, s0, s1, fluxes_slow)
         assert allclose(fluxes, fluxes_slow, atol=1e-7)
 
+        if Delta > 0:
+            npos += 1
+
     mess = f"[{case}:{cname.strip()}/{vectors}] fluxes vs integration: "\
            + f"errmax = {errmax_max:3.2e}"\
            + f" balmax = {errbal_max:3.3e}"\
-           + f" assessed = {nassessed/ntry*100:0.0f}% (ntry={ntry})"
+           + f" assessed = {nassessed/ntry*100:0.0f}%"\
+           + f" (ntry={ntry} npos={npos})"
     LOGGER.info(mess)
 
 
