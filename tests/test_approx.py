@@ -17,7 +17,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 13
+NCASES = 15
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -172,11 +172,11 @@ def generate_samples(ntry, selcase, request):
 
     # Refine cases
     if case == 3:
-        name = "Determinant is null"
+        name = "Delta null"
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
 
     elif case == 4:
-        name = "Determinant is negative"
+        name = "Delta<0"
         a, b, c = params.T
         Delta = -np.abs(b**2-4*a*c)
         qD = np.sqrt(-Delta)/2
@@ -184,7 +184,7 @@ def generate_samples(ntry, selcase, request):
         params[:, 2] = c
 
     elif case in [5, 12]:
-        name = "Determinant is positive" if case==5 \
+        name = "Delta>0" if case==5 \
                         else "edge case for atanh"
         a, b, c = params.T
         Delta = np.abs(b**2-4*a*c)
@@ -197,10 +197,10 @@ def generate_samples(ntry, selcase, request):
             s0s = -ssr+np.abs(qD/a)*np.random.uniform(0., 1., len(qD))
 
     elif case == 6:
-        name = "General"
+        name = "Gen"
 
     elif case == 7:
-        name = "General+large scale"
+        name = "Gen+large"
         # Do not increase positive values to avoid explosion
         # of solutions
         for icol in [0, 1]:
@@ -210,39 +210,50 @@ def generate_samples(ntry, selcase, request):
         params[:, 2] *= 1000
 
     elif case == 8:
-        name = "General+low scale"
+        name = "Gen+low"
         params /= 1000
 
     elif case == 9:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a and b close to zero"
+        name = "a and b close to 0"
         eps = 1e-9
         params[:, :2] = np.random.uniform(eps, 5*eps, size=(len(params), 2))
 
     elif case == 10:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a close to zero"
+        name = "a close to 0"
         eps = 1e-9
         params[:, 0] = np.random.uniform(eps, 5*eps, size=len(params))
 
     elif case == 11:
-        name = "equality s0 = -b/2a"
+        name = "equality s0=-b/2a"
         a, b, c = params.T
         s0s = -b/2./a
 
     elif case == 13:
-        name = "a zero and b close to zero"
+        name = "a=0 and b close to 0"
         params[:, 0] = 0
         eps = 1e-9
         params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
 
+    elif case == 14:
+        s0s = np.random.uniform(-5, 5, ntry)
+        name = "a very small"
+        eps = 1e-6
+        params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
+
+    if case == 15:
+        name = "Delta null + a very small"
+        eps = 1e-6
+        params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
+        params[:, 2] = params[:, 1]**2/4/params[:, 0]
 
     if not case in [9, 10, 11, 12]:
         s0s = np.random.uniform(-5, 5, ntry)
         a, b, c = params.T
         idx = np.abs(a)>0
         if idx.sum()>0:
-            Delta = np.abs(b**2-4*a*c)
+            Delta = np.abs(b**2 - 4*a*c)
             qD = np.sqrt(Delta)/2
             qD[np.abs(Delta)==0] = 3.
             ssr = b/2/a
