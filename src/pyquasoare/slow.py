@@ -129,7 +129,7 @@ def quad_expmxy(x, y):
 
 
 def quad_logpxy(x, y):
-    z = x * y;
+    z = x * y
     if z >= 1.0:
         return np.nan
     return x * (math.log1p(-z) / z)
@@ -232,7 +232,7 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
         expmb = quad_expmxy(tau, b)
         integS = s0 * expmb + (expmb - tau) * c_b_ratio
 
-        expm2b = quad_expmxy(tau, 2 * b);
+        expm2b = quad_expmxy(tau, 2 * b)
         integS2 = s0 * s0 * expm2b \
             + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb) \
             + 2 * s0 * c_b_ratio * (expm2b - expmb)
@@ -249,7 +249,7 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
             y1 = a * s1 + b / 2
             try:
                 l1 = math.log(abs(y1 * y1 - Delta / 4))
-            except:
+            except ValueError:
                 l1 = np.nan
 
             if not np.isfinite(l1) \
