@@ -7,11 +7,15 @@ if has_c_module():
     QUASOARE_EPS = c_pyquasoare.C_QUASOARE_EPS
     QUASOARE_ATOL = c_pyquasoare.C_QUASOARE_ATOL
     QUASOARE_RTOL = c_pyquasoare.C_QUASOARE_RTOL
+    QUASOARE_FLUX_TERM_RTOL = c_pyquasoare.C_QUASOARE_FLUX_TERM_RTOL
+    QUASOARE_DELTA_ATOL = c_pyquasoare.C_QUASOARE_DELTA_ATOL
+    QUASOARE_STEADY_STATE_TOL = c_pyquasoare.C_QUASOARE_STEADY_STATE_TOL
     QUASOARE_PI = c_pyquasoare.C_QUASOARE_PI
     QUASOARE_NFLUXES_MAX = c_pyquasoare.C_QUASOARE_NFLUXES_MAX
     QUASOARE_ACCURACY = c_pyquasoare.compiler_accuracy_kahan()
+
 else:
-    raise ImportError("Cannot run rezeq without C code."
+    raise ImportError("Cannot run pyquasoare without C code."
                       + " Please compile C code.")
 
 

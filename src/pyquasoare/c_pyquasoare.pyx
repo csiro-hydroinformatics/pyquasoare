@@ -8,6 +8,9 @@ cdef extern from 'c_quasoare_utils.h':
     cdef double QUASOARE_EPS
     cdef double QUASOARE_ATOL
     cdef double QUASOARE_RTOL
+    cdef double QUASOARE_FLUX_TERM_RTOL
+    cdef double QUASOARE_DELTA_ATOL
+    cdef double QUASOARE_STEADY_STATE_TOL
     cdef double QUASOARE_PI
     cdef int QUASOARE_NFLUXES_MAX
 
@@ -96,6 +99,9 @@ def __cinit__(self):
 C_QUASOARE_EPS = QUASOARE_EPS
 C_QUASOARE_ATOL = QUASOARE_ATOL
 C_QUASOARE_RTOL = QUASOARE_RTOL
+C_QUASOARE_FLUX_TERM_RTOL = QUASOARE_FLUX_TERM_RTOL
+C_QUASOARE_DELTA_ATOL = QUASOARE_DELTA_ATOL
+C_QUASOARE_STEADY_STATE_TOL = QUASOARE_STEADY_STATE_TOL
 C_QUASOARE_PI = QUASOARE_PI
 C_QUASOARE_NFLUXES_MAX = QUASOARE_NFLUXES_MAX
 
@@ -124,7 +130,7 @@ def get_error_message(int err_code):
 
 
 def quad_expmxy(double x, double y):
-    c_quad_expmxy(x, y)
+    return c_quad_expmxy(x, y)
 
 
 def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,

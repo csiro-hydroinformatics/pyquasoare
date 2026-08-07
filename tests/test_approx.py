@@ -158,12 +158,12 @@ def generate_samples(ntry, selcase, request):
     v0, v1 = -5 * np.ones(3), np.ones(3)
 
     if case == 1:
-        name = "a and b are zero"
+        name = "a=0 & b=0"
         v0[:-1] = 0
         v1[:-1] = 0
 
     elif case == 2:
-        name = "a is zero"
+        name = "a=0"
         v0[0] = 0
         v1[0] = 0
 
@@ -172,7 +172,7 @@ def generate_samples(ntry, selcase, request):
 
     # Refine cases
     if case == 3:
-        name = "Delta null"
+        name = "Delta=0"
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
 
     elif case == 4:
@@ -185,16 +185,17 @@ def generate_samples(ntry, selcase, request):
 
     elif case in [5, 12]:
         name = "Delta>0" if case==5 \
-                        else "edge case for atanh"
+                        else "atanh edge"
         a, b, c = params.T
-        Delta = np.abs(b**2-4*a*c)
-        c = (b**2-Delta)/4./a
+        Delta = np.abs(b**2 - 4 * a * c)
+        c = (b**2 - Delta) / 4. / a
         params[:, 2] = c
 
         if case == 12:
-            ssr = b/2./a
-            qD = np.sqrt(Delta)/2.
-            s0s = -ssr+np.abs(qD/a)*np.random.uniform(0., 1., len(qD))
+            ssr = b / 2. / a
+            qD = np.sqrt(Delta) / 2.
+            s0s = -ssr + np.abs(qD / a) \
+                * np.random.uniform(0., 1., len(qD))
 
     elif case == 6:
         name = "Gen"
@@ -205,45 +206,45 @@ def generate_samples(ntry, selcase, request):
         # of solutions
         for icol in [0, 1]:
             ineg = params[:, icol] < 0
-            params[:, icol] *= 1000
+            params[:, icol] *= 100
 
-        params[:, 2] *= 1000
+        params[:, 2] *= 100
 
     elif case == 8:
         name = "Gen+low"
-        params /= 1000
+        params /= 100
 
     elif case == 9:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a and b close to 0"
+        name = "a~0 & b~0"
         eps = 1e-9
         params[:, :2] = np.random.uniform(eps, 5*eps, size=(len(params), 2))
 
     elif case == 10:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a close to 0"
+        name = "a~0"
         eps = 1e-9
         params[:, 0] = np.random.uniform(eps, 5*eps, size=len(params))
 
     elif case == 11:
-        name = "equality s0=-b/2a"
+        name = "s0=-b/2a"
         a, b, c = params.T
         s0s = -b/2./a
 
     elif case == 13:
-        name = "a=0 and b close to 0"
+        name = "a=0 & b~0"
         params[:, 0] = 0
         eps = 1e-9
         params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
 
     elif case == 14:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a very small"
+        name = "a<<1"
         eps = 1e-6
         params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
 
     if case == 15:
-        name = "Delta null + a very small"
+        name = "Delta=0 & a<<1"
         eps = 1e-6
         params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
@@ -259,7 +260,7 @@ def generate_samples(ntry, selcase, request):
             ssr = b/2/a
             s0s[idx] = -ssr+qD/a*np.random.uniform(-2, 2, idx.sum())
 
-    return f"{name:20}", case, params, s0s, Tmax
+    return f"{name:>10}", case, params, s0s, Tmax
 
 
 # ----- TESTS --------------------------------------------

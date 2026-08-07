@@ -5,11 +5,14 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, \
-                                QUASOARE_ATOL, QUASOARE_RTOL
+                                QUASOARE_ATOL, QUASOARE_RTOL,\
+                                QUASOARE_FLUX_TERM_RTOL, \
+                                QUASOARE_DELTA_ATOL, \
+                                QUASOARE_STEADY_STATE_TOL
+
 from pyquasoare.approx import isequal, notequal, isnull, notnull
 from pyquasoare.integrate import quad_constants
 from pyquasoare.models import ERRORS
-
 
 def integrate_numerical(fluxes, dfluxes, t0, s0, t,
                         method="Radau", max_step=np.inf,
@@ -122,10 +125,14 @@ def omega_fun(x, Delta):
 
 def quad_expmxy(x, y):
     z = x * y
-    if abs(y) < 1e-10:
-        return x + 0.5 * x * z + (z * z * x) / 6.0
+    return x * (math.expm1(z) / z)
 
-    return math.expm1(z) / y
+
+def quad_logpxy(x, y):
+    z = x * y;
+    if z >= 1.0:
+        return np.nan
+    return x * (math.log1p(-z) / z)
 
 
 def quad_fun(a, b, c, s):
@@ -164,7 +171,7 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
         return s0
 
     if isnull(a) and isnull(b):
-        s1 = s0+c*tau
+        s1 = s0 + c * tau
 
     elif isnull(a) and notnull(b):
         expmb = quad_expmxy(tau, b)
@@ -210,27 +217,48 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     if isnull(tau):
         return
 
+    term0 = abs(c)
+    term1 = abs(b * s1)
+    term2 = abs(a * s1 * s1)
+    term12 = max(term1, term2)
+
     # Integrate S and S2
-    if isnull(a) and isnull(b):
-        integS = s0*tau+c*tau2/2
-        integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.
+    if term0 * QUASOARE_FLUX_TERM_RTOL > term12:
+        integS = s0 * tau + c * tau2 / 2
+        integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.
 
-    elif isnull(a) and notnull(b):
-        integS = (s1-s0-Cj*tau)/Bj
-        integS2 = ((s1**2-s0**2)/2-Cj*integS)/Bj
+    elif term1 * QUASOARE_FLUX_TERM_RTOL > term2:
+        c_b_ratio = c / b
+        expmb = quad_expmxy(tau, b)
+        integS = s0 * expmb + (expmb - tau) * c_b_ratio
 
-    elif notnull(a):
-        if isnull(Delta):
-            integS = sbar*tau-math.log(1-a*tau*(s0-sbar))/a
+        expm2b = quad_expmxy(tau, 2 * b);
+        integS2 = s0 * s0 * expm2b \
+            + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb) \
+            + 2 * s0 * c_b_ratio * (expm2b - expmb)
+
+    else:
+        if abs(Delta) < QUASOARE_DELTA_ATOL:
+            integS = sbar * tau - quad_logpxy(tau * (s0 - sbar), a)
+            integS2 = (s1 - s0 - b * integS - c * tau) / a
+
         else:
-            omega = omega_fun(qD*tau, Delta)
-            signD = -1 if Delta < 0. else 1.
-            if qD*tau > 10. and Delta > 0:
-                term1 = (math.log(2)-qD*tau)/Aj
-            else:
-                term1 = math.log(1-signD*omega*omega)/2./a
-            term2 = -math.log(1-a*(s0-sbar)/qD*omega)/a
-            integS = sbar*tau+term1+term2
+            y0 = a * s0 + b / 2
+            l0 = math.log(abs(y0 * y0 - Delta / 4))
+
+            y1 = a * s1 + b / 2
+            try:
+                l1 = math.log(abs(y1 * y1 - Delta / 4))
+            except:
+                l1 = np.nan
+
+            if not np.isfinite(l1) \
+                    or abs(y1 * y1 - Delta) < QUASOARE_STEADY_STATE_TOL:
+                l1 = math.log(Delta) + math.log(abs((y0 + qD) / (y0 - qD)))\
+                    - 2 * qD * tau
+
+            integS = (l1 - l0 - b * tau) / 2 / a
+            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a
 
     # increment fluxes
     if isnull(a):
