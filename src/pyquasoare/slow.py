@@ -217,13 +217,14 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     if isnull(tau):
         return
 
+    smax = max(abs(s0), abs(s1))
     term0 = abs(c)
-    term1 = abs(b * s1)
-    term2 = abs(a * s1 * s1)
+    term1 = abs(b * smax)
+    term2 = abs(a * smax * smax)
     term12 = max(term1, term2)
 
     # Integrate S and S2
-    if term0 * QUASOARE_FLUX_TERM_RTOL > term12:
+    if term0 * QUASOARE_FLUX_TERM_RTOL > term12 or abs(s1 - s0) == 0:
         integS = s0 * tau + c * tau2 / 2
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.
 

@@ -133,7 +133,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     >>> # Run the model
     >>> s0 = 0.
     >>> timestep = 1.
-    >>> niter, s1, fx = quad_model(alphas, sc, coefs, s0, timestep)
+    >>> niter, s1, fx = models.quad_model(alphas, sc, coefs, s0, timestep)
     >>> # ODE solution
     >>> s1
     array([ 0.        ,  0.        , 14.63001824,  0.92614791,  0.75904346,

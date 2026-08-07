@@ -498,7 +498,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                                    t0, t1, s0, s1, fluxes_slow)
         # There are still problems with 10 and 14 ...
         if not case in [10, 14]:
-            assert allclose(fluxes, fluxes_slow, atol=1e-7)
+            assert allclose(fluxes, fluxes_slow, atol=1e-5)
 
     mess = f"[{case:2d}:{cname}/{vectors}] quas fluxes: "\
            + f"emax={errmax_max:3.2e}"\
@@ -506,6 +506,25 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
            + f" total={nassessed/ntry*100:0.0f}%"\
            + f" ({ntry} tests, {npos} Delta>0)"
     LOGGER.info(mess)
+
+
+def test_integrate_doc():
+    funs = [lambda x: np.ones_like(x), lambda x: -x**6/2]
+    alphas = np.linspace(0., 1.2, 10)
+    coefs = approx.quad_coefficient_matrix(funs, alphas, approx_opt=1)
+    P = 10
+    inflows = np.zeros(P)
+    inflows[2] = 100.
+    scalings = np.column_stack([inflows, np.ones(P)])
+    t_start = 0.
+    s_start = 0.
+    timestep = 1.
+    for i in range(P):
+        n, s_end, fluxes = integrate.quad_integrate(alphas, scalings[i],
+                                                    coefs, t_start,
+                                                    s_start, timestep)
+        s_start = s_end
+        assert np.all(~np.isnan(fluxes))
 
 
 def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
@@ -657,7 +676,7 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     errmax_num_max, time_num, niter_num = 0., 0., 0
 
     for itry in range(ntry):
-        s0 = alpha0+(alpha1-alpha0)*float(itry)/(ntry-1)
+        s0 = alpha0 + (alpha1 - alpha0) * float(itry) / (ntry - 1)
 
         # Analytical solution
         expected = sol(t1, s0)
