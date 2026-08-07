@@ -13,10 +13,15 @@ double wfun(double delta, double S) {
     return exp(x);
 }
 
+double c_lin_expmxy(double x, double y) {
+    double z = x * y;
+    return x * (expm1(z) / z);
+}
+
 double c_grad_forward(double M, double S, double t0, double x0, double t){
     double x = c_get_nan();
     double tau = t - t0;
-    double exparg;
+    double exparg = 0.;
 
     if(isequal(t, t0, QUASOARE_EPS, 0.))
         return x0;
@@ -26,8 +31,10 @@ double c_grad_forward(double M, double S, double t0, double x0, double t){
     }
     else {
         exparg = S * tau;
-        x = fabs(exparg) < QUASOARE_EPS ? x0 * (1 + exparg) + M * tau
-            : -M / S +(x0 + M / S) * wfun(tau, S);
+        if(fabs(exparg) < QUASOARE_EPS)
+            x = x0 * (1 + exparg) + M * tau;
+        else
+            x = x0 * exp(exparg) + M * c_lin_expmxy(tau, S);
     }
     return x;
 }
@@ -170,6 +177,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
     double M = 0., S = 0.;
     double mij = 0., sij = 0.;
+    double expmb = 0.;
     double flx;
     double funval = 0.;
     double funval_prev = 0.;
@@ -350,10 +358,16 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         tau = t_end - t_start;
 
         /* Compute the integral of x(t) over the time unsigned interval */
-        if(notnull(S))
-            integ_x = (x_end - x_start - M * tau) / S;
-        else
+        if(notnull(S)) {
+            //integ_x = (x_end - x_start - M * tau) / S;
+            /* See c_quasoare_core.c::c_quad_fluxes_increment
+             * for explanation of this code */
+            expmb = c_lin_expmxy(tau, S);
+            integ_x = x_start * expmb + (expmb - tau) * (M / S);
+        }
+        else {
             integ_x = (x_start + M * tau / 2) * tau;
+        }
 
         /* Increment fluxes during the last unsigned interval */
         for(inp = 0; inp < nfxi; inp++){

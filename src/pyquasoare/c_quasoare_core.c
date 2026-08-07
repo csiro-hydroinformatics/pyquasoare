@@ -262,8 +262,6 @@ int c_quad_fluxes_increment(int nfluxes,
                             double * fluxes){
     int i, is_lin;
     double tau = t1 - t0;
-    double tau2 = tau * tau;
-    double tau3 = tau2 * tau;
     double aij, bij, cij;
     double a = Aj, a_check = 0.;
     double b = Bj, b_check = 0.;
@@ -274,28 +272,29 @@ int c_quad_fluxes_increment(int nfluxes,
     double c_b_ratio;
     double expmb = 0., expm2b = 0.;
     double y0 = 0., y1 = 0., l0 = 0., l1 = 0.;
-    double dist_to_steady_state = 0.;
     double integS = c_get_nan();
     double integS2 = c_get_nan();
+    double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
 
+    /* check integration time */
     if(t1 < t0)
         return QUASOARE_TIME_TOOLOW;
 
     if(isnull(tau))
         return 0;
 
-    /* Decide on computation method depending on terms order of
-     * magnitude */
+    /* Decide on computation method depending on order of
+     * magnitude of each terms of the equation dx/dt = ax^2 + bx + c */
     term0 = fabs(c);
-    term1 = fabs(b * s1);
-    term2 = fabs(a * s1 * s1);
+    term1 = fabs(b * smax);
+    term2 = fabs(a * smax * smax);
     term12 = term1 > term2 ? term1 : term2;
 
     /* Calculate integral of S and S^2 */
-    if (term0 * QUASOARE_FLUX_TERM_RTOL > term12) {
+    if (term0 * QUASOARE_FLUX_TERM_RTOL > term12 || isnull(fabs(s1 - s0))) {
         /* Constant case where dx/dt = c */
-        integS = s0 * tau + c * tau2 / 2;
-        integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
+        integS = (s0 + c * tau / 2) * tau;
+        integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
     }
     else if (term1 * QUASOARE_FLUX_TERM_RTOL > term2) {
         /* Linear case where dx/dt = bx + c */
@@ -364,7 +363,7 @@ int c_quad_fluxes_increment(int nfluxes,
                  * |y1**2 - Δ/4| ≈ Δ |(y0 + √Δ/2) / (y0 - √Δ/2)| exp(-√Δ (t1 - t0))
                  *
                  * Hence
-                 * log(|y1**2 - Δ/4) ≈ log(Δ) + log(|(y0 + √Δ/2) / (y0 - √Δ/2)|) -√Δ (t1 - t0)
+                 * log(|y1**2 - Δ/4|) ≈ log(Δ) + log(|(y0 + √Δ/2) / (y0 - √Δ/2)|) -√Δ (t1 - t0)
                  */
                 l1 = log(Delta) + log(fabs((y0 + qD) / (y0 - qD))) - 2 * qD * tau;
             }
