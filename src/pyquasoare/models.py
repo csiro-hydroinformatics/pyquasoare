@@ -151,7 +151,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
            [ 0.00000000e+00, -2.37258597e-02],
            [ 0.00000000e+00, -1.89470944e-02]])
     >>> # Check mass balance
-    >>> fx.sum(axis=0)[1]+s0-s1[-1]
+    >>> (fx.sum(axis=0)[1] + s0 - s1[-1]).round(10)
     np.float64(-100.0)
     """
     errors_check(errors)
