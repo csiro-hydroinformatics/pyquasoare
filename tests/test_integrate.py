@@ -531,8 +531,8 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
     fname, fun, dfun, _, inflow, (alpha0, alpha1) = reservoir_function
 
     # Reservoir functions
-    inp = lambda x: (1.+0*x)*inflow
-    sfun = lambda x: inflow+fun(x)
+    inp = lambda x: np.ones_like(x) * inflow
+    sfun = lambda x: inflow + fun(x)
     funs = [inp, fun]
 
     # Optimize approx

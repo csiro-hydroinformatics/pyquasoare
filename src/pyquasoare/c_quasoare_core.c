@@ -268,7 +268,7 @@ int c_quad_fluxes_increment(int nfluxes,
     double c = Cj, c_check = 0.;
 
     /* Integration variables */
-    double eps, term0, term1, term2, term12;
+    double term0, term1, term2, term12;
     double c_b_ratio;
     double expmb = 0., expm2b = 0.;
     double y0 = 0., y1 = 0., l0 = 0., l1 = 0.;

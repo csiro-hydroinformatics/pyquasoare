@@ -16,6 +16,17 @@ double gb_rr_omega_fun(double x, double Delta){
         return tanh(x);
 }
 
+double gb_rr_expmxy(double x, double y) {
+    double z = x * y;
+    return x * (expm1(z) / z);
+}
+
+double gb_rr_logpxy(double x, double y) {
+    double z = x * y;
+    return x * (log1p(-z) / z);
+}
+
+
 int gb_rr_constants(double a, double b, double c, double constants[4]) {
 
     /* Delta (not very robust numerically, see c_quasoare_core for
@@ -46,14 +57,19 @@ double gb_rr_forward(double a, double b, double c, double constants[4],
     double signD = constants[1];
     double qD = constants[2];
     double sbar = constants[3];
+    double expmb;
 
     if(gb_rr_isnull(a) && gb_rr_isnull(b)){
         s1 = s0 + c * tau;
     }
     else if((gb_rr_isnull(a) && gb_rr_notnull(b))){
         exparg = b * tau;
-        s1 = fabs(exparg) < 1e-12 ? s0 * (1 + exparg) + c * tau :
-                -c / b + (s0 + c / b) * exp(exparg);
+        if(fabs(exparg) < 1e-12) {
+            s1 = s0 * (1 + exparg) + c * tau;
+        } else {
+            expmb = gb_rr_expmxy(tau, b);
+            s1 = s0 * exp(exparg) + expmb * c;
+        }
     }
     else{
         if(gb_rr_isnull(Delta)){
@@ -68,76 +84,61 @@ double gb_rr_forward(double a, double b, double c, double constants[4],
     return s1;
 }
 
-/* computes integral of x and x^2 over [0, Δ] */
 double gb_rr_integrate_x(double a, double b, double c, double constants[4],
                       double timestep, double s0, double s1,
                       double integ[2])  {
     double tau = timestep;
-    double tau2 = tau * tau;
-    double tau3 = tau2 * tau;
 
     double Delta = constants[0];
     double signD = constants[1];
     double qD = constants[2];
     double sbar = constants[3];
+    double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
 
-    double integS, integS2, omega, term1, term2;
-    double integSL, integS2L, eps_bar;
+    double integS, integS2, term0, term1, term2, term12;
+    double c_b_ratio, expmb, expm2b, l0, l1, y0, y1;
 
-    if (gb_rr_isnull(a) && gb_rr_isnull(b)) {
-        integS = s0 * tau + c * tau2 / 2;
-        integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.;
+    term0 = fabs(c);
+    term1 = fabs(b * smax);
+    term2 = fabs(a * smax * smax);
+    term12 = term1 > term2 ? term1 : term2;
+
+    if (term0 * 1e-5 > term12 || gb_rr_isnull(fabs(s1 - s0))) {
+        integS = (s0 + c * tau / 2) * tau;
+        integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
     }
-    else if(gb_rr_isnull(a) && gb_rr_notnull(b)){
-        integS = (s1 - s0 - c * tau) / b;
-        integS2 = ((s1 * s1 - s0 * s0) / 2. - c * integS) / b;
+    else if (term1 * 1e-5 > term2) {
+        c_b_ratio = c / b;
+        expmb = gb_rr_expmxy(tau, b); // (exp(b * tau) - 1) / b
+        integS = s0 * expmb + (expmb - tau) * c_b_ratio;
+
+        expm2b = gb_rr_expmxy(tau, 2 * b);
+        integS2 = s0 * s0 * expm2b
+            + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb)
+            + 2 * s0 * c_b_ratio * (expm2b - expmb);
     }
-    else if (gb_rr_notnull(a)){
-        /* Integrate S only because S2 can be deducted from S */
-        if(gb_rr_isnull(Delta))
-            integS = sbar * tau - log(1 - a * tau * (s0 - sbar)) / a;
-        else {
-            omega = gb_rr_omega_fun(qD * tau, Delta);
-
-            /* Special formula to avoid the case where omega == 1 */
-            if(qD * tau > 10 && Delta > 0)
-                term1 = (log(2) - qD * tau) / a;
-            else
-                term1 = log(1 - signD * omega * omega) / 2. / a;
-
-            term2 = -log(1 - a * (s0 - sbar) / qD * omega) / a;
-            integS = sbar * tau + term1 + term2;
-        }
-
-        /* Correction to handle very small a if b ≠ 0 */
-        if(a < 1e-5 && gb_rr_notnull(b)){
-            /* Assume that x = x1 + eps
-             * where
-             * dx/dt = ax^2 + bx + c
-             * dx1/dt = bx + c
-             * We obtain the following integrals for x1:
-             */
-            integSL = (s1 - s0 - c * tau) / b;
-            integS2L = ((s1 * s1 - s0 * s0) / 2. - c * integS) / b;
-
-            /* the average value of eps(t) over the timestep is:*/
-            eps_bar = (integS - integSL) / tau;
-
-            /* Hence
-             * ∫x^2 = ∫(x1+eps)^2 ≈ ∫x1^2 + 2∫x1 eps ≈ ∫x1^2 + 2 eps_bar ∫x1
-             */
-            integS2 = integS2L + 2 * eps_bar * integSL;
-
-        } else {
-            /* Eq B13 in Lerat (2025) */
+    else {
+        if(fabs(Delta) < 1e-15) {
+            integS = sbar * tau - gb_rr_logpxy(tau * (s0 - sbar), a);
             integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
-    }
+        else {
+            y0 = a * s0 + b / 2;
+            l0 = log(fabs(y0 * y0 - Delta / 4));
 
+            y1 = a * s1 + b / 2;
+            l1 = log(fabs(y1 * y1 - Delta / 4));
+
+            if(!isfinite(l1) || fabs(y1 * y1 - Delta) < 1e-15)
+               l1 = log(Delta) + log(fabs((y0 + qD) / (y0 - qD))) - 2 * qD * tau;
+
+            integS = (l1 - l0 - b * tau) / 2 / a;
+            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a;
+        }
+    }
     integ[0] = integS;
     integ[1] = integS2;
 }
-
 
 int rr_prod_runtimestep(double qstar1, double qstar2,
                        double timestep, double gamma,
@@ -214,7 +215,6 @@ int c_gradbench_rainfall_runoff(int nval,
 
     /* Time series loop */
     for(j = 0; j < nval; j++) {
-        fprintf(stdout, "\n\nt = %d\n", j);
         /* Get inputs for production */
         pi = pin[j];
         ei = ein[j];
