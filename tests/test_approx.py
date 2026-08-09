@@ -206,13 +206,13 @@ def generate_samples(ntry, selcase, request):
         # of solutions
         for icol in [0, 1]:
             ineg = params[:, icol] < 0
-            params[:, icol] *= 100
+            params[:, icol] *= 1000
 
-        params[:, 2] *= 100
+        params[:, 2] *= 1000
 
     elif case == 8:
         name = "Gen+low"
-        params /= 100
+        params /= 1000
 
     elif case == 9:
         s0s = np.random.uniform(-5, 5, ntry)

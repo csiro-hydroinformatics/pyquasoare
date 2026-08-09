@@ -351,13 +351,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
     if case == 1:
         LOGGER.info("")
 
-    if case == 7:
-        pytest.skip("Can't make this one work. To be revisited")
-
     ntry = len(params)
-    #if case in [7, 10, 13]:
-    #    pytest.skip("Cannot do because of numerical round-off")
-
     errbal_max = 0
     errmax_max = 0
     nassessed = 0
@@ -475,19 +469,24 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
         nassessed += 1
         errmax_max = max(errmax, errmax_max)
 
-        if case in [1, 2, 4, 6, 8, 9, 10, 11, 13]:
-            # Best case
-            tol = 1e-3
-        elif case in [3, 5]:
-            # Sort of ok
+        if case in [15]:
+            # Really hard test
             tol = 2e-1
-        elif case in [12]:
-            # Starting to get really bad
-            tol = 5e-1
+        elif case in [14]:
+            # Very poor result
+            tol = 1e-2
+        elif case in [3]:
+            # Poor result
+            tol = 1e-3
+        elif case in [2, 5, 6, 7, 10, 11, 12]:
+            # Sort of ok
+            tol = 1e-4
+        elif case in [8, 9]:
+            # Good
+            tol = 1e-5
         else:
-            # Cases 7, 14, 15 .. 7 has even been dropped!
-            # Terrible, would need further work
-            tol = 2.
+            # Very good
+            tol = 1e-6
 
         assert errmax < tol, errmsg
 
@@ -497,7 +496,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                                    aoj, boj, coj, Delta, qD, sbar,
                                    t0, t1, s0, s1, fluxes_slow)
         # There are still problems with 10 and 14 ...
-        if not case in [10, 14]:
+        if not case in [10]:
             assert allclose(fluxes, fluxes_slow, atol=1e-5)
 
     mess = f"[{case:2d}:{cname}/{vectors}] quas fluxes: "\

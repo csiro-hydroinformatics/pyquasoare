@@ -73,71 +73,71 @@ def test_quad_model_errors(allclose):
                                           errors="raise")
 
 
-def test_quad_model(allclose):
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("X1", [50, 200, 1000])
+def test_gr4jprod(siteid, X1, allclose):
     nalphas = 20
     alphas = np.linspace(0., 1.2, nalphas)
     start, end = "2017-01", "2022-12-31"
     nsubdiv = 50000
-    X1s = [50, 200, 1000]
     LOGGER.info("")
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
     coefs = approx.quad_coefficient_matrix(fluxes, alphas)
 
-    # Loop over sites
-    for isite, siteid in enumerate(data_reader.SITEIDS):
-        # Get climate data
-        df = data_reader.get_data(siteid, "daily")
-        df = df.loc[start:end]
-        nval = len(df)
-        cols = ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]
-        inputs = np.ascontiguousarray(df.loc[:, cols])
-        climdiff = inputs[:, 0]-inputs[:, 1]
-        errmax_max = 0.
-        errbalmax_max = 0.
-        for X1 in X1s:
-            scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
-                                        np.maximum(-climdiff, 0.)/X1,
-                                        np.ones(nval)])
+    # Get climate data
+    df = data_reader.get_data(siteid, "daily")
+    df = df.loc[start:end]
+    nval = len(df)
+    cols = ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]
+    inputs = np.ascontiguousarray(df.loc[:, cols])
+    climdiff = inputs[:, 0]-inputs[:, 1]
+    errmax_max = 0.
+    errbalmax_max = 0.
 
-            # Run approximate solution + exclude PR and AE
-            s0 = X1/2
-            expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)[:, :-2]
+    scalings = np.column_stack([np.maximum(climdiff, 0.)/X1,
+                                np.maximum(-climdiff, 0.)/X1,
+                                np.ones(nval)])
 
-            # Run quad model
-            s0 = 1./2
-            niter, s1, fx = models.quad_model(alphas, scalings,
-                                              coefs, s0, 1.)
+    # Run approximate solution + exclude PR and AE
+    s0 = X1/2
+    expected = benchmarks.gr4jprod(nsubdiv, X1, s0, inputs)[:, :-2]
 
-            sims = np.column_stack([s1*X1, fx[:, 0]*X1, \
-                                        -fx[:, 1]*X1, -fx[:, 2]*X1])
+    # Run quad model
+    s0 = 1./2
+    niter, s1, fx = models.quad_model(alphas, scalings,
+                                      coefs, s0, 1.)
+    sims = np.column_stack([s1 * X1,
+                            fx[:, 0] * X1,
+                            -fx[:, 1] * X1,
+                            -fx[:, 2] * X1])
 
-            # Compare with slow
-            niter_slow, s1_slow, fx_slow = slow.quad_model(alphas, scalings,
-                                                           coefs, s0, 1.)
+    # Compare with slow
+    niter_slow, s1_slow, fx_slow = slow.quad_model(alphas, scalings,
+                                                   coefs, s0, 1.)
+    sims_slow = np.column_stack([s1_slow * X1,
+                                 fx_slow[:, 0] * X1,
+                                -fx_slow[:, 1] * X1,
+                                -fx_slow[:, 2] * X1])
+    assert allclose(sims, sims_slow, atol=1e-5)
 
-            sims_slow = np.column_stack([s1_slow*X1, fx_slow[:, 0]*X1,
-                                        -fx_slow[:, 1]*X1, -fx_slow[:, 2]*X1])
-            assert allclose(sims, sims_slow, atol=1e-5)
+    # Error analysis
+    ps = expected[:, 1]
+    errbalmax = np.abs((sims[:, 1]-ps).mean(axis=0)) * 100
+    errbalmax /= np.mean(ps)
+    errbalmax_max = max(errbalmax, errbalmax_max)
 
-            # Error analysis
-            errmax = np.abs(sims-expected).max()
-            errmax_max = max(errmax, errmax_max)
-
-            ps = expected[:, 1]
-            errbalmax = np.abs((sims[:, 1]-ps).mean(axis=0))*100
-            errbalmax /= np.mean(ps)
-            errbalmax_max = max(errbalmax, errbalmax_max)
-
-            atol = 1e-3
-            rtol = 1e-4
-            assert allclose(expected, sims, atol=atol, rtol=rtol)
-
-        mess = f"quad_model vs gr4jprod / site {isite+1}:"\
-                    +f" errmax={errmax_max:3.3e}"\
-                    +f" errbalmax={errbalmax_max:3.3e}%"
-        LOGGER.info(mess)
+    tol = 5e-4
+    tsims = np.asinh(sims)
+    texp = np.asinh(expected)
+    errmax = np.abs(tsims - texp).max()
+    msg = "PASS" if errmax < tol else "FAIL"
+    mess = f"quad_model vs gr4jprod / {siteid} X1={X1:0.0f}:"\
+                +f" err={errmax:0.2e}"\
+                +f" errbal={errbalmax_max:0.2e}% > {msg}"
+    LOGGER.info(mess)
+    assert allclose(tsims, texp, atol=tol), mess
 
 
 def test_quad_model_perturb(allclose):
@@ -238,25 +238,37 @@ def test_routing_convergence(allclose):
                                        s0, timestep)
 
 
-def test_reservoir_interception(allclose):
-    siteid = "203900"
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("theta", [0.001, 0.01, 0.1])
+def test_reservoir_interception(siteid, theta, allclose):
     df = data_reader.get_data(siteid, "daily")
     P, E = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values[:300].T
 
-    theta = 0.1
-    scalings = np.column_stack([P/theta, E/theta])
+    scalings = np.column_stack([P / theta, E / theta])
 
-    nuP, nuE = 8., 8.
-    fP = lambda x: 1-x**nuP
-    fE = lambda x: -1+(1-x)**nuE
+    nuP, nuE = 10., 10.
+    fP = lambda x: 1 - np.minimum(x, 1.)**nuP
+    fE = lambda x: -1 + (1 - np.maximum(x, 0.))**nuE
 
-    alphas = np.linspace(0, 1.05, 10)
+    nalphas = 50
+    alphas = np.concatenate([[-1e-4], np.linspace(0., 1., nalphas - 2),
+                             [1 + 1e-4]])
     coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
 
     s0 = 0.
     timestep = 1.
     niter, s1, sim = models.quad_model(alphas, scalings, coefs,
                                        s0, timestep)
+    Pr = P - sim[:, 0] * theta
+    Er = E + sim[:, 1] * theta
+
+    Pr_exp = np.maximum(P - E, 0.)
+    tol = theta
+    assert allclose(Pr, Pr_exp, atol=tol)
+
+    Er_exp = np.maximum(E - P, 0.)
+    assert allclose(Er, Er_exp, atol=tol)
+
 
 
 def test_in_place_computing(allclose):
