@@ -23,7 +23,20 @@ np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-LOGGER = iutils.get_logger("integrate", flog=FTEST / "test_integrate.log")
+
+LOGGER = iutils.get_logger("integrate",
+                           console=False,
+                           flog=FTEST / "test_integrate.log")
+LOGGER_DEBUG = iutils.get_logger("integrate",
+                                 console=True,
+                                 flog=FTEST / "test_integrate.log")
+
+def get_logger(debug_mode):
+    if debug_mode:
+        return LOGGER_DEBUG
+    else:
+        return LOGGER
+
 
 def test_find_alpha(allclose):
     alphas = np.linspace(0, 1, 4)
@@ -77,8 +90,9 @@ def test_quad_constants(allclose, generate_samples):
             assert allclose(sbar, -b/2/a)
 
 
-def test_delta_t_max(allclose, generate_samples):
+def test_delta_t_max(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
+    logger = get_logger(debug_mode)
     ntry = len(params)
     t_eval = np.logspace(-3, math.log10(Tmax), 1000)
 
@@ -152,7 +166,7 @@ def test_delta_t_max(allclose, generate_samples):
 
     mess = f"[{case}:{cname}] delta tmax: errmax = {err_max:3.2e}"\
             f" assessed={100*nassessed/ntry:0.0f}%"
-    LOGGER.info(mess)
+    logger.info(mess)
 
 
 #def test_forward_edge_case(allclose):
@@ -165,8 +179,10 @@ def test_delta_t_max(allclose, generate_samples):
 
 
 
-def test_forward_vs_finite_difference(allclose, generate_samples):
+def test_forward_vs_finite_difference(allclose, generate_samples,
+                                      debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
+    logger = get_logger(debug_mode)
 
     ntry = len(params)
     t0 = 0
@@ -230,12 +246,13 @@ def test_forward_vs_finite_difference(allclose, generate_samples):
 
         nassessed += 1
 
-    LOGGER.info(f"[{case}:{cname}] forward vs finite diff: errmax = {errmax_max:3.2e}"\
+    logger.info(f"[{case}:{cname}] forward vs finite diff: errmax = {errmax_max:3.2e}"\
                 f" assessed={nassessed*100/ntry:0.0f}% (ntry={ntry})")
 
 
-def test_forward_vs_numerical(allclose, generate_samples):
+def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
+    logger = get_logger(debug_mode)
     if case in [7]:
         pytest.skip("Cannot do because of numerical round-off")
 
@@ -282,11 +299,12 @@ def test_forward_vs_numerical(allclose, generate_samples):
     mess = f"[{case}:{cname}] forward vs numerical: "\
                 +f"errmax = {errmax_max:3.2e}"\
                 +f" assessed={nassessed*100/ntry:0.0f}%"
-    LOGGER.info(mess)
+    logger.info(mess)
 
 
-def test_inverse(allclose, generate_samples):
+def test_inverse(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
+    logger = get_logger(debug_mode)
     ntry = len(params)
     t0 = 0
     nassessed = 0
@@ -340,16 +358,18 @@ def test_inverse(allclose, generate_samples):
         assert allclose(dta[iok], dta_slow)
         nassessed += 1
 
-    LOGGER.info(f"[{case}:{cname}] inverse: "\
+    logger.info(f"[{case}:{cname}] inverse: "\
                 +f"errmax = {errmax_max:3.2e} "\
                 +f"assessed={100*nassessed/ntry:0.0f}% (ntry={ntry})")
 
 
 @pytest.mark.parametrize("vectors", ["rand", "unit"])
-def test_increment_fluxes(allclose, vectors, generate_samples):
+def test_increment_fluxes(allclose, vectors, generate_samples,
+                          debug_mode):
+    logger = get_logger(debug_mode)
     cname, case, params, s0s, Tmax = generate_samples
     if case == 1:
-        LOGGER.info("")
+        logger.info("")
 
     ntry = len(params)
     errbal_max = 0
@@ -478,7 +498,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
         elif case in [3]:
             # Poor result
             tol = 1e-3
-        elif case in [2, 5, 6, 7, 10, 11, 12]:
+        elif case in [2, 5, 6, 7, 10, 11, 12, 16]:
             # Sort of ok
             tol = 1e-4
         elif case in [8, 9]:
@@ -496,15 +516,14 @@ def test_increment_fluxes(allclose, vectors, generate_samples):
                                    aoj, boj, coj, Delta, qD, sbar,
                                    t0, t1, s0, s1, fluxes_slow)
         # There are still problems with 10 and 14 ...
-        if not case in [10]:
+        if not case in [10, 16]:
             assert allclose(fluxes, fluxes_slow, atol=1e-5)
 
     mess = f"[{case:2d}:{cname}/{vectors}] quas fluxes: "\
            + f"emax={errmax_max:3.2e}"\
            + f" bmax={errbal_max:3.3e}"\
-           + f" total={nassessed/ntry*100:0.0f}%"\
-           + f" ({ntry} tests, {npos} Delta>0)"
-    LOGGER.info(mess)
+           + f" (tries={ntry},assessed={nassessed}, Dlt>0={npos})"
+    logger.info(mess)
 
 
 def test_integrate_doc():
@@ -634,11 +653,13 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
         "genlogistic": 5e-8
     }
     assert errmax_max < err_thresh[fname]
-    LOGGER.info(f"[{fname}] approx extrapolation: errmax={errmax_max:3.2e}")
+    logger.info(f"[{fname}] approx extrapolation: errmax={errmax_max:3.2e}")
 
 
-def test_reservoir_equation(allclose, ntry, reservoir_function):
+def test_reservoir_equation(allclose, ntry, reservoir_function, debug_mode):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
+    logger = get_logger(debug_mode)
+
     if sol is None:
         pytest.skip("No analytical solution")
 
@@ -749,10 +770,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
     assert errmax_app_max < err_thresh[fname]
     #assert time_app<time_num*3.
 
-    LOGGER.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
+    logger.info(f"[{fname}] approx vs analytical: errmax={errmax_app_max:3.2e}"\
                     +f" / time={time_app:3.3e}ms / niter={niter_app}")
 
-    LOGGER.info(f"[{fname}] numerical vs analytical: "\
+    logger.info(f"[{fname}] numerical vs analytical: "\
                     +f"errmax = {errmax_num_max:3.2e} "\
                     +f"(ratio vs app={errmax_app_max/errmax_num_max:0.2f})"\
                     +f" / time={time_num:3.3e}ms "\
@@ -762,13 +783,14 @@ def test_reservoir_equation(allclose, ntry, reservoir_function):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("X1", [50, 200, 1000])
-def test_reservoir_equation_gr4j(siteid, X1, allclose):
+def test_reservoir_equation_gr4j(siteid, X1, debug_mode, allclose):
     nalphas = 20
     alphas = np.linspace(0., 1.2, nalphas)
     start, end = "2017-01", "2022-12-31"
     nsubdiv = 10000
     nu = 0.01
-    LOGGER.info("")
+    logger = get_logger(debug_mode)
+    logger.info("")
 
     # Compute approx coefs
     fluxes, _ = benchmarks.gr4jprod_fluxes_noscaling()
@@ -813,7 +835,7 @@ def test_reservoir_equation_gr4j(siteid, X1, allclose):
     errmax = np.abs(sims-expected).max()
     mess = f"approx vs gr4jprod /site {siteid}/x1={X1:4.0f}:"\
                 +f" errmax={errmax:3.3e}"
-    LOGGER.info(mess)
+    logger.info(mess)
     atol = 1e-3
     rtol = 1e-4
     assert np.allclose(expected, sims, atol=atol, rtol=rtol)

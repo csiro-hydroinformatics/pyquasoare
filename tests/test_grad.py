@@ -24,7 +24,6 @@ np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
 NALPHAS = 50
 
 DEMANDS = [-0.5, -0.1, 0.5]
@@ -433,10 +432,14 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
 @pytest.mark.parametrize("demand", DEMANDS)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
-                        flux_scalings, allclose):
+                        flux_scalings, allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
-
-    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
+    if debug_mode:
+        start, end = 6400, 6410
+    else:
+        start, end = None, None
+    Qstars, scalings = get_data(siteid, reservoir, timestep,
+                                gamma, demand, start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
 
     # Flux scalings

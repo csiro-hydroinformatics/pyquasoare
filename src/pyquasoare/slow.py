@@ -6,7 +6,8 @@ from scipy.integrate import solve_ivp
 
 from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, \
                                 QUASOARE_ATOL, QUASOARE_RTOL,\
-                                QUASOARE_FLUX_TERM_RTOL, \
+                                QUASOARE_FLUX_TERM_RTOL1, \
+                                QUASOARE_FLUX_TERM_RTOL2, \
                                 QUASOARE_DELTA_ATOL
 
 from pyquasoare.approx import isequal, notequal, isnull, notnull
@@ -225,11 +226,11 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     term12 = max(term1, term2)
 
     # Integrate S and S2
-    if term0 * QUASOARE_FLUX_TERM_RTOL > term12 or abs(s1 - s0) == 0:
+    if term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 or abs(s1 - s0) == 0:
         integS = s0 * tau + c * tau2 / 2
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.
 
-    elif term1 * QUASOARE_FLUX_TERM_RTOL > term2:
+    elif term1 * QUASOARE_FLUX_TERM_RTOL2 > term2:
         c_b_ratio = c / b
         expmb = quad_expmxy(tau, b)
         integS = s0 * expmb + (expmb - tau) * c_b_ratio
