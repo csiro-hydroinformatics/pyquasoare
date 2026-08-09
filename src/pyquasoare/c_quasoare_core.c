@@ -5,15 +5,16 @@
 /* [exp(x*y) - 1] / y */
 double c_quad_expmxy(double x, double y) {
     double z = x * y;
+    if(isnull(y) || isnull(x))
+        return x;
     return x * (expm1(z) / z);
 }
 
 /* log(1 - x*y) / y */
 double c_quad_logpxy(double x, double y) {
     double z = x * y;
-    if(z >= 1.0)
-        return c_get_nan();
-
+    if(isnull(y) || isnull(x))
+        return x;
     return x * (log1p(-z) / z);
 }
 
@@ -271,7 +272,7 @@ int c_quad_fluxes_increment(int nfluxes,
     double term0, term1, term2, term12;
     double c_b_ratio;
     double expmb = 0., expm2b = 0.;
-    double y0 = 0., y1 = 0., l0 = 0., l1 = 0.;
+    double omega, signD, part1, part2;
     double integS = c_get_nan();
     double integS2 = c_get_nan();
     double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
@@ -319,57 +320,18 @@ int c_quad_fluxes_increment(int nfluxes,
             integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
         else {
-            /* These formula use a change of variable such that
-             * y = a x + b / 2
-             *
-             * Consequently we obtain:
-             * dy/dt = y^2 - Δ / 4
-             * where Δ = b^2 - 4ac
-             *
-             * Subsequently, we introduce f(y) = log(|y^2 - Δ/4|)
-             * This leads to
-             * df(y)/dt = 2 y
-             *
-             * Hence
-             * ∫ydt = (f(y1) - f(y0)) / 2
-             * => ∫x = [f(y1) - f(y0) - b(t1 - t0)] / 2a
-             *
-             * Similarly
-             * ∫y^2 dt = y1 - y0 => a^2 ∫x^2 +ab ∫x + b^2/4 (t1 - t0) = y1 - y0
-             */
+            omega = c_omega_fun(qD * tau, Delta);
+            signD = Delta < 0 ? -1. : 1.;
 
-            /* y variable at t=t0 */
-            y0 = a * s0 + b / 2;
-            l0 = log(fabs(y0 * y0 - Delta / 4));
+            if(qD * tau > 10 && Delta > 0)
+                part1 = (QUASOARE_LOG2 - qD * tau) / a;
+            else
+                part1 = log1p(-signD * omega * omega) / 2. / a;
 
-            /* y variable at t = t1 */
-            y1 = a * s1 + b / 2;
-            l1 = log(fabs(y1 * y1 - Delta / 4));
+            part2 = -c_quad_logpxy((s0 - sbar) / qD * omega, a);
 
-            /*.. the isfinite clause should not be needed in theory,
-             * but it seems to help a lot some edge cases??? */
-            if(!isfinite(l1) || fabs(y1 * y1 - Delta) < QUASOARE_STEADY_STATE_TOL) {
-                /* We are infinitely close to the steady state of x, which breaks
-                 * the normal calculation of l1. Because there is a steady state,
-                 * we assume Delta > 0. In this case, the only stable steady
-                 * state is yb = -√Δ/2.
-                 * Moreover, we know the solution for y, which leads to:
-                 * (y1 + √Δ/2) / (y1 - √Δ/2) = (y0 + √Δ/2) / (y0 - √Δ/2) exp(-√Δ (t1 - t0))
-                 *
-                 * If we assume that y1 ≈ -√Δ/2, we obtain
-                 * y1 ≈ -√Δ/2 - √Δ (y0 + √Δ/2) / (y0 - √Δ/2) exp(-√Δ (t1 - t0))
-                 *
-                 * A first order approximation gives
-                 * |y1**2 - Δ/4| ≈ Δ |(y0 + √Δ/2) / (y0 - √Δ/2)| exp(-√Δ (t1 - t0))
-                 *
-                 * Hence
-                 * log(|y1**2 - Δ/4|) ≈ log(Δ) + log(|(y0 + √Δ/2) / (y0 - √Δ/2)|) -√Δ (t1 - t0)
-                 */
-                l1 = log(Delta) + log(fabs((y0 + qD) / (y0 - qD))) - 2 * qD * tau;
-            }
-
-            integS = (l1 - l0 - b * tau) / 2 / a;
-            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a;
+            integS = sbar * tau + part1 + part2;
+            integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
     }
 

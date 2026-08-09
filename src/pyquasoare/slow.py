@@ -7,8 +7,7 @@ from scipy.integrate import solve_ivp
 from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, \
                                 QUASOARE_ATOL, QUASOARE_RTOL,\
                                 QUASOARE_FLUX_TERM_RTOL, \
-                                QUASOARE_DELTA_ATOL, \
-                                QUASOARE_STEADY_STATE_TOL
+                                QUASOARE_DELTA_ATOL
 
 from pyquasoare.approx import isequal, notequal, isnull, notnull
 from pyquasoare.integrate import quad_constants
@@ -125,13 +124,15 @@ def omega_fun(x, Delta):
 
 def quad_expmxy(x, y):
     z = x * y
+    if x == 0 or y == 0:
+        return x
     return x * (math.expm1(z) / z)
 
 
 def quad_logpxy(x, y):
     z = x * y
-    if z >= 1.0:
-        return np.nan
+    if x == 0 or y == 0:
+        return x
     return x * (math.log1p(-z) / z)
 
 
@@ -244,22 +245,18 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
             integS2 = (s1 - s0 - b * integS - c * tau) / a
 
         else:
-            y0 = a * s0 + b / 2
-            l0 = math.log(abs(y0 * y0 - Delta / 4))
+            omega = omega_fun(qD * tau, Delta)
+            signD = -1 if Delta < 0 else 1
 
-            y1 = a * s1 + b / 2
-            try:
-                l1 = math.log(abs(y1 * y1 - Delta / 4))
-            except ValueError:
-                l1 = np.nan
+            if qD * tau > 10 and Delta > 0:
+                part1 = (math.log(2) - qD * tau) / a
+            else:
+                part1 = math.log1p(-signD * omega * omega) / 2. / a
 
-            if not np.isfinite(l1) \
-                    or abs(y1 * y1 - Delta) < QUASOARE_STEADY_STATE_TOL:
-                l1 = math.log(Delta) + math.log(abs((y0 + qD) / (y0 - qD)))\
-                    - 2 * qD * tau
+            part2 = -quad_logpxy((s0 - sbar) / qD * omega, a)
 
-            integS = (l1 - l0 - b * tau) / 2 / a
-            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a
+            integS = sbar * tau + part1 + part2
+            integS2 = (s1 - s0 - b * integS - c * tau) / a
 
     # increment fluxes
     if isnull(a):
