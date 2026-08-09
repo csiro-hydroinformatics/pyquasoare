@@ -15,6 +15,8 @@ double wfun(double delta, double S) {
 
 double c_lin_expmxy(double x, double y) {
     double z = x * y;
+    if(isnull(x) || isnull(y))
+        return x;
     return x * (expm1(z) / z);
 }
 
