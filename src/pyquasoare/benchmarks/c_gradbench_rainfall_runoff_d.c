@@ -31,12 +31,63 @@ double gb_rr_omega_fun_d(double x, double xd, double Delta, double *
 }
 
 /*
+  Differentiation of gb_rr_expmxy in forward (tangent) mode:
+   variations   of useful results: gb_rr_expmxy
+   with respect to varying inputs: y
+*/
+double gb_rr_expmxy_d(double x, double y, double yd, double *gb_rr_expmxy) {
+    double z = x*y;
+    double zd = x*yd;
+    int result1;
+    int result2;
+    double temp;
+    result1 = gb_rr_isnull_c(x);
+    result2 = gb_rr_isnull_c(y);
+    if (result1 || result2) {
+        *gb_rr_expmxy = x;
+        return 0.0;
+    } else {
+        // expm1 is not known to Tapenade. Revert to naive form
+        temp = (exp(z)-1)/z;
+        *gb_rr_expmxy = x*temp;
+        return x*(exp(z)-temp)*zd/z;
+    }
+}
+
+/*
+  Differentiation of gb_rr_logpxy in forward (tangent) mode:
+   variations   of useful results: gb_rr_logpxy
+   with respect to varying inputs: x y
+*/
+double gb_rr_logpxy_d(double x, double xd, double y, double yd, double *
+        gb_rr_logpxy) {
+    double z = x*y;
+    double zd = y*xd + x*yd;
+    int result1;
+    int result2;
+    double temp;
+    double temp0;
+    result1 = gb_rr_isnull_c(x);
+    result2 = gb_rr_isnull_c(y);
+    if (result1 || result2) {
+        *gb_rr_logpxy = x;
+        return xd;
+    } else {
+        // log1p is not known to Tapenade. Revert to naive form
+        temp = x/z;
+        temp0 = log(-z + 1);
+        *gb_rr_logpxy = temp0*temp;
+        return temp0*(xd-temp*zd)/z - temp*zd/(1-z);
+    }
+}
+
+/*
   Differentiation of gb_rr_constants in forward (tangent) mode:
    variations   of useful results: constants[0:4-1]
    with respect to varying inputs: a b c
    Plus diff mem management of: constants:in
 */
-int gb_rr_constants_d(double a, double ad, double b, double bd, double c,
+int gb_rr_constants_d(double a, double ad, double b, double bd, double c, 
         double cd, double constants[4], double constantsd[4]) {
     /* Delta (not very robust numerically, see c_quasoare_core for
      * a better formulation */
@@ -81,7 +132,7 @@ int gb_rr_constants_d(double a, double ad, double b, double bd, double c,
    with respect to varying inputs: s0 constants[0:4-1] a b c
    Plus diff mem management of: constants:in
 */
-double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
+double gb_rr_forward_d(double a, double ad, double b, double bd, double c, 
         double cd, double constants[4], double constantsd[4], double timestep,
         double s0, double s0d, double *gb_rr_forward) {
     double s1 = 0;
@@ -98,6 +149,8 @@ double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
     double qDd = constantsd[2];
     double sbar = constants[3];
     double sbard = constantsd[3];
+    double expmb;
+    double expmbd;
     double fabs0;
     int result1;
     int result2;
@@ -120,21 +173,23 @@ double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
                 fabs0 = exparg;
             else
                 fabs0 = -exparg;
-            temp = exp(exparg);
-            temp0 = c/b;
-            s1d = (fabs0 < 1e-12 ? (exparg+1)*s0d + s0*expargd + tau*cd : temp
-                *(s0d+(cd-temp0*bd)/b) + (s0+temp0)*exp(exparg)*expargd - (cd-
-                c*bd/b)/b);
-            s1 = (fabs0 < 1e-12 ? s0*(exparg+1) + tau*c : (s0+temp0)*temp - c/
-                b);
+            if (fabs0 < 1e-12) {
+                s1d = (exparg+1)*s0d + s0*expargd + tau*cd;
+                s1 = s0*(1+exparg) + c*tau;
+            } else {
+                expmbd = gb_rr_expmxy_d(tau, b, bd, &expmb);
+                temp = exp(exparg);
+                s1d = temp*s0d + s0*exp(exparg)*expargd + c*expmbd + expmb*cd;
+                s1 = s0*temp + expmb*c;
+            }
         } else {
             result1 = gb_rr_isnull_c(Delta);
             if (result1) {
-                temp0 = -(tau*a*(s0-sbar)) + 1;
-                temp = (s0-sbar)/temp0;
-                s1d = sbard + (s0d-sbard+temp*tau*((s0-sbar)*ad+a*(s0d-sbard))
-                    )/temp0;
-                s1 = sbar + temp;
+                temp = -(tau*a*(s0-sbar)) + 1;
+                temp0 = (s0-sbar)/temp;
+                s1d = sbard + (s0d-sbard+temp0*tau*((s0-sbar)*ad+a*(s0d-sbard)
+                    ))/temp;
+                s1 = sbar + temp0;
             } else {
                 omegad = gb_rr_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
                 temp0 = (s0-sbar)/qD;
@@ -158,15 +213,12 @@ double gb_rr_forward_d(double a, double ad, double b, double bd, double c,
    with respect to varying inputs: s0 s1 constants[0:4-1] a b
                 c
    Plus diff mem management of: constants:in integ:in
-
- computes integral of x and x^2 over [0, ?] */
+*/
 double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
         double cd, double constants[4], double constantsd[4], double timestep,
-        double s0, double s0d, double s1, double s1d, double integ[2], double
+        double s0, double s0d, double s1, double s1d, double integ[2], double 
         integd[2]) {
     double tau = timestep;
-    double tau2 = tau*tau;
-    double tau3 = tau2*tau;
     double Delta = constants[0];
     double signD = constants[1];
     double signDd = constantsd[1];
@@ -174,75 +226,119 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
     double qDd = constantsd[2];
     double sbar = constants[3];
     double sbard = constantsd[3];
-    double integS, integS2, omega, term1, term2;
-    double integSd, integS2d, omegad, term1d, term2d;
+    double fabs0;
+    double fabs1;
+    double fabs2;
+    double fabs3;
+    double fabs4;
+    double fabs5;
     int result1;
-    int result2;
+    double result10;
+    double result10d;
     double arg1;
     double arg1d;
     double temp;
+    double temp0;
     int ii1;
-    result1 = gb_rr_isnull_c(a);
-    result2 = gb_rr_isnull_c(b);
-    if (result1 && result2) {
-        integSd = tau*s0d + tau2*cd/2;
-        integS = s0*tau + c*tau2/2;
-        integS2d = tau*2*s0*s0d + tau2*(c*s0d+s0*cd) + tau3*2*c*cd/3.;
-        integS2 = s0*s0*tau + s0*c*tau2 + c*c*tau3/3.;
+    if (s0 >= 0.0)
+        fabs0 = s0;
+    else
+        fabs0 = -s0;
+    if (s1 >= 0.0)
+        fabs3 = s1;
+    else
+        fabs3 = -s1;
+    if (s1 >= 0.0)
+        fabs4 = s1;
+    else
+        fabs4 = -s1;
+    if (s0 >= 0.0)
+        fabs5 = s0;
+    else
+        fabs5 = -s0;
+    double smax = (fabs0 < fabs3 ? fabs4 : fabs5);
+    double integS, integS2, term0, term1, term2, term12;
+    double integSd, integS2d;
+    double c_b_ratio, expmb, expm2b;
+    double c_b_ratiod, expmbd, expm2bd;
+    double omega, part1, part2;
+    double omegad, part1d, part2d;
+    if (c >= 0.0)
+        term0 = c;
+    else
+        term0 = -c;
+    if (b*smax >= 0.0)
+        term1 = b*smax;
+    else
+        term1 = -(b*smax);
+    if (a*smax*smax >= 0.0)
+        term2 = a*smax*smax;
+    else
+        term2 = -(a*smax*smax);
+    term12 = (term1 > term2 ? term1 : term2);
+    if (s1 - s0 >= 0.0)
+        fabs1 = s1 - s0;
+    else
+        fabs1 = -(s1-s0);
+    result1 = gb_rr_isnull_c(fabs1);
+    if (term0*1e-5 > term12 || result1) {
+        integSd = tau*(s0d+tau*cd/2);
+        integS = (s0+c*tau/2)*tau;
+        integS2d = tau*(2*s0*s0d+tau*(c*s0d+s0*cd)+tau*tau*2*c*cd/3.);
+        integS2 = (s0*s0+s0*c*tau+c*c*tau*tau/3.)*tau;
+    } else if (term1*1e-5 > term2) {
+        c_b_ratiod = (cd-c*bd/b)/b;
+        c_b_ratio = c/b;
+        expmbd = gb_rr_expmxy_d(tau, b, bd, &expmb);
+        // (exp(b * tau) - 1) / b
+        integSd = expmb*s0d + (s0+c_b_ratio)*expmbd + (expmb-tau)*c_b_ratiod;
+        integS = s0*expmb + (expmb-tau)*c_b_ratio;
+        expm2bd = gb_rr_expmxy_d(tau, 2*b, 2*bd, &expm2b);
+        temp = tau + expm2b - 2*expmb;
+        temp0 = 2*s0*c_b_ratio;
+        integS2d = expm2b*2*s0*s0d + s0*s0*expm2bd + temp*2*c_b_ratio*
+            c_b_ratiod + c_b_ratio*c_b_ratio*(expm2bd-2*expmbd) + (expm2b-
+            expmb)*(c_b_ratio*2*s0d+2*s0*c_b_ratiod) + temp0*(expm2bd-expmbd);
+        integS2 = s0*s0*expm2b + c_b_ratio*c_b_ratio*temp + temp0*(expm2b-
+            expmb);
     } else {
-        result1 = gb_rr_isnull_c(a);
-        result2 = gb_rr_notnull_c(b);
-        if (result1 && result2) {
-            temp = (s1-s0-tau*c)/b;
-            integSd = (s1d-s0d-tau*cd-temp*bd)/b;
-            integS = temp;
-            temp = ((s1*s1-s0*s0)/2.-c*integS)/b;
-            integS2d = ((2*s1*s1d-2*s0*s0d)/2.-integS*cd-c*integSd-temp*bd)/b;
-            integS2 = temp;
+        if (Delta >= 0.0)
+            fabs2 = Delta;
+        else
+            fabs2 = -Delta;
+        if (fabs2 < 1e-15) {
+            result10d = gb_rr_logpxy_d(tau*(s0-sbar), tau*(s0d-sbard), a, ad, 
+                                       &result10);
+            integSd = tau*sbard - result10d;
+            integS = sbar*tau - result10;
+            temp0 = (s1-s0-b*integS-tau*c)/a;
+            integS2d = (s1d-s0d-integS*bd-b*integSd-tau*cd-temp0*ad)/a;
+            integS2 = temp0;
         } else {
-            result1 = gb_rr_notnull_c(a);
-            if (result1) {
-                /* Integrate S only because S2 can be deducted from S */
-                result1 = gb_rr_isnull_c(Delta);
-                if (result1) {
-                    arg1d = -(tau*((s0-sbar)*ad+a*(s0d-sbard)));
-                    arg1 = 1 - a*tau*(s0-sbar);
-                    temp = log(arg1)/a;
-                    integSd = tau*sbard - (arg1d/arg1-temp*ad)/a;
-                    integS = tau*sbar - temp;
-                } else {
-                    omegad = gb_rr_omega_fun_d(qD*tau, tau*qDd, Delta, &omega)
-                    ;
-                    /* Special formula to avoid the case where omega == 1 */
-                    if (qD*tau > 10 && Delta > 0) {
-                        temp = (log(2)-tau*qD)/a;
-                        term1d = (-(tau*qDd)-temp*ad)/a;
-                        term1 = temp;
-                    } else {
-                        arg1d = -(omega*omega*signDd+signD*2*omega*omegad);
-                        arg1 = 1 - signD*omega*omega;
-                        temp = log(arg1)/(2.*a);
-                        term1d = (arg1d/arg1-temp*2.*ad)/(2.*a);
-                        term1 = temp;
-                    }
-                    temp = (s0-sbar)/qD;
-                    arg1d = -(a*omega*(s0d-sbard-temp*qDd)/qD+temp*(omega*ad+a
-                        *omegad));
-                    arg1 = 1 - temp*(a*omega);
-                    temp = log(arg1)/a;
-                    term2d = -((arg1d/arg1-temp*ad)/a);
-                    term2 = -temp;
-                    integSd = tau*sbard + term1d + term2d;
-                    integS = sbar*tau + term1 + term2;
-                }
-                /* Eq B13 in Lerat (2025) */
-                temp = (s1-s0-b*integS-tau*c)/a;
-                integS2d = (s1d-s0d-integS*bd-b*integSd-tau*cd-temp*ad)/a;
-                integS2 = temp;
+            omegad = gb_rr_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
+            if (qD*tau > 10 && Delta > 0) {
+                temp0 = (log(2)-tau*qD)/a;
+                part1d = (-(tau*qDd)-temp0*ad)/a;
+                part1 = temp0;
             } else {
-                integS2d = 0.0;
-                integSd = 0.0;
+                // log1p is not known to Tapenade. Revert to naive form
+                arg1d = -(omega*omega*signDd+signD*2*omega*omegad);
+                arg1 = 1 - signD*omega*omega;
+                temp0 = log(arg1)/(2.*a);
+                part1d = (arg1d/arg1-temp0*2.*ad)/(2.*a);
+                part1 = temp0;
             }
+            temp0 = omega/qD;
+            result10d = gb_rr_logpxy_d((s0-sbar)/qD*omega, temp0*(s0d-sbard) +
+                                       (s0-sbar)*(omegad-temp0*qDd)/qD, a, ad,
+                                       &result10);
+            part2d = -result10d;
+            part2 = -result10;
+            integSd = tau*sbard + part1d + part2d;
+            integS = sbar*tau + part1 + part2;
+            temp0 = (s1-s0-b*integS-tau*c)/a;
+            integS2d = (s1d-s0d-integS*bd-b*integSd-tau*cd-temp0*ad)/a;
+            integS2 = temp0;
         }
     }
     for (ii1 = 0; ii1 < 2; ++ii1)
@@ -259,8 +355,8 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
    with respect to varying inputs: gamma *flux x0 *state
    Plus diff mem management of: flux:in state:in
 */
-int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
-        double gamma, double gammad, double x0, double x0d, double *state,
+int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep, 
+        double gamma, double gammad, double x0, double x0d, double *state, 
         double *stated, double *flux, double *fluxd) {
     double temp;
     int ii1;
@@ -293,11 +389,11 @@ int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
     *stated = x1d;
     *state = x1;
     /* compute output flux, i.e. Q1*-Q1 + Q3 */
-    double integ[2];
-    double integd[2];
+    double integ[2] = {0., 0.};
+    double integd[2] = {0.0};
     for (ii1 = 0; ii1 < 2; ++ii1)
         integd[ii1] = 0.0;
-    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep,
+    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep, 
                         x0, x0d, x1, x1d, integ, integd);
     temp = integ[1]/timestep;
     temp0 = qstar1 + 64.*gamma/(6561.*timestep);
@@ -309,14 +405,12 @@ int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
 /*
   Differentiation of rr_route_runtimestep in forward (tangent) mode:
    variations   of useful results: *flux *state
-   with respect to varying inputs: gamma *flux qstar1 qstar2 x0
-                *state
+   with respect to varying inputs: gamma *flux qstar1 x0 *state
    Plus diff mem management of: flux:in state:in
 */
-int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
-        double qstar2d, double timestep, double gamma, double gammad, double
-        x0, double x0d, double *state, double *stated, double *flux, double *
-        fluxd) {
+int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2, 
+        double timestep, double gamma, double gammad, double x0, double x0d, 
+        double *state, double *stated, double *flux, double *fluxd) {
     /* Quasaore coefficients
      * dx/dt = Q1* / G 0.9 + Q2* / G x^2 - 1/? 0.25 x^2
      *
@@ -325,7 +419,7 @@ int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
      *
      */
     double a = qstar2/gamma - 0.25/timestep;
-    double ad = (qstar2d-qstar2*gammad/gamma)/gamma;
+    double ad = -(qstar2*gammad/(gamma*gamma));
     double b = 0.;
     double bd;
     double c = qstar1/gamma*0.9;
@@ -345,12 +439,12 @@ int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
                           , x0, x0d, &x1);
     *stated = x1d;
     *state = x1;
-    double integ[2];
-    double integd[2];
+    double integ[2] = {0., 0.};
+    double integd[2] = {0.0};
     for (ii1 = 0; ii1 < 2; ++ii1)
         integd[ii1] = 0.0;
     bd = 0.0;
-    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep,
+    gb_rr_integrate_x_d(a, ad, b, bd, c, cd, constants, constantsd, timestep, 
                         x0, x0d, x1, x1d, integ, integd);
     *fluxd = 0.1*qstar1d + 0.25*(integ[1]*gammad+gamma*integd[1])/(timestep*
         timestep);
@@ -361,21 +455,20 @@ int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
 /*
   Differentiation of c_gradbench_rainfall_runoff in forward (tangent) mode:
    variations   of useful results: *qout_rr_prod *qout_rr_route
-   with respect to varying inputs: gamma_rr_prod demand_rr_route
-                gamma_rr_route
+   with respect to varying inputs: gamma_rr_prod gamma_rr_route
    RW status of diff variables: qout_rr_prod:(loc) *qout_rr_prod:out
                 qout_rr_route:(loc) *qout_rr_route:out gamma_rr_prod:in
-                demand_rr_route:in gamma_rr_route:in
+                gamma_rr_route:in
    Plus diff mem management of: qout_rr_prod:in qout_rr_route:in
                 states_rr_route:in states_rr_prod:in
 */
 int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
-        , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd,
+        , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, 
         double gamma_rr_route, double gamma_rr_routed, double demand_rr_route,
-        double demand_rr_routed, double *pin, double *ein, double *
-        states_rr_prod, double *states_rr_prodd, double *states_rr_route,
-        double *states_rr_routed, double *qout_rr_prod, double *qout_rr_prodd,
-        double *qout_rr_route, double *qout_rr_routed) {
+        double *pin, double *ein, double *states_rr_prod, double *
+        states_rr_prodd, double *states_rr_route, double *states_rr_routed, 
+        double *qout_rr_prod, double *qout_rr_prodd, double *qout_rr_route, 
+        double *qout_rr_routed) {
     int j;
     double pi, ei, qi;
     double qid;
@@ -400,11 +493,11 @@ int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
         /* Run routing */
         qid = qout_rr_prodd[j];
         qi = qout_rr_prod[j];
-        rr_route_runtimestep_d(qi, qid, demand_rr_route, demand_rr_routed,
-                               timestep, gamma_rr_route, gamma_rr_routed,
-                               x0_rr_route, x0_rr_routed, &(states_rr_route[j]
-                               ), &(states_rr_routed[j]), &(qout_rr_route[j]),
-                               &(qout_rr_routed[j]));
+        rr_route_runtimestep_d(qi, qid, demand_rr_route, timestep, 
+                               gamma_rr_route, gamma_rr_routed, x0_rr_route, 
+                               x0_rr_routed, &(states_rr_route[j]), &(
+                               states_rr_routed[j]), &(qout_rr_route[j]), &(
+                               qout_rr_routed[j]));
         /* Set timestep for next iteration */
         x0_rr_prodd = states_rr_prodd[j];
         x0_rr_prod = states_rr_prod[j];

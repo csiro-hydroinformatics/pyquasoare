@@ -30,6 +30,19 @@ double gb_ro_omega_fun_d(double x, double xd, double Delta, double *
     }
 }
 
+double gb_ro_expmxy_c(double x, double y) {
+    double z = x*y;
+    int result1;
+    int result2;
+    result1 = gb_ro_isnull_c(y);
+    result2 = gb_ro_isnull_c(x);
+    if (result1 || result2)
+        return x;
+    else
+        // expm1 is not known to Tapenade. Revert to naive form
+        return x*((exp(z)-1)/z);
+}
+
 /*
   Differentiation of gb_ro_constants in forward (tangent) mode:
    variations   of useful results: constants[0:4-1]
@@ -96,6 +109,7 @@ double gb_ro_forward_d(double a, double b, double c, double cd, double
     double qDd = constantsd[2];
     double sbar = constants[3];
     double sbard = constantsd[3];
+    double expmb;
     double fabs0;
     int result1;
     int result2;
@@ -116,11 +130,15 @@ double gb_ro_forward_d(double a, double b, double c, double cd, double
                 fabs0 = exparg;
             else
                 fabs0 = -exparg;
-            temp = exp(exparg);
-            s1d = (fabs0 < 1e-12 ? (exparg+1)*s0d + tau*cd : temp*(s0d+cd/b) -
-                cd/b);
-            s1 = (fabs0 < 1e-12 ? (exparg+1)*s0 + tau*c : temp*(s0+c/b) - c/b)
-            ;
+            if (fabs0 < 1e-12) {
+                s1d = (exparg+1)*s0d + tau*cd;
+                s1 = s0*(1+exparg) + c*tau;
+            } else {
+                expmb = gb_ro_expmxy_c(tau, b);
+                temp = exp(exparg);
+                s1d = temp*s0d + expmb*cd;
+                s1 = temp*s0 + expmb*c;
+            }
         } else {
             result1 = gb_ro_isnull_c(Delta);
             if (result1) {

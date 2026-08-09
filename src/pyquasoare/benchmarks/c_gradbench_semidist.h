@@ -7,8 +7,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c_gradbench_rainfall_runoff.h"
-
 int c_gradbench_semidist(int nval, int nreaches,
                          double timestep,
                          double x0_rr_prod,
