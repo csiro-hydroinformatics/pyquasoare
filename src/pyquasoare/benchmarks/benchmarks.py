@@ -291,15 +291,13 @@ def gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
                                       dgamma_rr_prod,
                                       gamma_rr_route,
                                       dgamma_rr_route,
-                                      demand_rr_route,
-                                      ddemand_rr_route):
+                                      demand_rr_route):
     timestep = np.float64(timestep)
     gamma_rr_prod = np.float64(gamma_rr_prod)
     dgamma_rr_prod = np.float64(dgamma_rr_prod)
     gamma_rr_route = np.float64(gamma_rr_route)
     dgamma_rr_route = np.float64(dgamma_rr_route)
     demand_rr_route = np.float64(demand_rr_route)
-    ddemand_rr_route = np.float64(ddemand_rr_route)
     pin = np.ascontiguousarray(pin).astype(np.float64)
     ein = np.ascontiguousarray(ein).astype(np.float64)
 
@@ -323,7 +321,6 @@ def gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
                                                                gamma_rr_route,
                                                                dgamma_rr_route,
                                                                demand_rr_route,
-                                                               ddemand_rr_route,
                                                                pin, ein,
                                                                states_rr_prod,
                                                                dstates_rr_prod,
@@ -406,7 +403,6 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
                                gammas_ro_route,
                                dgammas_ro_route,
                                demands_rr_route,
-                               ddemands_rr_route,
                                out=None):
     timestep = np.float64(timestep)
     areas = areas.astype(np.float64)
@@ -417,7 +413,6 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
     gammas_ro_route = gammas_ro_route.astype(np.float64)
     dgammas_ro_route = dgammas_ro_route.astype(np.float64)
     demands_rr_route = demands_rr_route.astype(np.float64)
-    ddemands_rr_route = ddemands_rr_route.astype(np.float64)
     pin = np.ascontiguousarray(pin).astype(np.float64)
     ein = np.ascontiguousarray(ein).astype(np.float64)
 
@@ -461,7 +456,6 @@ def gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
                                                         gammas_ro_route,
                                                         dgammas_ro_route,
                                                         demands_rr_route,
-                                                        ddemands_rr_route,
                                                         pin, ein,
                                                         states_rr_prod,
                                                         dstates_rr_prod,
