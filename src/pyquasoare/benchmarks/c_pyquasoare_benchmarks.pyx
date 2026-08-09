@@ -66,11 +66,10 @@ cdef extern from 'c_gradbench_rainfall_runoff.h':
 cdef extern from 'c_gradbench_rainfall_runoff_d.h':
     int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
         , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, double
-        gamma_rr_route, double gamma_rr_routed, double demand_rr_route, double
-        demand_rr_routed, double *pin, double *ein, double *states_rr_prod, double
-        *states_rr_prodd, double *states_rr_route, double *states_rr_routed,
-        double *qout_rr_prod, double *qout_rr_prodd, double *qout_rr_route, double
-        *qout_rr_routed);
+        gamma_rr_route, double gamma_rr_routed, double demand_rr_route, double *
+        pin, double *ein, double *states_rr_prod, double *states_rr_prodd, double
+        *states_rr_route, double *states_rr_routed, double *qout_rr_prod, double *
+        qout_rr_prodd, double *qout_rr_route, double *qout_rr_routed);
 
 cdef extern from 'c_gradbench_semidist.h':
     int c_gradbench_semidist(int nval, int nreaches,
@@ -97,12 +96,11 @@ cdef extern from 'c_gradbench_semidist_d.h':
         x0_rr_prod, double x0_rr_route, double x0_ro_route, double *areas, double
         *gammas_rr_prod, double *gammas_rr_prodd, double *gammas_rr_route, double
         *gammas_rr_routed, double *gammas_ro_route, double *gammas_ro_routed,
-        double *demands_rr_route, double *demands_rr_routed, double *pin, double *
-        ein, double *states_rr_prod, double *states_rr_prodd, double *
-        states_rr_route, double *states_rr_routed, double *states_ro_route, double
-        *states_ro_routed, double *qout_rr_prod, double *qout_rr_prodd, double *
-        qout_rr_route, double *qout_rr_routed, double *qout_ro_route, double *
-        qout_ro_routed);
+        double *demands_rr_route, double *pin, double *ein, double *states_rr_prod
+        , double *states_rr_prodd, double *states_rr_route, double *
+        states_rr_routed, double *states_ro_route, double *states_ro_routed,
+        double *qout_rr_prod, double *qout_rr_prodd, double *qout_rr_route, double
+        *qout_rr_routed, double *qout_ro_route, double *qout_ro_routed);
 
 
 def __cinit__(self):
@@ -367,7 +365,6 @@ def gradbench_rainfall_runoff_d(double timestep,
                                 double gamma_rr_route,
                                 double gamma_rr_routed,
                                 double demand_rr_route,
-                                double demand_rr_routed,
                                 np.ndarray[double, ndim=1, mode='c'] pin not None,
                                 np.ndarray[double, ndim=1, mode='c'] ein not None,
                                 np.ndarray[double, ndim=1, mode='c'] states_rr_prod not None,
@@ -416,7 +413,6 @@ def gradbench_rainfall_runoff_d(double timestep,
                                          gamma_rr_route,
                                          gamma_rr_routed,
                                          demand_rr_route,
-                                         demand_rr_routed,
                                          <double*> np.PyArray_DATA(pin),
                                          <double*> np.PyArray_DATA(ein),
                                          <double*> np.PyArray_DATA(states_rr_prod),
@@ -538,7 +534,6 @@ def gradbench_semidist_d(double timestep,
                          np.ndarray[double, ndim=1, mode='c'] gammas_ro_route not None,
                          np.ndarray[double, ndim=1, mode='c'] gammas_ro_routed not None,
                          np.ndarray[double, ndim=1, mode='c'] demands_rr_route not None,
-                         np.ndarray[double, ndim=1, mode='c'] demands_rr_routed not None,
                          np.ndarray[double, ndim=2, mode='c'] pin not None,
                          np.ndarray[double, ndim=2, mode='c'] ein not None,
                          np.ndarray[double, ndim=2, mode='c'] states_rr_prod not None,
@@ -570,9 +565,6 @@ def gradbench_semidist_d(double timestep,
 
     if demands_rr_route.shape[0] != nreaches:
         raise ValueError("demands_rr_route.shape[0] != areas.shape[0]")
-
-    if demands_rr_routed.shape[0] != nreaches:
-        raise ValueError("demands_rr_routed.shape[0] != areas.shape[0]")
 
     if gammas_ro_route.shape[0] != nreaches:
         raise ValueError("gammas_ro_route.shape[0] != areas.shape[0]")
@@ -673,7 +665,6 @@ def gradbench_semidist_d(double timestep,
                                   <double*> np.PyArray_DATA(gammas_ro_route),
                                   <double*> np.PyArray_DATA(gammas_ro_routed),
                                   <double*> np.PyArray_DATA(demands_rr_route),
-                                  <double*> np.PyArray_DATA(demands_rr_routed),
                                   <double*> np.PyArray_DATA(pin),
                                   <double*> np.PyArray_DATA(ein),
                                   <double*> np.PyArray_DATA(states_rr_prod),

@@ -10,7 +10,7 @@ int gb_sd_isnull(double x){
 }
 
 double gb_sd_omega_fun(double x, double Delta){
-    if(Delta<0.)
+    if(Delta < 0.)
         return tan(x);
     else
         return tanh(x);
@@ -18,12 +18,18 @@ double gb_sd_omega_fun(double x, double Delta){
 
 double gb_sd_expmxy(double x, double y) {
     double z = x * y;
-    return x * (expm1(z) / z);
+    if(gb_sd_isnull(x) || gb_sd_isnull(y))
+        return x;
+    // expm1 is not known to Tapenade. Revert to naive form
+    return x * ((exp(z) - 1) / z);
 }
 
 double gb_sd_logpxy(double x, double y) {
     double z = x * y;
-    return x * (log1p(-z) / z);
+    if(gb_sd_isnull(x) || gb_sd_isnull(y))
+        return x;
+    // log1p is not known to Tapenade. Revert to naive form
+    return x * (log(1 - z) / z);
 }
 
 int gb_sd_constants(double a, double b, double c, double constants[4]) {
@@ -96,7 +102,8 @@ double gb_sd_integrate_x(double a, double b, double c, double constants[4],
     double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
 
     double integS, integS2, term0, term1, term2, term12;
-    double c_b_ratio, expmb, expm2b, l0, l1, y0, y1;
+    double c_b_ratio, expmb, expm2b;
+    double omega, part1, part2;
 
     term0 = fabs(c);
     term1 = fabs(b * smax);
@@ -123,17 +130,18 @@ double gb_sd_integrate_x(double a, double b, double c, double constants[4],
             integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
         else {
-            y0 = a * s0 + b / 2;
-            l0 = log(fabs(y0 * y0 - Delta / 4));
+            omega = gb_sd_omega_fun(qD * tau, Delta);
 
-            y1 = a * s1 + b / 2;
-            l1 = log(fabs(y1 * y1 - Delta / 4));
+            if(qD * tau > 10 && Delta > 0)
+                part1 = (log(2) - qD * tau) / a;
+            else
+                // log1p is not known to Tapenade. Revert to naive form
+                part1 = log(1 - signD * omega * omega) / 2. / a;
 
-            if(!isfinite(l1) || fabs(y1 * y1 - Delta) < 1e-15)
-               l1 = log(Delta) + log(fabs((y0 + qD) / (y0 - qD))) - 2 * qD * tau;
+            part2 = -gb_sd_logpxy((s0 - sbar) / qD * omega, a);
 
-            integS = (l1 - l0 - b * tau) / 2 / a;
-            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a;
+            integS = sbar * tau + part1 + part2;
+            integS2 = (s1 - s0 - b * integS - c * tau) / a;
         }
     }
     integ[0] = integS;
@@ -162,7 +170,7 @@ int sd_rr_prod_runtimestep(double qstar1, double qstar2,
     *state = x1;
 
     /* compute output flux, i.e. Q1*-Q1 + Q3 */
-    double integ[2];
+    double integ[2] = {0., 0.};
     gb_sd_integrate_x(a, b, c, constants, timestep, x0, x1, integ);
     *flux = (qstar1 + gamma * 64. / 6561. / timestep) * integ[1] / timestep;
 
@@ -190,7 +198,7 @@ int sd_rr_route_runtimestep(double qstar1, double qstar2,
 
     *state = x1;
 
-    double integ[2];
+    double integ[2] = {0., 0.};
     gb_sd_integrate_x(a, b, c, constants, timestep, x0, x1, integ);
     *flux = qstar1 * 0.1 + gamma * 0.25 * integ[1] / timestep / timestep;
 

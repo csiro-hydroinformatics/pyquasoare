@@ -8,28 +8,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-
-#include "c_gradbench_rainfall_runoff.h"
-
-int rr_prod_runtimestep(double qstar1, double qstar2, double timestep, double
+int rr_prod_runtimestep(double qstar1, double qstar2, double timestep, double 
     gamma, double x0, double *state, double *flux);
-int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep,
-    double gamma, double gammad, double x0, double x0d, double *state, double
+int rr_prod_runtimestep_d(double qstar1, double qstar2, double timestep, 
+    double gamma, double gammad, double x0, double x0d, double *state, double 
     *stated, double *flux, double *fluxd);
 int rr_route_runtimestep(double qstar1, double qstar2, double timestep, double
     gamma, double x0, double *state, double *flux);
-int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2,
-    double qstar2d, double timestep, double gamma, double gammad, double x0,
-    double x0d, double *state, double *stated, double *flux, double *fluxd);
-int c_gradbench_rainfall_runoff(int nval, double timestep, double x0_rr_prod,
-    double x0_rr_route, double gamma_rr_prod, double gamma_rr_route, double
-    demand_rr_route, double *pin, double *ein, double *states_rr_prod, double
+int rr_route_runtimestep_d(double qstar1, double qstar1d, double qstar2, 
+    double timestep, double gamma, double gammad, double x0, double x0d, 
+    double *state, double *stated, double *flux, double *fluxd);
+int c_gradbench_rainfall_runoff(int nval, double timestep, double x0_rr_prod, 
+    double x0_rr_route, double gamma_rr_prod, double gamma_rr_route, double 
+    demand_rr_route, double *pin, double *ein, double *states_rr_prod, double 
     *states_rr_route, double *qout_rr_prod, double *qout_rr_route);
 int c_gradbench_rainfall_runoff_d(int nval, double timestep, double x0_rr_prod
-    , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, double
-    gamma_rr_route, double gamma_rr_routed, double demand_rr_route, double
-    demand_rr_routed, double *pin, double *ein, double *states_rr_prod, double
-    *states_rr_prodd, double *states_rr_route, double *states_rr_routed,
-    double *qout_rr_prod, double *qout_rr_prodd, double *qout_rr_route, double
-    *qout_rr_routed);
+    , double x0_rr_route, double gamma_rr_prod, double gamma_rr_prodd, double 
+    gamma_rr_route, double gamma_rr_routed, double demand_rr_route, double *
+    pin, double *ein, double *states_rr_prod, double *states_rr_prodd, double 
+    *states_rr_route, double *states_rr_routed, double *qout_rr_prod, double *
+    qout_rr_prodd, double *qout_rr_route, double *qout_rr_routed);
 #endif

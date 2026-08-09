@@ -10,7 +10,7 @@ int gb_ro_isnull(double x){
 }
 
 double gb_ro_omega_fun(double x, double Delta){
-    if(Delta<0.)
+    if(Delta < 0.)
         return tan(x);
     else
         return tanh(x);
@@ -18,12 +18,18 @@ double gb_ro_omega_fun(double x, double Delta){
 
 double gb_ro_expmxy(double x, double y) {
     double z = x * y;
-    return x * (expm1(z) / z);
+    if(gb_ro_isnull(y) || gb_ro_isnull(x))
+        return x;
+    // expm1 is not known to Tapenade. Revert to naive form
+    return x * ((exp(z) - 1) / z);
 }
 
 double gb_ro_logpxy(double x, double y) {
     double z = x * y;
-    return x * (log1p(-z) / z);
+    if(gb_ro_isnull(y) || gb_ro_isnull(x))
+        return x;
+    // log1p is not known to Tapenade. Revert to naive form
+    return x * (log(1 - z) / z);
 }
 
 int gb_ro_constants(double a, double b, double c, double constants[4]) {
@@ -82,64 +88,6 @@ double gb_ro_forward(double a, double b, double c, double constants[4],
     }
     return s1;
 }
-
-/* computes integral of x and x^2 over [0, Δ] */
-double gb_ro_integrate_x(double a, double b, double c, double constants[4],
-                      double timestep, double s0, double s1,
-                      double integ[2])  {
-    double tau = timestep;
-
-    double Delta = constants[0];
-    double signD = constants[1];
-    double qD = constants[2];
-    double sbar = constants[3];
-    double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
-
-    double integS, integS2, term0, term1, term2, term12;
-    double c_b_ratio, expmb, expm2b, l0, l1, y0, y1;
-
-    term0 = fabs(c);
-    term1 = fabs(b * smax);
-    term2 = fabs(a * smax * smax);
-    term12 = term1 > term2 ? term1 : term2;
-
-    if (term0 * 1e-5 > term12 || gb_ro_isnull(fabs(s1 - s0))) {
-        integS = (s0 + c * tau / 2) * tau;
-        integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
-    }
-    else if (term1 * 1e-5 > term2) {
-        c_b_ratio = c / b;
-        expmb = gb_ro_expmxy(tau, b); // (exp(b * tau) - 1) / b
-        integS = s0 * expmb + (expmb - tau) * c_b_ratio;
-
-        expm2b = gb_ro_expmxy(tau, 2 * b);
-        integS2 = s0 * s0 * expm2b
-            + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb)
-            + 2 * s0 * c_b_ratio * (expm2b - expmb);
-    }
-    else {
-        if(fabs(Delta) < 1e-15) {
-            integS = sbar * tau - gb_ro_logpxy(tau * (s0 - sbar), a);
-            integS2 = (s1 - s0 - b * integS - c * tau) / a;
-        }
-        else {
-            y0 = a * s0 + b / 2;
-            l0 = log(fabs(y0 * y0 - Delta / 4));
-
-            y1 = a * s1 + b / 2;
-            l1 = log(fabs(y1 * y1 - Delta / 4));
-
-            if(!isfinite(l1) || fabs(y1 * y1 - Delta) < 1e-15)
-               l1 = log(Delta) + log(fabs((y0 + qD) / (y0 - qD))) - 2 * qD * tau;
-
-            integS = (l1 - l0 - b * tau) / 2 / a;
-            integS2 = (y1 - y0 + b * (l0 - l1) / 2 + (b * b + Delta) * tau / 4) / a / a;
-        }
-    }
-    integ[0] = integS;
-    integ[1] = integS2;
-}
-
 
 int ro_route_runtimestep(double qstar1, double timestep, double gamma,
                          double x0, double * state, double * flux) {
