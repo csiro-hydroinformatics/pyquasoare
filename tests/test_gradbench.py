@@ -269,7 +269,7 @@ def test_gradbench_rainfall_runoff_route(siteid, gamma, demand, timestep, allclo
 @pytest.mark.parametrize("gamma", [10, 100, 10000])
 @pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
 @pytest.mark.parametrize("timestep", [1., 0.1])
-@pytest.mark.parametrize("diff", [1, 2, 3])
+@pytest.mark.parametrize("diff", [1, 2])
 def test_gradbench_rainfall_runoff_tangent(siteid, gamma, demand, timestep,
                                            diff, allclose):
     x0, _, _, pin, ein = get_data(siteid)
@@ -280,31 +280,27 @@ def test_gradbench_rainfall_runoff_tangent(siteid, gamma, demand, timestep,
     gamma_rr_route = gamma / 5.
     dgamma_rr_route = 1. if diff == 2 else 0.
     demand_rr_route = demand
-    ddemand_rr_route = 1. if diff == 3 else 0.
     out = benchmarks.gradbench_rainfall_runoff_tangent(timestep, pin, ein, x0,
                                                        gamma_rr_prod,
                                                        dgamma_rr_prod,
                                                        gamma_rr_route,
                                                        dgamma_rr_route,
-                                                       demand_rr_route,
-                                                       ddemand_rr_route)
+                                                       demand_rr_route)
     # Numerical differenciation
     eps = 1e-4
     gamma_rr_prod1 = gamma_rr_prod - dgamma_rr_prod * eps
     gamma_rr_route1 = gamma_rr_route - dgamma_rr_route * eps
-    demand_rr_route1 = demand_rr_route - ddemand_rr_route * eps
     out1 = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
                                              gamma_rr_prod1,
                                              gamma_rr_route1,
-                                             demand_rr_route1)
+                                             demand_rr_route)
 
     gamma_rr_prod2 = gamma_rr_prod + dgamma_rr_prod * eps
     gamma_rr_route2 = gamma_rr_route + dgamma_rr_route * eps
-    demand_rr_route2 = demand_rr_route + ddemand_rr_route * eps
     out2 = benchmarks.gradbench_rainfall_runoff(timestep, pin, ein, x0,
                                              gamma_rr_prod2,
                                              gamma_rr_route2,
-                                             demand_rr_route2)
+                                             demand_rr_route)
     atol = 1e-3
     for i in range(len(out1)):
         va = np.asinh(out[1 + 2 * i])
@@ -413,7 +409,7 @@ def test_gradbench_semidist(gamma, demand, timestep, nreaches, allclose):
 @pytest.mark.parametrize("demand", [-0.1, 0, 0.1])
 @pytest.mark.parametrize("timestep", [1., 0.1])
 @pytest.mark.parametrize("nreaches", [1, 2, 5])
-@pytest.mark.parametrize("diff", [1, 2, 3, 4])
+@pytest.mark.parametrize("diff", [1, 2, 3])
 def test_gradbench_semidist_tangent(gamma, demand, timestep, nreaches,
                                     diff, allclose):
     nval = 1000
@@ -435,7 +431,6 @@ def test_gradbench_semidist_tangent(gamma, demand, timestep, nreaches,
     gammas_ro_route = np.array([gamma / 20] * nreaches)
     dgammas_ro_route = o if diff == 3 else zr
     demands_rr_route = np.ones(nreaches) * demand
-    ddemands_rr_route = o if diff == 4 else zr
 
     out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
                                                 gammas_rr_prod,
@@ -444,29 +439,26 @@ def test_gradbench_semidist_tangent(gamma, demand, timestep, nreaches,
                                                 dgammas_rr_route,
                                                 gammas_ro_route,
                                                 dgammas_ro_route,
-                                                demands_rr_route,
-                                                ddemands_rr_route)
+                                                demands_rr_route)
 
     eps = 5e-4
     gammas_rr_prod1 = gammas_rr_prod - dgammas_rr_prod * eps
     gammas_rr_route1 = gammas_rr_route - dgammas_rr_route * eps
     gammas_ro_route1 = gammas_ro_route - dgammas_ro_route * eps
-    demands_rr_route1 = demands_rr_route - ddemands_rr_route * eps
     out1 = benchmarks.gradbench_semidist(timestep, pin, ein, x0, areas,
                                          gammas_rr_prod1,
                                          gammas_rr_route1,
                                          gammas_ro_route1,
-                                         demands_rr_route1)
+                                         demands_rr_route)
 
     gammas_rr_prod2 = gammas_rr_prod + dgammas_rr_prod * eps
     gammas_rr_route2 = gammas_rr_route + dgammas_rr_route * eps
     gammas_ro_route2 = gammas_ro_route + dgammas_ro_route * eps
-    demands_rr_route2 = demands_rr_route + ddemands_rr_route * eps
     out2 = benchmarks.gradbench_semidist(timestep, pin, ein, x0, areas,
                                          gammas_rr_prod2,
                                          gammas_rr_route2,
                                          gammas_ro_route2,
-                                         demands_rr_route2)
+                                         demands_rr_route)
     atol = 1e-4
     for i in range(len(out1)):
         va = np.asinh(out[1 + 2 * i])
@@ -509,8 +501,7 @@ def test_gradbench_rainfallrunoff_tangent_specific():
                                                         dgrr_prod,
                                                         grr_route,
                                                         dgrr_route,
-                                                        demrr_route,
-                                                        ddemrr_route)
+                                                        demrr_route)
 
     grr_prod1 = grr_prod - eps
     out1 = benchmarks.gradbench_rainfall_runoff(timestep, pin,
