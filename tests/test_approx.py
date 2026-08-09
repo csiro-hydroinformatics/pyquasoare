@@ -17,7 +17,7 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 15
+NCASES = 16
 
 LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
 
@@ -176,7 +176,7 @@ def generate_samples(ntry, selcase, request):
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
 
     elif case == 4:
-        name = "Delta<0"
+        name = "Dlt<0"
         a, b, c = params.T
         Delta = -np.abs(b**2-4*a*c)
         qD = np.sqrt(-Delta)/2
@@ -184,7 +184,7 @@ def generate_samples(ntry, selcase, request):
         params[:, 2] = c
 
     elif case in [5, 12]:
-        name = "Delta>0" if case==5 \
+        name = "Dlt>0" if case==5 \
                         else "atanh edge"
         a, b, c = params.T
         Delta = np.abs(b**2 - 4 * a * c)
@@ -244,10 +244,16 @@ def generate_samples(ntry, selcase, request):
         params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
 
     if case == 15:
-        name = "Delta=0 & a<<1"
+        name = "Dlt=0 & a<<1"
         eps = 1e-6
         params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
+
+    elif case == 16:
+        name = "a=0 & b<<1"
+        params[:, 0] = 0
+        eps = 1e-6
+        params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
 
     if not case in [9, 10, 11, 12]:
         s0s = np.random.uniform(-5, 5, ntry)

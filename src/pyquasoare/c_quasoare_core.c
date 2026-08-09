@@ -292,12 +292,12 @@ int c_quad_fluxes_increment(int nfluxes,
     term12 = term1 > term2 ? term1 : term2;
 
     /* Calculate integral of S and S^2 */
-    if (term0 * QUASOARE_FLUX_TERM_RTOL > term12 || isnull(fabs(s1 - s0))) {
+    if (term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 || isnull(fabs(s1 - s0))) {
         /* Constant case where dx/dt = c */
         integS = (s0 + c * tau / 2) * tau;
         integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
     }
-    else if (term1 * QUASOARE_FLUX_TERM_RTOL > term2) {
+    else if (term1 * QUASOARE_FLUX_TERM_RTOL2 > term2) {
         /* Linear case where dx/dt = bx + c */
 
         /* Rewrite of Eq B11 in Lerat (2025) for improved numerics when a≈0 */

@@ -36,7 +36,7 @@ double c_grad_forward(double M, double S, double t0, double x0, double t){
         if(fabs(exparg) < QUASOARE_EPS)
             x = x0 * (1 + exparg) + M * tau;
         else
-            x = x0 * exp(exparg) + M * c_lin_expmxy(tau, S);
+            x = x0 * wfun(tau, S) + M * c_lin_expmxy(tau, S);
     }
     return x;
 }
