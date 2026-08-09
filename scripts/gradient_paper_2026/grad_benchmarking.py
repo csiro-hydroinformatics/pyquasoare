@@ -428,8 +428,6 @@ def process(config, script_paths, logger, data):
     dgro_route = np.zeros((nres, nreaches))
     dgro_route[k + 2, k] = 1
 
-    ddemrr_route = np.zeros(nreaches)
-
     areas = np.ones(nreaches) * modref.area
     x0 = 0.5
 
@@ -512,7 +510,6 @@ def process(config, script_paths, logger, data):
                                                   gro_route,
                                                   dgro_route[res],
                                                   demrr_route,
-                                                  ddemrr_route,
                                                   out)
         dt_bench = time.time() - t0
 
@@ -641,9 +638,21 @@ def process(config, script_paths, logger, data):
             err = np.abs(dfluxes_bench_c - dfluxes_quas_c)
 
             import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(nrows=2, sharex=True,
+                                    layout="tight",
+                                    figsize=(12, 7))
+            ax = axs[0]
+            b = fluxes_bench_c[:, 0, 5]
+            q = fluxes_quas_c[:, 0, 5]
+            ax.plot(b, label="bench")
+            ax.plot(q, label="quas")
+            ax.legend(loc=2)
+            tax = ax.twinx()
+            tax.plot(b - q, color="0.5", lw=0.8)
+
+            ax = axs[1]
             db = dfluxes_bench_c[:, 0, 0, 5]
             dq = dfluxes_quas_c[:, 0, 0, 5]
-            fig, ax = plt.subplots()
             ax.plot(db, label="bench")
             ax.plot(dq, label="quas")
             tax = ax.twinx()
