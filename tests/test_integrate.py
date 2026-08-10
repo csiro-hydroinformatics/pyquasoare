@@ -24,18 +24,21 @@ np.random.seed(5446)
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-LOGGER = iutils.get_logger("integrate",
-                           console=False,
-                           flog=FTEST / "test_integrate.log")
-LOGGER_DEBUG = iutils.get_logger("integrate",
-                                 console=True,
-                                 flog=FTEST / "test_integrate.log")
+LOGGERS = {}
 
-def get_logger(debug_mode):
+def get_logger(debug_mode, logger_name="integrate"):
     if debug_mode:
-        return LOGGER_DEBUG
+        key = f"{logger_name}-debug"
+        console = True
     else:
-        return LOGGER
+        key = f"{logger_name}-normal"
+        console = False
+
+    if key not in LOGGERS:
+        LOGGERS[key] = iutils.get_logger(logger_name,
+                                         console=console,
+                                         flog=FTEST / f"test_{logger_name}.log")
+    return LOGGERS[key]
 
 
 def test_find_alpha(allclose):
@@ -368,8 +371,9 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
                           debug_mode):
     logger = get_logger(debug_mode)
     cname, case, params, s0s, Tmax = generate_samples
-    if case == 1:
+    if case == 1 and vectors == "rand":
         logger.info("")
+        logger.info("-- Test increment fluxes --")
 
     ntry = len(params)
     errbal_max = 0
@@ -545,8 +549,10 @@ def test_integrate_doc():
         assert np.all(~np.isnan(fluxes))
 
 
-def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function):
+def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function,
+                                          debug_mode):
     fname, fun, dfun, _, inflow, (alpha0, alpha1) = reservoir_function
+    logger = get_logger(debug_mode)
 
     # Reservoir functions
     inp = lambda x: np.ones_like(x) * inflow

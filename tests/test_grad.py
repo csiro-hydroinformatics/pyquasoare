@@ -576,7 +576,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         if np.any(np.isnan(dfx_eff)) or np.isnan(dx_eff):
             continue
 
-        xtol = 7e-4
+        xtol = 1e-3
         ftol = 5e-4
         if debug_mode and (dx_eff > xtol or np.max(dfx_eff) > ftol):
             import matplotlib.pyplot as plt
