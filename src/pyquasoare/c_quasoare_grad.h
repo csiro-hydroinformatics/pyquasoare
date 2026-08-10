@@ -37,7 +37,7 @@ double c_grad_forward(double M, double S, double t0, double x0, double t);
 double c_grad_inverse(double M, double S, double x0, double x1);
 
 int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
-                     unsigned int check_potential_inflow_pos,
+                     unsigned int enforce_potential_inflow_pos,
                      double *alphas,
                      double timestep,
                      double gamma,
@@ -58,7 +58,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
 int c_grad_reservoir(int nalphas, unsigned int nval,
                     unsigned int errors,
-                    unsigned int check_potential_inflow_pos,
+                    unsigned int enforce_potential_inflow_pos,
                     double * alphas,
                     double timestep,
                     double gamma,
@@ -74,7 +74,7 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 
 int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
                  unsigned int errors,
-                 unsigned int check_potential_inflow_pos,
+                 unsigned int enforce_potential_inflow_pos,
                  double * alphas,
                  double timestep,
                  double * gammas,
