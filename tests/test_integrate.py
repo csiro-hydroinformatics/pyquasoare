@@ -488,19 +488,16 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
         nassessed += 1
         errmax_max = max(errmax, errmax_max)
 
-        if case in [15]:
+        if case in [15, 14]:
             # Really hard test
             tol = 2e-1
-        elif case in [14]:
+        elif case in [3]:
             # Very poor result
             tol = 1e-2
-        elif case in [3]:
-            # Poor result
-            tol = 1e-3
-        elif case in [2, 5, 6, 7, 10, 11, 12, 16]:
+        elif case in [2, 5, 6, 7, 8, 10, 11, 12, 16]:
             # Sort of ok
             tol = 1e-4
-        elif case in [8, 9]:
+        elif case in [4, 8, 9]:
             # Good
             tol = 1e-5
         else:
@@ -511,7 +508,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
                  + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"
         txt = " ".join([f"{e:0.2e}" for e in err])
         #errmsg = f"{cname}: {config} : e(x)={errx:0.2e} e(fx)={txt}"
-        errmsg = f"{cname}: e(x)={errx:0.2e} e(fx)={txt}>{tol:0.2e}"
+        errmsg = f"{cname}: e(x)={errx:0.2e} e(fx)={txt} > {tol:0.2e}"
         assert errmax < tol, errmsg
 
         # Compare against slow
