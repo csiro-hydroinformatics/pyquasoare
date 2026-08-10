@@ -458,6 +458,38 @@ def test_grad_reservoir_nan(debug_mode):
     assert np.all(~np.isnan(fx1))
 
 
+def test_grad_reservoir_specific(debug_mode, allclose):
+    siteid = "203014"
+    reservoir = "linrouting"
+    start, end = 14100, 14130
+    demand = 0.5
+    timestep = 1.
+    gamma = 100.
+    Qstars, scalings = get_data(siteid, reservoir, timestep,
+                                gamma, demand, start, end)
+    alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
+
+    # Quad
+    x0 = 0.5
+    n1, x1, fx1 = models.quad_model(alphas, scalings, coefs,
+                                    x0, timestep)
+    fx1 *= gamma / timestep
+    fx1 = np.column_stack([fx1,
+                           -Qstars[:, 0] + fx1[:, 0],
+                           -Qstars[:, 1] + fx1[:, 1],
+                           -Qstars[:, 0] + fx1[:, 0] + fx1[:, 2]])
+
+    # Lin
+    fxs = np.ones(3)
+    n2, x2, dx2, fx2, dfx2 = gradients.grad_reservoir(alphas, gamma,
+                                                      Qstars, coefs_lin,
+                                                      timestep, x0,
+                                                      flux_scalings=fxs,
+                                                      errors="raise")
+    assert allclose(x1, x2)
+    assert allclose(fx1, fx2)
+
+
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
@@ -468,7 +500,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
                         flux_scalings, allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
     if debug_mode:
-        start, end = 6400, 6410
+        start, end = 14100, 14130
     else:
         start, end = None, None
     Qstars, scalings = get_data(siteid, reservoir, timestep,
