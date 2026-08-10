@@ -12,6 +12,8 @@ from hydrodiy.io import iutils
 from pyquasoare import approx, slow
 import c_pyquasoare
 
+from loggers import get_logger
+
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
@@ -19,7 +21,7 @@ FTEST = source_file.parent
 
 NCASES = 16
 
-LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
+LOGGER = get_logger(False, "approx")
 
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \

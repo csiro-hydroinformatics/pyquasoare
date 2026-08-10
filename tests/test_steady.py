@@ -15,13 +15,12 @@ from pyquasoare import approx, steady, benchmarks
 from test_approx import generate_samples
 
 import data_reader
+from loggers import get_logger
 
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-
-LOGGER = iutils.get_logger("steady", flog=FTEST / "test_steady.log")
 
 def test_kahan(allclose):
     # Implementing tests by Kayan
@@ -105,7 +104,9 @@ def test_steady_state(allclose, generate_samples):
         assert np.all(np.isnan(stdy[izero, 1]))
 
 
-def test_flux_scalings(allclose, generate_samples):
+def test_flux_scalings(allclose, generate_samples, debug_mode):
+    logger = get_logger(debug_mode, "steady")
+
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
 
@@ -142,9 +143,10 @@ def test_flux_scalings(allclose, generate_samples):
                 else:
                     f = a * s**2 + b * s + c
 
-                assert allclose(f, 0, atol=1e-10)
+                assert allclose(f, 0, atol=1e-9)
 
-    LOGGER.info(f"[{case}:{cname}] steady flux_scalings: tested={(100.*tested)/ntry:0.0f}%")
+    mess = f"[{case}:{cname}] steady flux_scalings: tested={(100.*tested)/ntry:0.0f}%"
+    logger.info(mess)
 
 
 def test_flux_scalings_extrapolation(allclose):

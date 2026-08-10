@@ -297,7 +297,7 @@ int c_quad_fluxes_increment(int nfluxes,
     //        s0, s1, s1-s0);
 
     /* Calculate integral of S and S^2 */
-    if (term0 * QUASOARE_FLUX_TERM_RTOL1 > term12){// || isnull(fabs(s1 - s0))) {
+    if (term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 || isnull(term12)) {
         /* Constant case where dx/dt = c */
         integS = (s0 + c * tau / 2) * tau;
         integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;

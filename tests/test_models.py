@@ -20,12 +20,13 @@ from pygme.models import gr4j
 
 import data_reader
 
+from loggers import get_logger
+
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-LOGGER = iutils.get_logger("models", flog=FTEST / "test_models.log")
-
+LOGGER = get_logger(False, "models")
 
 def test_quad_model_errors(allclose):
     nalphas = 20
