@@ -425,6 +425,39 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         x_start = x1
 
 
+def test_grad_reservoir_nan(debug_mode):
+    timestep = 1.
+    siteid = "203004"
+    df = data_reader.get_data(siteid, "daily")
+    #df = df.iloc[:1]
+
+    mod = gradients.MultiReservoirModel(2, errors="ignore")
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
+    mod.gammas = [5., 400.]
+    mod.allocate(len(df), timestep=timestep)
+
+    Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
+    Qst0[:, -1] *= -1
+    Qst0 = np.ascontiguousarray(Qst0)
+
+    coefs = np.ascontiguousarray(mod.coefs_linear[0])
+    n0, x0, _, fx0, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[0]),
+                                                 mod.gammas[0],
+                                                 Qst0,
+                                                 coefs,
+                                                 timestep, mod.x0[0])
+
+    Qst1 = np.ascontiguousarray(-fx0[:, 3:5])
+    n1, x1, _, fx1, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[1]),
+                                                 mod.gammas[1],
+                                                 Qst1,
+                                                 np.ascontiguousarray(mod.coefs_linear[1]),
+                                                 timestep, mod.x0[1],
+                                                 errors="raise")
+    assert np.all(~np.isnan(fx1))
+
+
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
@@ -690,7 +723,7 @@ def test_grad_model_clone(allclose):
         [1., 1.2, 1.]
     ])
 def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
-    mod = gradients.MultiReservoirModel(6, errors="ignore")
+    mod = gradients.MultiReservoirModel(6, errors="raise")
 
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
