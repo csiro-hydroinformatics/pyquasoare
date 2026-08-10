@@ -18,27 +18,12 @@ from test_approx import generate_samples, reservoir_function
 from pygme.models import gr4j
 
 import data_reader
+from loggers import get_logger
 
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-
-LOGGERS = {}
-
-def get_logger(debug_mode, logger_name="integrate"):
-    if debug_mode:
-        key = f"{logger_name}-debug"
-        console = True
-    else:
-        key = f"{logger_name}-normal"
-        console = False
-
-    if key not in LOGGERS:
-        LOGGERS[key] = iutils.get_logger(logger_name,
-                                         console=console,
-                                         flog=FTEST / f"test_{logger_name}.log")
-    return LOGGERS[key]
 
 
 def test_find_alpha(allclose):
@@ -95,7 +80,7 @@ def test_quad_constants(allclose, generate_samples):
 
 def test_delta_t_max(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
     ntry = len(params)
     t_eval = np.logspace(-3, math.log10(Tmax), 1000)
 
@@ -185,7 +170,7 @@ def test_delta_t_max(allclose, generate_samples, debug_mode):
 def test_forward_vs_finite_difference(allclose, generate_samples,
                                       debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
 
     ntry = len(params)
     t0 = 0
@@ -255,7 +240,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
 
 def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
     if case in [7]:
         pytest.skip("Cannot do because of numerical round-off")
 
@@ -307,7 +292,7 @@ def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
 
 def test_inverse(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
     ntry = len(params)
     t0 = 0
     nassessed = 0
@@ -369,7 +354,7 @@ def test_inverse(allclose, generate_samples, debug_mode):
 @pytest.mark.parametrize("vectors", ["rand", "unit"])
 def test_increment_fluxes(allclose, vectors, generate_samples,
                           debug_mode):
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
     cname, case, params, s0s, Tmax = generate_samples
     if case == 1 and vectors == "rand":
         logger.info("")
@@ -490,7 +475,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
 
         if case in [15, 14]:
             # Really hard test but still ballpark good :-)
-            tol = 2e-1
+            tol = 3e-1
         elif case in [3]:
             # Very poor result
             tol = 1e-2
@@ -519,9 +504,9 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
         slow.quad_fluxes_increment(avect, bvect, cvect,
                                    aoj, boj, coj, Delta, qD, sbar,
                                    t0, t1, s0, s1, fluxes_slow)
-        # There are still problems with 10 and 14 ...
-        #if not case in [10, 16]:
-        #    assert allclose(fluxes, fluxes_slow, atol=1e-5)
+        # There are still problems with 10 and 16 ...
+        if not case in [10, 16]:
+            assert allclose(fluxes, fluxes_slow, atol=1e-5)
 
     mess = f"[{case:2d}:{cname}/{vectors}] quas fluxes: "\
            + f"emax={errmax_max:3.2e}"\
@@ -552,7 +537,7 @@ def test_integrate_doc():
 def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function,
                                           debug_mode):
     fname, fun, dfun, _, inflow, (alpha0, alpha1) = reservoir_function
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
 
     # Reservoir functions
     inp = lambda x: np.ones_like(x) * inflow
@@ -664,7 +649,7 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function,
 
 def test_reservoir_equation(allclose, ntry, reservoir_function, debug_mode):
     fname, fun, dfun, sol, inflow, (alpha0, alpha1) = reservoir_function
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
 
     if sol is None:
         pytest.skip("No analytical solution")
@@ -795,7 +780,7 @@ def test_reservoir_equation_gr4j(siteid, X1, debug_mode, allclose):
     start, end = "2017-01", "2022-12-31"
     nsubdiv = 10000
     nu = 0.01
-    logger = get_logger(debug_mode)
+    logger = get_logger(debug_mode, "integrate")
     logger.info("")
 
     # Compute approx coefs

@@ -18,12 +18,13 @@ from test_approx import generate_samples, reservoir_function
 from pygme.models import gr4j
 
 import data_reader
+from loggers import get_logger
 
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
-LOGGER = iutils.get_logger("benchmarks", flog=FTEST / "test_benchmarks.log")
+LOGGER = get_logger(False, "benchmarks")
 
 def test_benchmarks_error(allclose):
     siteid = data_reader.SITEIDS[0]
@@ -36,7 +37,6 @@ def test_benchmarks_error(allclose):
     X1, s0 = 1000., -1.
     with pytest.raises(ValueError, match="gr4jprod"):
         gp = benchmarks.gr4jprod(1, X1, s0, inputs)
-
 
     inflows = inputs[:, 0]
     timestep, theta, nu, q0, s0 = 1., -1., 2., 1., 0.

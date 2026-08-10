@@ -226,7 +226,7 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     term12 = max(term1, term2)
 
     # Integrate S and S2
-    if term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 or abs(s1 - s0) == 0:
+    if term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 or term12 == 0:
         integS = s0 * tau + c * tau2 / 2
         integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.
 
