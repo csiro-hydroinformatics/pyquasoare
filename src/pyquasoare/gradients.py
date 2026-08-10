@@ -119,7 +119,7 @@ def grad_reservoir(alphas, gamma,
                    fluxes=None,
                    dfluxes=None,
                    niter=None,
-                   check_potential_inflow_pos=True,
+                   enforce_potential_inflow_pos=True,
                    errors="ignore"):
     """ Integrate the approximate reservoir equation with initial initial
     condition x0 over a series of P timesteps. The reservoir is
@@ -180,7 +180,7 @@ def grad_reservoir(alphas, gamma,
         when output arrays are not allocated within the
         function. This is useful if the function is used repeatedly.
         If None, the arrays are allocated during every function run.
-    check_potential_inflow_pos: bool
+    enforce_potential_inflow_pos: bool
         Verifies that potential inflows are always positive.
     errors: str
         - if 'ignore', then skip over error during time step integration
@@ -218,7 +218,7 @@ def grad_reservoir(alphas, gamma,
     errors_check(errors)
     nval = Qstars.shape[0]
     nvariables = VARTYPE_NUMBER
-    check_potential_inflow_pos = int(check_potential_inflow_pos)
+    enforce_potential_inflow_pos = int(enforce_potential_inflow_pos)
 
     if flux_scalings is None:
         flux_scalings = np.ones(NFLUXES_INPUTS)
@@ -241,7 +241,7 @@ def grad_reservoir(alphas, gamma,
 
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_reservoir(ierrors,
-                                            check_potential_inflow_pos,
+                                            enforce_potential_inflow_pos,
                                             alphas,
                                             timestep,
                                             gamma,
@@ -276,11 +276,11 @@ def grad_model(alphas, gammas,
                dfluxes=None,
                niter=None,
                dQstars_ext=None,
-               check_potential_inflow_pos=True,
+               enforce_potential_inflow_pos=True,
                errors="ignore"):
     nreservoirs = alphas.shape[0]
     nval = Qstars.shape[0]
-    check_potential_inflow_pos = int(check_potential_inflow_pos)
+    enforce_potential_inflow_pos = int(enforce_potential_inflow_pos)
 
     if variables_reservoir_id is None:
         variables_reservoir_id = np.arange(nreservoirs, dtype=np.int32)
@@ -307,7 +307,7 @@ def grad_model(alphas, gammas,
 
     ierrors = get_errorsid(errors)
     ierr = c_pyquasoare_grad.grad_model(ierrors,
-                                        check_potential_inflow_pos,
+                                        enforce_potential_inflow_pos,
                                         alphas,
                                         timestep,
                                         gammas,
@@ -519,8 +519,8 @@ class MultiReservoirModel():
     def __init__(self, nreservoirs,
                  nalphas=10,
                  errors="ignore",
-                 check_potential_inflow_pos=True):
-        self._check_potential_inflow_pos = check_potential_inflow_pos
+                 enforce_potential_inflow_pos=True):
+        self._enforce_potential_inflow_pos = enforce_potential_inflow_pos
         self._network = Network(nreservoirs)
         self._errors = errors
         self._gammas = None
@@ -773,5 +773,5 @@ class MultiReservoirModel():
                    niter=self.niter,
                    dQstars_ext=self.dQstars_ext,
                    errors=self.errors,
-                   check_potential_inflow_pos=self._check_potential_inflow_pos)
+                   enforce_potential_inflow_pos=self._enforce_potential_inflow_pos)
 
