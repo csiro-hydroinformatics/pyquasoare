@@ -487,6 +487,12 @@ def test_grad_reservoir_specific(debug_mode, allclose):
                                                       flux_scalings=fxs,
                                                       errors="raise")
     assert allclose(x1, x2)
+    import matplotlib.pyplot as plt
+    plt.close("all")
+    plt.plot(fx1[:, 2])
+    plt.plot(fx2[:, 2])
+    plt.show()
+
     assert allclose(fx1, fx2)
 
 
