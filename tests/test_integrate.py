@@ -481,11 +481,6 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
         err = np.abs(np.arcsinh(fluxes) - np.arcsinh(expected))
         err = err[:-1] if vectors == "unit" else err
         errmax = err.max()
-        config = f"a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
-                 + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"
-        txt = " ".join([f"{e:0.2e}" for e in err])
-        #errmsg = f"{cname}: {config} : e(x)={errx:0.2e} e(fx)={txt}"
-        errmsg = f"{cname}: e(x)={errx:0.2e} e(fx)={txt}"
 
         # Count tests
         if Delta > 0:
@@ -512,6 +507,11 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
             # Very good
             tol = 1e-6
 
+        config = f"a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
+                 + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"
+        txt = " ".join([f"{e:0.2e}" for e in err])
+        #errmsg = f"{cname}: {config} : e(x)={errx:0.2e} e(fx)={txt}"
+        errmsg = f"{cname}: e(x)={errx:0.2e} e(fx)={txt}>{tol:0.2e}"
         assert errmax < tol, errmsg
 
         # Compare against slow

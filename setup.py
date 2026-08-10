@@ -3,7 +3,24 @@
 import numpy
 
 from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 from Cython.Build import cythonize
+
+# Customize compilation depending on compiler
+class CustomBuildExt(build_ext):
+    def build_extension(self, ext):
+        is_msvc = self.compiler.compiler_type == "msvc"
+        if is_msvc:
+            ext.extra_compile_args += ["/O2"]  # MSVC has no /O3
+        else:
+            # march=native : tells GCC/Clang to detect the CPU architecture
+            # of the machine doing the compiling and generate machine
+            # code that uses every instruction set extension that CPU supports
+            # — rather than targeting a generic, portable baseline.
+            ext.extra_compile_args += ["-O3", "-march=native"]
+
+        super().build_extension(ext)
+
 
 extensions = [
     Extension(name="c_pyquasoare",
@@ -40,8 +57,14 @@ extensions = [
 
 setup(
     name="pyquasoare",
-    ext_modules=cythonize(extensions, \
-            compiler_directives={"language_level": 3, "profile": False})
+    # boundscheck : Does not check the bounds of numpy arrays
+    # passed to cython. Potentially dangerous!
+    ext_modules=cythonize(extensions,
+                          compiler_directives={
+                            "language_level": 3,
+                            "boundscheck": False
+                            }),
+    cmdclass={"build_ext": CustomBuildExt}
 )
 
 
