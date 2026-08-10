@@ -291,8 +291,13 @@ int c_quad_fluxes_increment(int nfluxes,
     term2 = fabs(a * smax * smax);
     term12 = term1 > term2 ? term1 : term2;
 
+    //fprintf(stdout, "\n\nabc=%0.6e %0.6e %0.6e D=%0.6e\n",
+    //        a, b, c, Delta);
+    //fprintf(stdout, "s=%0.6e %0.6e ds=%0.6e\n",
+    //        s0, s1, s1-s0);
+
     /* Calculate integral of S and S^2 */
-    if (term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 || isnull(fabs(s1 - s0))) {
+    if (term0 * QUASOARE_FLUX_TERM_RTOL1 > term12){// || isnull(fabs(s1 - s0))) {
         /* Constant case where dx/dt = c */
         integS = (s0 + c * tau / 2) * tau;
         integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
@@ -347,6 +352,7 @@ int c_quad_fluxes_increment(int nfluxes,
         c_check += cij;
 
         fluxes[i] += aij * integS2 + bij * integS + cij * tau;
+        //fprintf(stdout, "fx%d = %0.2e\n", i, fluxes[i]);
     }
 
     if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
