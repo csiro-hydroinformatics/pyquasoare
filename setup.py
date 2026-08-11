@@ -6,6 +6,36 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 from Cython.Build import cythonize
 
+# Build directives. Aggressive means
+# faster, but less safe compilation
+AGGRESSIVE = True
+
+directives = {
+   # Bounds/overflow/safety checks removed
+   "boundscheck": not AGGRESSIVE,
+   "wraparound": not AGGRESSIVE,
+   "initializedcheck": not AGGRESSIVE,
+   "nonecheck": not AGGRESSIVE,
+   "cdivision": AGGRESSIVE,
+   "cdivision_warnings": not AGGRESSIVE,
+
+   # Python-interaction overhead removed
+   "profile": not AGGRESSIVE,
+   "linetrace": not AGGRESSIVE,
+   "embedsignature": not AGGRESSIVE,
+
+   # Aggressive numeric/control-flow behavior
+   "overflowcheck": not AGGRESSIVE,
+   "overflowcheck.fold": not AGGRESSIVE,
+
+   # Compilation mode
+   "language_level": "3",
+   "binding": False,
+
+   # Loop/iteration optimizations
+   "infer_types": True
+   }
+
 # Customize compilation depending on compiler
 class CustomBuildExt(build_ext):
     def build_extension(self, ext):
@@ -60,31 +90,8 @@ setup(
     # Configure cython for maximum speed, i.e.
     # disable all cython safety nets... potentially dangerous
     ext_modules=cythonize(extensions,
-                          compiler_directives={
-                            # Bounds/overflow/safety checks removed
-                            "boundscheck": False,
-                            "wraparound": False,
-                            "initializedcheck": False,
-                            "nonecheck": False,
-                            "cdivision": True,
-                            "cdivision_warnings": False,
-
-                            # Python-interaction overhead removed
-                            "profile": False,
-                            "linetrace": False,
-                            "embedsignature": False,
-
-                            # Aggressive numeric/control-flow behavior
-                            "overflowcheck": False,
-                            "overflowcheck.fold": False,
-
-                            # Compilation mode
-                            "language_level": "3",
-                            "binding": False,
-
-                            # Loop/iteration optimizations
-                            "infer_types": True,
-                        }),
+                          compiler_directives=directives
+),
     cmdclass={"build_ext": CustomBuildExt}
 )
 
