@@ -36,18 +36,19 @@ directives = {
    "infer_types": True
    }
 
-# Customize compilation depending on compiler
+# Customize compilation to take into account aggressive options
 class CustomBuildExt(build_ext):
     def build_extension(self, ext):
         is_msvc = self.compiler.compiler_type == "msvc"
-        if is_msvc:
-            ext.extra_compile_args += ["/O2"]  # MSVC has no /O3
-        else:
-            # march=native : tells GCC/Clang to detect the CPU architecture
-            # of the machine doing the compiling and generate machine
-            # code that uses every instruction set extension that CPU supports
-            # — rather than targeting a generic, portable baseline.
-            ext.extra_compile_args += ["-O3", "-march=native"]
+        if AGGRESSIVE:
+            if is_msvc:
+                ext.extra_compile_args += ["/O2"]  # MSVC has no /O3
+            else:
+                # march=native : tells GCC/Clang to detect the CPU architecture
+                # of the machine doing the compiling and generate machine
+                # code that uses every instruction set extension that CPU supports
+                # — rather than targeting a generic, portable baseline.
+                ext.extra_compile_args += ["-O3", "-march=native"]
 
         super().build_extension(ext)
 
@@ -87,11 +88,8 @@ extensions = [
 
 setup(
     name="pyquasoare",
-    # Configure cython for maximum speed, i.e.
-    # disable all cython safety nets... potentially dangerous
     ext_modules=cythonize(extensions,
-                          compiler_directives=directives
-),
+                          compiler_directives=directives),
     cmdclass={"build_ext": CustomBuildExt}
 )
 
