@@ -808,7 +808,7 @@ def process(config, script_paths, logger, data):
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
         results.loc[irepeat, "dfx_errmax_quasoare"] = dfx_err.max()
 
-        if dfx_err.max() > 5e-2:
+        if False: #dfx_err.max() > 1e-3:
             err = np.abs(dfluxes_bench_c - dfluxes_quas_c)
 
             import matplotlib.pyplot as plt
