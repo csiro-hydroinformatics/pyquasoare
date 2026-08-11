@@ -300,26 +300,88 @@ double gb_sd_integrate_x_d(double a, double ad, double b, double bd, double c,
         term2 = -(a*smax*smax);
     term12 = (term1 > term2 ? term1 : term2);
     result1 = gb_sd_isnull_c(term12);
+
+    /* gradient variables */
+    c_b_ratiod = (cd-c*bd/b)/b;
+    expmbd = gb_sd_expmxy_d(tau, b, bd, &expmb);
+    expm2bd = gb_sd_expmxy_d(tau, 2*b, 2*bd, &expm2b);
+    omegad = gb_sd_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
+
+    /* Integrals of x and x2 */
     if (term0*1e-5 > term12 || result1) {
-        integSd = tau*(s0d+tau*cd/2);
         integS = (s0+c*tau/2)*tau;
-        integS2d = tau*(2*s0*s0d+tau*(c*s0d+s0*cd)+tau*tau*2*c*cd/3.);
         integS2 = (s0*s0+s0*c*tau+c*c*tau*tau/3.)*tau;
     } else if (term1*1e-5 > term2) {
+        c_b_ratio = c/b;
+        integS = s0*expmb + (expmb-tau)*c_b_ratio;
+        temp = tau + expm2b - 2*expmb;
+        temp0 = 2*s0*c_b_ratio;
+        integS2 = s0*s0*expm2b + c_b_ratio*c_b_ratio*temp + temp0*(expm2b-
+            expmb);
+    } else {
+        if (Delta >= 0.0)
+            fabs1 = Delta;
+        else
+            fabs1 = -Delta;
+        if (fabs1 < 1e-15) {
+            integS = sbar*tau - result10;
+            temp0 = (s1-s0-b*integS-tau*c)/a;
+            integS2 = temp0;
+        } else {
+            if (qD*tau > 10 && Delta > 0) {
+                temp0 = (log(2)-tau*qD)/a;
+                part1d = (-(tau*qDd)-temp0*ad)/a;
+                part1 = temp0;
+            } else {
+                // log1p is not known to Tapenade. Revert to naive form
+                // .. but subsequently modified back to expm1 to improve numerics ...
+                arg1d = -(omega*omega*signDd+signD*2*omega*omegad);
+                arg1 = 1 - signD*omega*omega;
+                //temp0 = log(arg1)/(2.*a);
+                temp0 = log1p(-signD*omega*omega)/(2.*a);
+
+                part1d = (arg1d/arg1-temp0*2.*ad)/(2.*a);
+                part1 = temp0;
+            }
+            temp0 = omega/qD;
+            result10d = gb_sd_logpxy_d((s0-sbar)/qD*omega, temp0*(s0d-sbard) +
+                                       (s0-sbar)*(omegad-temp0*qDd)/qD, a, ad,
+                                       &result10);
+            part2 = -result10;
+            integS = sbar*tau + part1 + part2;
+            temp0 = (s1-s0-b*integS-tau*c)/a;
+            integS2 = temp0;
+
+            //if(fabs(a) < 1e-5) {
+            //    fprintf(stdout, "abc=%0.3e %0.3e %0.3e D=%0.3e s0=%0.3e t=%0.3e\n",
+            //            a, b, c, Delta, s0, tau);
+            //    fprintf(stdout, "terms=%0.3e %0.3e %0.3e\n",
+            //            term0, term1, term2);
+            //    fprintf(stdout, "i1=%0.3e %0.3e / i2=%0.3e %0.3e\n",
+            //            integS, integSd, integS2, integS2d);
+            //}
+        }
+    }
+
+    /* Gradient of integral of x and x2
+     * Different loop to change balance of terms */
+    if (term0*1e-5 > term12 || result1) {
+        integSd = tau*(s0d+tau*cd/2);
+        integS2d = tau*(2*s0*s0d+tau*(c*s0d+s0*cd)+tau*tau*2*c*cd/3.);
+
+    /* !!!! Here the balance is higher than for the integral values
+     * above (1e-4 vs 1e-5) because the gradient is unstable for very
+     * small values of a */
+    } else if (term1*1e-4 > term2) {
         c_b_ratiod = (cd-c*bd/b)/b;
         c_b_ratio = c/b;
-        expmbd = gb_sd_expmxy_d(tau, b, bd, &expmb);
         // (exp(b * tau) - 1) / b
         integSd = expmb*s0d + (s0+c_b_ratio)*expmbd + (expmb-tau)*c_b_ratiod;
-        integS = s0*expmb + (expmb-tau)*c_b_ratio;
-        expm2bd = gb_sd_expmxy_d(tau, 2*b, 2*bd, &expm2b);
         temp = tau + expm2b - 2*expmb;
         temp0 = 2*s0*c_b_ratio;
         integS2d = expm2b*2*s0*s0d + s0*s0*expm2bd + temp*2*c_b_ratio*
             c_b_ratiod + c_b_ratio*c_b_ratio*(expm2bd-2*expmbd) + (expm2b-
             expmb)*(c_b_ratio*2*s0d+2*s0*c_b_ratiod) + temp0*(expm2bd-expmbd);
-        integS2 = s0*s0*expm2b + c_b_ratio*c_b_ratio*temp + temp0*(expm2b-
-            expmb);
     } else {
         if (Delta >= 0.0)
             fabs1 = Delta;
@@ -329,10 +391,8 @@ double gb_sd_integrate_x_d(double a, double ad, double b, double bd, double c,
             result10d = gb_sd_logpxy_d(tau*(s0-sbar), tau*(s0d-sbard), a, ad,
                                        &result10);
             integSd = tau*sbard - result10d;
-            integS = sbar*tau - result10;
             temp0 = (s1-s0-b*integS-tau*c)/a;
             integS2d = (s1d-s0d-integS*bd-b*integSd-tau*cd-temp0*ad)/a;
-            integS2 = temp0;
         } else {
             omegad = gb_sd_omega_fun_d(qD*tau, tau*qDd, Delta, &omega);
             if (qD*tau > 10 && Delta > 0) {
@@ -357,21 +417,11 @@ double gb_sd_integrate_x_d(double a, double ad, double b, double bd, double c,
             part2d = -result10d;
             part2 = -result10;
             integSd = tau*sbard + part1d + part2d;
-            integS = sbar*tau + part1 + part2;
             temp0 = (s1-s0-b*integS-tau*c)/a;
             integS2d = (s1d-s0d-integS*bd-b*integSd-tau*cd-temp0*ad)/a;
-            integS2 = temp0;
-
-            //if(fabs(a) < 1e-5) {
-            //    fprintf(stdout, "abc=%0.3e %0.3e %0.3e D=%0.3e s0=%0.3e t=%0.3e\n",
-            //            a, b, c, Delta, s0, tau);
-            //    fprintf(stdout, "terms=%0.3e %0.3e %0.3e\n",
-            //            term0, term1, term2);
-            //    fprintf(stdout, "i1=%0.3e %0.3e / i2=%0.3e %0.3e\n",
-            //            integS, integSd, integS2, integS2d);
-            //}
         }
     }
+
     for (ii1 = 0; ii1 < 2; ++ii1)
         integd[ii1] = 0.0;
     integd[0] = integSd;
