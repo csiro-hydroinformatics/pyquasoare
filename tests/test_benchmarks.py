@@ -68,7 +68,7 @@ def test_gr4jprod_nsubdiv(allclose):
     s0 = X1/2
     gp1 = benchmarks.gr4jprod(1, X1, s0, inputs)
     gp100 = benchmarks.gr4jprod(100, X1, s0, inputs)
-    assert np.all(~np.allclose(gp1, gp100, atol=1e-5))
+    assert np.all(np.invert(np.allclose(gp1, gp100, atol=1e-5)))
 
 
 def test_gr4jprod_vs_gr4j(allclose):
@@ -187,7 +187,7 @@ def test_nonlinrouting_vs_splitting(allclose):
                                         nu, q0, s0, inflows)
             sim100 = benchmarks.nonlinrouting(100, timestep, theta, \
                                         nu, q0, s0, inflows)
-            assert np.all(~np.allclose(sim1, sim100, atol=1e-5))
+            assert np.all(np.invert(np.allclose(sim1, sim100, atol=1e-5)))
 
             # Test routing with very small storage
             # Expect inflow==outflow

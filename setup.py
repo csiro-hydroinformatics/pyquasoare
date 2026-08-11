@@ -57,13 +57,34 @@ extensions = [
 
 setup(
     name="pyquasoare",
-    # boundscheck : Does not check the bounds of numpy arrays
-    # passed to cython. Potentially dangerous!
+    # Configure cython for maximum speed, i.e.
+    # disable all cython safety nets... potentially dangerous
     ext_modules=cythonize(extensions,
                           compiler_directives={
-                            "language_level": 3,
-                            "boundscheck": False
-                            }),
+                            # Bounds/overflow/safety checks removed
+                            "boundscheck": False,
+                            "wraparound": False,
+                            "initializedcheck": False,
+                            "nonecheck": False,
+                            "cdivision": True,
+                            "cdivision_warnings": False,
+
+                            # Python-interaction overhead removed
+                            "profile": False,
+                            "linetrace": False,
+                            "embedsignature": False,
+
+                            # Aggressive numeric/control-flow behavior
+                            "overflowcheck": False,
+                            "overflowcheck.fold": False,
+
+                            # Compilation mode
+                            "language_level": "3",
+                            "binding": False,
+
+                            # Loop/iteration optimizations
+                            "infer_types": True,
+                        }),
     cmdclass={"build_ext": CustomBuildExt}
 )
 

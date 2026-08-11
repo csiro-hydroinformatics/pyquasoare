@@ -110,7 +110,7 @@ double gb_rr_integrate_x(double a, double b, double c, double constants[4],
     term2 = fabs(a * smax * smax);
     term12 = term1 > term2 ? term1 : term2;
 
-    if (term0 * 1e-5 > term12 || gb_rr_isnull(fabs(s1 - s0))) {
+    if (term0 * 1e-5 > term12 || gb_rr_isnull(term12)) {
         integS = (s0 + c * tau / 2) * tau;
         integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
     }

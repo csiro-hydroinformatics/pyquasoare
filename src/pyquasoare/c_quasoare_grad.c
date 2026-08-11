@@ -178,6 +178,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     unsigned int ifx_original;
 
     double M = 0., S = 0.;
+    double term0, term1, xmax;
     double mij = 0., sij = 0.;
     double expmb = 0.;
     double flx;
@@ -365,16 +366,19 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         /* Time increment variable */
         tau = t_end - t_start;
 
-        /* Compute the integral of x(t) over the time unsigned interval */
-        if(notnull(S)) {
-            //integ_x = (x_end - x_start - M * tau) / S;
-            /* See c_quasoare_core.c::c_quad_fluxes_increment
-             * for explanation of this code */
-            expmb = c_lin_expmxy(tau, S);
-            integ_x = x_start * expmb + (expmb - tau) * (M / S);
+        /* Compute the integral of x(t) over the time interval
+         * See c_quasoare_core.c::c_quad_fluxes_increment
+         * for explanation of this code */
+        xmax = fabs(x_start) < fabs(x_end) ? fabs(x_end) : fabs(x_start);
+        term0 = fabs(M);
+        term1 = fabs(S * xmax);
+
+        if(term0 * QUASOARE_FLUX_TERM_RTOL1 > term1 || isnull(term1)) {
+            integ_x = (x_start + M * tau / 2) * tau;
         }
         else {
-            integ_x = (x_start + M * tau / 2) * tau;
+            expmb = c_lin_expmxy(tau, S);
+            integ_x = x_start * expmb + (expmb - tau) * (M / S);
         }
 
         /* Increment fluxes during the last unsigned interval */
