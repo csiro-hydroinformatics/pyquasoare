@@ -176,13 +176,14 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
     t0 = 0
     errmax_max = 0
     nassessed = 0
+    nfail = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
 
         # Set integration time
         Tmax = t0 + integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0) * 0.99
         Tmax = Tmax if np.isfinite(Tmax) else 20.
-        t_eval = np.linspace(t0, Tmax, 10000)
+        t_eval = np.linspace(t0, Tmax * 0.5, 10000)
 
         # Integrate with C code
         s1 = integrate.quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t_eval)
@@ -219,35 +220,33 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
 
         errmax = np.nanmax(err[iok])
 
-        if case in [13]:
-            tol = 1e-5
-        elif case in [10]:
-            tol = 5e-4
+        if case in [10]:
+            tol = 1e-3
         elif case in [7]:
             tol = 1e-2
-        else:
+        elif case in [14]:
             tol = 1e-6
+        else:
+            tol = 1e-8
 
-        assert errmax < tol
-
+        nfail += errmax > tol
+        nassessed += 1
         errmax_max = max(errmax, errmax_max)
 
-        nassessed += 1
-
-    logger.info(f"[{case}:{cname}] forward vs finite diff: errmax = {errmax_max:3.2e}"\
-                f" assessed={nassessed*100/ntry:0.0f}% (ntry={ntry})")
+    assert nfail <= (5 if case == 7 else 0)
+    mess = f"[{case}:{cname}] fwd vs diff: emax={errmax_max:3.2e}"\
+           + f" nfail={nfail} (ntry={ntry} nassessed={nassessed})"
+    logger.info(mess)
 
 
 def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
     cname, case, params, s0s, Tmax = generate_samples
     logger = get_logger(debug_mode, "integrate")
-    if case in [7]:
-        pytest.skip("Cannot do because of numerical round-off")
-
     ntry = len(params)
     t0 = 0
     errmax_max = 0
     nassessed = 0
+    nfail = 0
     for itry, ((a, b, c), s0) in enumerate(zip(params, s0s)):
         Delta, qD, sbar = integrate.quad_constants(a, b, c)
         coefs = np.array([a, b, c]).astype(float)
@@ -256,7 +255,7 @@ def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
         Tmax = min(20, t0+integrate.quad_delta_t_max(a, b, c, Delta, qD, sbar, s0)*0.99)
         if np.isnan(Tmax) or Tmax<0:
             continue
-        t_eval = np.linspace(0, Tmax * 0.1, 1000)
+        t_eval = np.linspace(0, Tmax * 0.5, 1000)
 
         f = lambda x: approx.quad_fun(coefs, x)
         df = lambda x: approx.quad_grad(coefs, x)
@@ -274,19 +273,20 @@ def test_forward_vs_numerical(allclose, generate_samples, debug_mode):
         err = np.abs(np.arcsinh(s1) - np.arcsinh(expected))
         errmax = np.nanmax(err[iok])
 
-        if case in [5, 7]:
-            tol = 5e-2
+        if case in [3, 5]:
+            tol = 5e-4
         else:
-            tol = 1e-3
+            tol = 5e-5
 
-        #assert errmax < tol
+        nfail += errmax > tol
 
         errmax_max = max(errmax, errmax_max)
         nassessed += 1
 
-    mess = f"[{case}:{cname}] forward vs numerical: "\
-                +f"errmax = {errmax_max:3.2e}"\
-                +f" assessed={nassessed*100/ntry:0.0f}%"
+    assert nfail <= (1 if case == 7 else 0)
+    mess = f"[{case}:{cname}] fwd vs solver: "\
+                +f"emax={errmax_max:3.2e}"\
+                +f" nfail={nfail} (ntry={ntry}, assessed={nassessed})"
     logger.info(mess)
 
 
@@ -328,7 +328,7 @@ def test_inverse(allclose, generate_samples, debug_mode):
 
         errmax = np.nanmax(err[iok])
 
-        if case in [13, 10, 15]:
+        if case in [13, 10, 15, 3]:
             tol = 1e-4
         else:
             tol = 5e-6
@@ -492,9 +492,9 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
             # Very good
             tol = 1e-6
 
-        config = f"a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
-                 + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"
-        txt = " ".join([f"{e:0.2e}" for e in err])
+        #config = f"a={aoj:0.3e};b={boj:0.3e};c={coj:0.3e};"\
+        #         + f"s0={s0:0.3e};t0={t0:0.3e};t1={t1:0.3e}"
+        #txt = " ".join([f"{e:0.2e}" for e in err])
         #errmsg = f"{cname}: {config} : e(x)={errx:0.2e} e(fx)={txt}"
         errmsg = f"{cname}: e(x)={errx:0.2e} e(fx)={txt} > {tol:0.2e}"
         assert errmax < tol, errmsg

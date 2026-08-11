@@ -236,14 +236,14 @@ double c_quad_forward(double a, double b, double c, double Delta, double qD,
 double c_quad_inverse(double a, double b, double c, double Delta, double qD,
                       double sbar, double s0, double s1){
     if(isnull(a) && isnull(b)){
-        return (s1-s0)/c;
+        return (s1 - s0) / c;
     }
     else if(isnull(a) && notnull(b)){
-        return 1./b*log(fabs((b*s1+c)/(b*s0+c)));
+        return 1. / b * log(fabs((b * s1 + c) / (b * s0 + c)));
     }
     else{
         if(isnull(Delta))
-            return (1./(s0-sbar)-1./(s1-sbar))/a;
+            return (1. / (s0 - sbar) - 1. / (s1 - sbar)) / a;
         else{
             return (c_eta_fun(a *(s1 - sbar) / qD, Delta)
                     - c_eta_fun(a * (s0 - sbar) / qD, Delta)) / qD;
@@ -275,7 +275,6 @@ int c_quad_fluxes_increment(int nfluxes,
     double omega, signD, part1, part2;
     double integS = c_get_nan();
     double integS2 = c_get_nan();
-    double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
 
     /* check integration time */
     if(t1 < t0)
@@ -286,6 +285,7 @@ int c_quad_fluxes_increment(int nfluxes,
 
     /* Decide on computation method depending on order of
      * magnitude of each terms of the equation dx/dt = ax^2 + bx + c */
+    double smax = fabs(s0) < fabs(s1) ? fabs(s1) : fabs(s0);
     term0 = fabs(c);
     term1 = fabs(b * smax);
     term2 = fabs(a * smax * smax);
