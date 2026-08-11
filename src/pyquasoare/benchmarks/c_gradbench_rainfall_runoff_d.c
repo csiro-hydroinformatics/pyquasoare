@@ -231,7 +231,6 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
     double fabs2;
     double fabs3;
     double fabs4;
-    double fabs5;
     int result1;
     double result10;
     double result10d;
@@ -245,18 +244,18 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
     else
         fabs0 = -s0;
     if (s1 >= 0.0)
+        fabs2 = s1;
+    else
+        fabs2 = -s1;
+    if (s1 >= 0.0)
         fabs3 = s1;
     else
         fabs3 = -s1;
-    if (s1 >= 0.0)
-        fabs4 = s1;
-    else
-        fabs4 = -s1;
     if (s0 >= 0.0)
-        fabs5 = s0;
+        fabs4 = s0;
     else
-        fabs5 = -s0;
-    double smax = (fabs0 < fabs3 ? fabs4 : fabs5);
+        fabs4 = -s0;
+    double smax = (fabs0 < fabs2 ? fabs3 : fabs4);
     double integS, integS2, term0, term1, term2, term12;
     double integSd, integS2d;
     double c_b_ratio, expmb, expm2b;
@@ -276,11 +275,7 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
     else
         term2 = -(a*smax*smax);
     term12 = (term1 > term2 ? term1 : term2);
-    if (s1 - s0 >= 0.0)
-        fabs1 = s1 - s0;
-    else
-        fabs1 = -(s1-s0);
-    result1 = gb_rr_isnull_c(fabs1);
+    result1 = gb_rr_isnull_c(term12);
     if (term0*1e-5 > term12 || result1) {
         integSd = tau*(s0d+tau*cd/2);
         integS = (s0+c*tau/2)*tau;
@@ -303,10 +298,10 @@ double gb_rr_integrate_x_d(double a, double ad, double b, double bd, double c,
             expmb);
     } else {
         if (Delta >= 0.0)
-            fabs2 = Delta;
+            fabs1 = Delta;
         else
-            fabs2 = -Delta;
-        if (fabs2 < 1e-15) {
+            fabs1 = -Delta;
+        if (fabs1 < 1e-15) {
             result10d = gb_rr_logpxy_d(tau*(s0-sbar), tau*(s0d-sbard), a, ad, 
                                        &result10);
             integSd = tau*sbard - result10d;

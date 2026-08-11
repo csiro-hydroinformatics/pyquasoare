@@ -21,7 +21,8 @@ double gb_sd_expmxy(double x, double y) {
     if(gb_sd_isnull(x) || gb_sd_isnull(y))
         return x;
     // expm1 is not known to Tapenade. Revert to naive form
-    return x * ((exp(z) - 1) / z);
+    // .. but subsequently modified manually back to expm1 to improve numerics ...
+    return x * (expm1(z) / z);
 }
 
 double gb_sd_logpxy(double x, double y) {
@@ -29,7 +30,8 @@ double gb_sd_logpxy(double x, double y) {
     if(gb_sd_isnull(x) || gb_sd_isnull(y))
         return x;
     // log1p is not known to Tapenade. Revert to naive form
-    return x * (log(1 - z) / z);
+    // .. but subsequently modified manually back to log1p to improve numerics ...
+    return x * (log1p(- z) / z);
 }
 
 int gb_sd_constants(double a, double b, double c, double constants[4]) {
@@ -110,7 +112,7 @@ double gb_sd_integrate_x(double a, double b, double c, double constants[4],
     term2 = fabs(a * smax * smax);
     term12 = term1 > term2 ? term1 : term2;
 
-    if (term0 * 1e-5 > term12 || gb_sd_isnull(fabs(s1 - s0))) {
+    if (term0 * 1e-5 > term12 || gb_sd_isnull(term12)) {
         integS = (s0 + c * tau / 2) * tau;
         integS2 = (s0 * s0 + s0 * c * tau + c * c * tau * tau / 3.) * tau;
     }
