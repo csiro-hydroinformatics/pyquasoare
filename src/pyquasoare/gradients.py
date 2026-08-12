@@ -67,12 +67,12 @@ FLUX_FUNCTIONS = {
     "openwater": [
         lambda x: np.where(x < 1., 1., 0.),
         lambda x: np.where(x > 0., 1., 0.),
-        lambda x: np.zeros_like(x)
+        lambda x: np.where(x < 1., 0., (x - 1) * 1e10)
         ],
     "openwatersmooth": [
         lambda x: thresh_smooth(1 - x, 1e-2),
         lambda x: thresh_smooth(x, 1e-2),
-        lambda x: np.zeros_like(x)
+        lambda x: np.where(x < 1., 0., (x - 1) * 1e10)
         ]
 }
 

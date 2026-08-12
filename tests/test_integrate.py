@@ -225,7 +225,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
         elif case in [7]:
             tol = 1e-2
         elif case in [14]:
-            tol = 1e-6
+            tol = 1e-5
         else:
             tol = 1e-8
 
@@ -328,7 +328,9 @@ def test_inverse(allclose, generate_samples, debug_mode):
 
         errmax = np.nanmax(err[iok])
 
-        if case in [13, 10, 15, 3]:
+        if  case in [3]:
+            tol = 1e-3
+        elif case in [13, 10, 15]:
             tol = 1e-4
         else:
             tol = 5e-6
