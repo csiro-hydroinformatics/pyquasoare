@@ -164,7 +164,8 @@ def configure_model(config, area):
     nres_per_reach = 4
     nres = nres_per_reach * nreaches
     nalphas = 1000 if config.debug else config.task.nalphas
-    mod = gradients.MultiReservoirModel(nres, nalphas, errors="raise")
+    mod = gradients.MultiReservoirModel(nres, nalphas,
+                                        errors="raise")
     mod.area = area
 
     for ireach in range(nreaches):
@@ -372,7 +373,7 @@ def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
 def convert_fluxes(area, nres_per_reach, gammas,
                    fluxes, dfluxes):
     nres = dfluxes.shape[2]
-    nreach = nres // nres_per_reach
+    nreaches = nres // nres_per_reach
 
     fluxes_converted = fluxes.copy()
 
@@ -382,7 +383,7 @@ def convert_fluxes(area, nres_per_reach, gammas,
     dfluxes_converted = dfluxes.copy() * g
 
     # Convert m3/s to mm/day for the transluent reservoir
-    for ireach in range(nreach):
+    for ireach in range(nreaches):
         area_up = area * (ireach + 1)
         ires_transluent = ireach * nres_per_reach + 3
         factor = 86.4 * MODEL_TIMESTEP / area_up
@@ -414,7 +415,7 @@ def process(config, script_paths, logger, data):
     # Allocate model with extended hydroclim data
     debug = config.debug
     context = config.options.context
-    dbase = 50 if debug else context["duration_base"]
+    dbase = 20 if debug else context["duration_base"]
     drep = 1 if debug else context["duration_repeat"]
     n = dbase * 365
     hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
@@ -430,7 +431,7 @@ def process(config, script_paths, logger, data):
     # Define job
     batch = config.task.batch
     nbatch = config.options.context["nbatch"]
-    nrepeat = 10 if config.debug else config.options.context["nrepeat"]
+    nrepeat = 3 if config.debug else config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise gradient data
@@ -634,12 +635,12 @@ def process(config, script_paths, logger, data):
                 # Sim - rr prod
                 df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach, 5]
                 # Sim - rr route
-                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 1, 5]
+                df[:, ireach * nsims + 3] = -modref.fluxes[kk, nrp * ireach + 1, 5]
                 # Sim - ro route
-                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 2, 5]
+                df[:, ireach * nsims + 4] = -modref.fluxes[kk, nrp * ireach + 2, 5]
                 # Sim - sum
-                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 3, 5]
-                r = f"{ireach:03d}"
+                df[:, ireach * nsims + 5] = -modref.fluxes[kk, nrp * ireach + 3, 5]
+                r = f"_{ireach:03d}"
                 cols.extend([f"P{r}", f"PE{r}", f"RR_PROD{r}",
                              f"RR_ROUTE{r}", f"RO_ROUTE{r}",
                              f"AGG{r}"])
@@ -647,6 +648,7 @@ def process(config, script_paths, logger, data):
             df = pd.DataFrame(df).round(3)
             df.columns = cols
             df.index.name = "DAY"
+
             fs = fsims / f"simulations_v{version}_TASK{taskid}.csv"
             csv.write_csv(df, fs, "Simulations for repeat 0",
                           script_paths.source_file,
@@ -861,43 +863,6 @@ def process(config, script_paths, logger, data):
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
         results.loc[irepeat, "dfx_errmax_quasoare"] = np.nanmax(dfx_err)
 
-        if False: #np.nanmax(dfx_err) > 1e-3:
-            err = np.abs(dfluxes_bench_c - dfluxes_quas_c)
-
-            import matplotlib.pyplot as plt
-            fig, axs = plt.subplots(nrows=2, sharex=True,
-                                    layout="tight",
-                                    figsize=(12, 7))
-            ax = axs[0]
-            diffres = 0
-            plotres = 1
-            b = fluxes_bench_c[:, plotres, 5]
-            q = fluxes_quas_c[:, plotres, 5]
-            ax.plot(b, "k--", label="bench")
-            ax.plot(q, label="quas")
-            ax.legend(loc=2)
-            tax = ax.twinx()
-            tax.plot(b - q, color="0.5", lw=0.8)
-
-            ax = axs[1]
-            db = dfluxes_bench_c[:, diffres, plotres, 5]
-            dq = dfluxes_quas_c[:, diffres, plotres, 5]
-            dqn = dfluxes_quas_diff2_c[:, diffres, plotres, 5]
-            dbn = dfluxes_bench_diff2_c[:, diffres, plotres, 5]
-
-            ax.plot(db, "k--", label="bench")
-            ax.plot(dqn, label="diff quas", color="lightblue", alpha=0.2, lw=2)
-            ax.plot(dbn, label="diff bench", color="coral", alpha=0.2, lw=2)
-
-            ax.plot(dq, label="quas")
-            tax = ax.twinx()
-            tax.plot(db - dq, color="0.5", lw=0.8)
-            imax = np.argmax(dfx_err[:, diffres])
-            tax.plot(imax, db[imax] - dq[imax], "ro")
-            ax.legend(loc=2)
-            plt.show()
-            import pdb; pdb.set_trace()
-
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
         results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = np.nanmax(dfx_err)
 
@@ -946,7 +911,7 @@ if __name__ == "__main__":
     task = opm.get_task(taskid)
 
     if debug:
-        task.nreaches = 2
+        task.nreaches = 3
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task)
