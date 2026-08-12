@@ -58,23 +58,29 @@ FLUX_FUNCTIONS = {
 def get_options():
     timestep = "daily"
     duration_base = 100
-    duration_repeat = 5
+    duration_repeat = 1
 
-    stationids = data_reader.SITEIDS
-    nreaches = [1, 10, 100]
+    #stationids = data_reader.SITEIDS
+    stationids = data_reader.SITEIDS[:3]
+
+    nreaches = [10] #[1, 10, 100]
+
     nalphas = [10, 100, 1000]
-    numdiff_eps = [1e-3, 1e-5, 1e-7]
 
-    nrepeat = 100
+    numdiff_eps = [1e-5] #[1e-3, 1e-5, 1e-7]
+
+    nrepeat = 50
     nbatch = 1
     batches = np.arange(nbatch)
 
-    gamma_means = [
-        (500, 50, 1),
-        (50, 50, 1),
-        (500, 5, 1),
-        (500, 50, 10)
-        ]
+    #gamma_means = [
+    #    (500, 50, 1),
+    #    (50, 50, 1),
+    #    (500, 5, 1),
+    #    (500, 50, 10)
+    #    ]
+    gamma_means = [(500, 50, 1)]
+
     gamma_std = 0.1
     demand_mean = -0.5
     demand_std = 0.2
@@ -391,6 +397,13 @@ def convert_fluxes(area, nres_per_reach, gammas,
 
 
 def process(config, script_paths, logger, data):
+    # Prepare output folders
+    fperf = script_paths.fout / "performance"
+    fperf.mkdir(exist_ok=True)
+
+    fsims = script_paths.fout / "simulations"
+    fsims.mkdir(exist_ok=True)
+
     # Setup up model
     modref = configure_model(config, data.area)
     # .. difference models
@@ -426,14 +439,15 @@ def process(config, script_paths, logger, data):
     nres_per_reach = modref.nres_per_reach
 
     dgrr_prod = np.zeros((nres, nreaches))
-    k = np.arange(nreaches) * nres_per_reach
-    dgrr_prod[k, k] = 1
+    k1 = np.arange(nreaches) * nres_per_reach
+    k2 = np.arange(nreaches)
+    dgrr_prod[k1, k2] = 1
 
     dgrr_route = np.zeros((nres, nreaches))
-    dgrr_route[k + 1, k] = 1
+    dgrr_route[k1 + 1, k2] = 1
 
     dgro_route = np.zeros((nres, nreaches))
-    dgro_route[k + 2, k] = 1
+    dgro_route[k1 + 2, k2] = 1
 
     areas = np.ones(nreaches) * modref.area
     x0 = 0.5
@@ -477,7 +491,7 @@ def process(config, script_paths, logger, data):
     # initialise perf results
     mnames = ["bench", "bench_diff1", "bench_diff2",
               "quasoare", "quasoare_diff1", "quasoare_diff2"]
-    cc = [f"runtime_{m}" for m in mnames]
+    cc = [f"runtime_{m}" for m in mnames] + ["runtime_quasoare_neutral"]
     cc += [f"fx_errmax_quasoare"]
     cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
     results = pd.DataFrame(0., index=np.arange(nrepeat),
@@ -600,6 +614,43 @@ def process(config, script_paths, logger, data):
         t0 = time.time()
         modref.run()
         dt_quas = time.time() - t0
+
+        t0 = time.time()
+        modneutral.run()
+        dt_quas_neutral = time.time() - t0
+
+        # Print one simulation to make sure it makes sense
+        if irepeat == 0:
+            nval = 2000
+            kk = np.arange(-nval, 0)
+            nsims = nres_per_reach + 2
+            df = np.empty((nval, nreaches * nsims))
+            cols = []
+            nrp = nres_per_reach
+            for ireach in range(nreaches):
+                # Data
+                df[:, ireach * nsims] = pin[kk, ireach]
+                df[:, ireach * nsims + 1] = ein[kk, ireach]
+                # Sim - rr prod
+                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach, 5]
+                # Sim - rr route
+                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 1, 5]
+                # Sim - ro route
+                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 2, 5]
+                # Sim - sum
+                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach + 3, 5]
+                r = f"{ireach:03d}"
+                cols.extend([f"P{r}", f"PE{r}", f"RR_PROD{r}",
+                             f"RR_ROUTE{r}", f"RO_ROUTE{r}",
+                             f"AGG{r}"])
+
+            df = pd.DataFrame(df).round(3)
+            df.columns = cols
+            df.index.name = "DAY"
+            fs = fsims / f"simulations_v{version}_TASK{taskid}.csv"
+            csv.write_csv(df, fs, "Simulations for repeat 0",
+                          script_paths.source_file,
+                          write_index=True)
 
         # --------------------------------------------------
         # Run numerical difference - grad model
@@ -801,6 +852,7 @@ def process(config, script_paths, logger, data):
         results.loc[irepeat, "runtime_bench_diff1"] = dt_bench_diff1
         results.loc[irepeat, "runtime_bench_diff2"] = dt_bench_diff2
         results.loc[irepeat, "runtime_quasoare"] = dt_quas
+        results.loc[irepeat, "runtime_quasoare_neutral"] = dt_quas_neutral
 
         nan = "keep" if debug else "ignore"
         fx_err = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
@@ -859,9 +911,7 @@ def process(config, script_paths, logger, data):
         results.loc[irepeat, "dfx_errmax_bench_diff2"] = np.nanmax(dfx_err)
 
     results.index.name = "REPEAT"
-    fout = script_paths.fout / "performance"
-    fout.mkdir(exist_ok=True)
-    fres =  fout / f"performance_v{version}_TASK{taskid}.csv"
+    fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
     csv.write_csv(results, fres, "Performance",
                   script_paths.source_file,
                   write_index=True,
@@ -894,11 +944,19 @@ if __name__ == "__main__":
                          "debug", "options", "task"])
     opm = get_options()
     task = opm.get_task(taskid)
+
+    if debug:
+        task.nreaches = 2
+
     config = Config(version, taskid, overwrite,
                     debug, opm, task)
 
     # Baseline
     script_paths = get_script_paths(config)
+
+    fopm = script_paths.fout / "option_manager.json"
+    opm.save(fopm)
+
     logger = get_logger(config, script_paths)
 
     # Data
