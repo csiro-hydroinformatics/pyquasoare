@@ -1,5 +1,6 @@
 from pathlib import Path
 from itertools import product as prod
+import warnings
 import math
 import re
 import pytest
@@ -330,6 +331,32 @@ def test_function_runtime():
         rx2 = rt/runtimes[0]*100
         mess = f"Runtime of fun {fun:4s} : {rt:2.2e}ms ({rx2:0.0f}% of x2)"
         LOGGER.info(mess)
+
+
+def test_quad_constants(allclose, generate_samples):
+    cname, case, params, s0s, Tmax = generate_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip("Skip param config")
+
+    cst = approx.quad_constants(params)
+    a, b, c = params.T
+
+    if case in [3, 15]:
+        assert allclose(cst[:, 0], 0.)
+        assert allclose(cst[:, 1], 0., atol=5e-8)
+    else:
+        delta = b**2 - 4 * a * c
+        assert allclose(cst[:, 0], delta)
+
+        qD = np.sqrt(np.abs(delta)) / 2
+        assert allclose(cst[:, 1], qD)
+
+    if case not in [1, 2, 13, 16]:
+        sbar = -b / 2 / a
+        assert allclose(cst[:, 2], sbar)
+    else:
+        assert np.all(np.invert(np.isfinite(cst[:, 2])))
 
 
 def test_quad_fun(allclose, generate_samples):

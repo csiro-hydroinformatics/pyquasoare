@@ -105,22 +105,21 @@ C_QUASOARE_DELTA_ATOL = QUASOARE_DELTA_ATOL
 C_QUASOARE_PI = QUASOARE_PI
 C_QUASOARE_NFLUXES_MAX = QUASOARE_NFLUXES_MAX
 
+
 def get_nan():
     return c_get_nan()
+
 
 def get_inf():
     return c_get_inf()
 
+
 def compiler_accuracy_kahan():
     return c_compiler_accuracy_kahan()
 
+
 def eta_fun(double x, double Delta):
     return c_eta_fun(x, Delta)
-
-def quad_constants(double a, double b, double c,
-                np.ndarray[double, ndim=1, mode='c'] values not None):
-    assert values.shape[0] == 3
-    return c_quad_constants(a, b, c, <double*> np.PyArray_DATA(values))
 
 
 def get_error_message(int err_code):
@@ -131,6 +130,38 @@ def get_error_message(int err_code):
 
 def quad_expmxy(double x, double y):
     return c_quad_expmxy(x, y)
+
+
+def quad_constants(double a, double b, double c,
+                   np.ndarray[double, ndim=1, mode='c'] values not None):
+    if values.shape[0] != 3:
+        raise ValueError("Expected values.shape[0] == 3")
+    return c_quad_constants(a, b, c, <double*> np.PyArray_DATA(values))
+
+
+def quad_constants_vect(np.ndarray[double, ndim=2, mode='c'] coefs not None,
+                        np.ndarray[double, ndim=2, mode='c'] values not None):
+    cdef int ierr = 0
+    cdef int nval = coefs.shape[0]
+    cdef double vals[3]
+
+    if coefs.shape[1] != 3:
+        raise ValueError("Expected coefs.shape[1] == 3")
+    if values.shape[1] != 3:
+        raise ValueError("Expected values.shape[1] == 3")
+    if values.shape[0] != nval:
+        raise ValueError("Expected values.shape[0] == coefs.shape[0]")
+
+    for i in range(nval):
+        ierr = c_quad_constants(coefs[i, 0], coefs[i, 1], coefs[i, 2], vals)
+        if ierr > 0:
+            return ierr
+
+        values[i, 0] = vals[0]
+        values[i, 1] = vals[1]
+        values[i, 2] = vals[2]
+
+    return ierr
 
 
 def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
@@ -147,9 +178,9 @@ def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
 
 
 def quad_fun_tangent(double sref,
-                           np.ndarray[double, ndim=1, mode='c'] coefs not None,
-                           np.ndarray[double, ndim=1, mode='c'] s not None,
-                           np.ndarray[double, ndim=1, mode='c'] o not None):
+                     np.ndarray[double, ndim=1, mode='c'] coefs not None,
+                     np.ndarray[double, ndim=1, mode='c'] s not None,
+                     np.ndarray[double, ndim=1, mode='c'] o not None):
     cdef int nval = s.shape[0]
     assert o.shape[0] == nval
     assert coefs.shape[0] == 3
