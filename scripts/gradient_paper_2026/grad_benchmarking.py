@@ -157,7 +157,7 @@ def configure_model(config, area):
     nreaches = config.task.nreaches
     nres_per_reach = 4
     nres = nres_per_reach * nreaches
-    nalphas = 2000 if config.debug else config.task.nalphas
+    nalphas = 1000 if config.debug else config.task.nalphas
     mod = gradients.MultiReservoirModel(nres, nalphas, errors="raise")
     mod.area = area
 
@@ -401,7 +401,7 @@ def process(config, script_paths, logger, data):
     # Allocate model with extended hydroclim data
     debug = config.debug
     context = config.options.context
-    dbase = 20 if debug else context["duration_base"]
+    dbase = 50 if debug else context["duration_base"]
     drep = 1 if debug else context["duration_repeat"]
     n = dbase * 365
     hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
@@ -475,7 +475,8 @@ def process(config, script_paths, logger, data):
     dfluxes_bench_diff2 = modref.dfluxes.copy() * np.nan
 
     # initialise perf results
-    mnames = ["bench", "diff1", "diff2", "quasoare"]
+    mnames = ["bench", "bench_diff1", "bench_diff2",
+              "quasoare", "quasoare_diff1", "quasoare_diff2"]
     cc = [f"runtime_{m}" for m in mnames]
     cc += [f"fx_errmax_quasoare"]
     cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
@@ -806,9 +807,9 @@ def process(config, script_paths, logger, data):
         results.loc[irepeat, "fx_errmax_quasoare"] = fx_err.max()
 
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
-        results.loc[irepeat, "dfx_errmax_quasoare"] = dfx_err.max()
+        results.loc[irepeat, "dfx_errmax_quasoare"] = np.nanmax(dfx_err)
 
-        if False: #dfx_err.max() > 1e-3:
+        if False: #np.nanmax(dfx_err) > 1e-3:
             err = np.abs(dfluxes_bench_c - dfluxes_quas_c)
 
             import matplotlib.pyplot as plt
@@ -846,12 +847,25 @@ def process(config, script_paths, logger, data):
             import pdb; pdb.set_trace()
 
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
-        results.loc[irepeat, "dfx_errmax_quas_diff1"] = dfx_err.max()
+        results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = np.nanmax(dfx_err)
 
         dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
-        results.loc[irepeat, "dfx_errmax_quas_diff2"] = dfx_err.max()
+        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = np.nanmax(dfx_err)
 
-    import pdb; pdb.set_trace()
+        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
+        results.loc[irepeat, "dfx_errmax_bench_diff1"] = np.nanmax(dfx_err)
+
+        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
+        results.loc[irepeat, "dfx_errmax_bench_diff2"] = np.nanmax(dfx_err)
+
+    results.index.name = "REPEAT"
+    fout = script_paths.fout / "performance"
+    fout.mkdir(exist_ok=True)
+    fres =  fout / f"performance_v{version}_TASK{taskid}.csv"
+    csv.write_csv(results, fres, "Performance",
+                  script_paths.source_file,
+                  write_index=True,
+                  lineterminator="\n")
 
 
 if __name__ == "__main__":
