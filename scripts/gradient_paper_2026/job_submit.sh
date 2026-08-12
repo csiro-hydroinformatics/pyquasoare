@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-FROOT=$NFRSK
+FROOT=$QUAS
 
 set -a 
 

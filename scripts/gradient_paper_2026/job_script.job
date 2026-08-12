@@ -57,6 +57,7 @@ echo
 echo VERSION = $VERSION
 echo JOBID = $jobid
 echo TASKID = $taskid
+echo PYSCRIPT = $PYSCRIPT
 echo 
 
 # .. run with overwrite option
