@@ -25,7 +25,7 @@ ARRAYS_FIT="0-$(($NTASKS - 1))"
 ARRAYS_PROC=$ARRAYS_FIT
 
 # Job config
-JOBSCRIPT=$FROOT/scripts/fit/job_script.job
+JOBSCRIPT=$FROOT/scripts/gradient_paper_2026/job_script.job
 
 if [ ! -f "$JOBSCRIPT" ]; then
     echo "ERROR - script $JOBSCRIPT does not exists"
