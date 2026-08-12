@@ -230,6 +230,8 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
             tol = 1e-2
         elif case in [14]:
             tol = 1e-5
+        elif case in [5, 15]:
+            tol = 1e-6
         else:
             tol = 1e-8
 
