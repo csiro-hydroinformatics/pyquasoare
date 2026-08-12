@@ -120,7 +120,7 @@ def get_script_paths(config):
 
 def get_logger(config, script_paths):
     basename = script_paths.basename
-    fl = script_paths.flogs / f"{basename}.log"
+    fl = script_paths.flogs / f"{basename}_TASK{config.taskid}.log"
     logger = iutils.get_logger(basename, flog=fl, console=True)
     dd = config._asdict()
     dd.pop("options")
