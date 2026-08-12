@@ -61,4 +61,4 @@ echo
 
 # .. run with overwrite option
 ferr=$FLOG/${jobname}_TASK${taskid}_JOB${jobid}.err
-srun --ntasks=1 --error=$ferr uv run python $PYSCRIPT -t $taskid -v $VERSION
+srun --ntasks=1 --error=$ferr uv --frozen run python $PYSCRIPT -t $taskid -v $VERSION
