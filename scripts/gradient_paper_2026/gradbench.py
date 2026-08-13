@@ -24,6 +24,7 @@ from collections import namedtuple
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from hydrodiy.io import csv, iutils, hyruns
 from hydrodiy.stat import armodels
@@ -325,7 +326,6 @@ def backwardP(y):
 def forwardE(x):
     return x
 
-
 def backwardE(y):
     return np.maximum(y, 0.)
 
@@ -336,6 +336,14 @@ def forwardasinh(x, x0=1):
 
 def random_scalings(sigma, nval, s0=1e-2):
     return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
+
+
+def forward_plot_scale(x, eps=1e-2):
+    return (np.sqrt(eps**2 + np.abs(x)) - eps) * np.sign(x)
+
+
+def backward_plot_scale(y, eps=1e-2):
+    return ((np.abs(y) + eps)**2 - eps**2) * np.sign(y)
 
 
 def compute_flux_error(bench, alt, transform=None, nan="ignore"):
@@ -653,6 +661,14 @@ def process(config, script_paths, logger, data):
             csv.write_csv(df, fs, "Simulations for repeat 0",
                           script_paths.source_file,
                           write_index=True)
+
+            plt.close("all")
+            fig, ax = plt.subplots(figsize=(12, 5), layout="tight")
+            df.filter(regex="RO_ROUTE", axis=1).plot(ax=ax)
+            ax.set_yscale("function",
+                          functions=(forward_plot_scale,
+                                     backward_plot_scale))
+            fig.savefig(fs.parent / f"{fs.stem}.png")
 
         # --------------------------------------------------
         # Run numerical difference - grad model
