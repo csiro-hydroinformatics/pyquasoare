@@ -64,27 +64,27 @@ def get_options():
     #stationids = data_reader.SITEIDS
     stationids = data_reader.SITEIDS[:3]
 
-    nreaches = [10] #[1, 10, 100]
+    nreaches = [3] #[1, 10, 100]
 
     nalphas = [10, 100, 1000]
 
     numdiff_eps = [1e-5] #[1e-3, 1e-5, 1e-7]
 
-    nrepeat = 50
+    nrepeat = 5 #50
     nbatch = 1
     batches = np.arange(nbatch)
 
     #gamma_means = [
-    #    (500, 50, 1),
+    #    (500, 50, 10),
     #    (50, 50, 1),
     #    (500, 5, 1),
     #    (500, 50, 10)
     #    ]
-    gamma_means = [(500, 50, 1)]
+    gamma_means = [(500, 50, 1000)]
 
-    gamma_std = 0.1
+    gamma_std = 0.3
     demand_mean = -0.5
-    demand_std = 0.2
+    demand_std = 0.3
 
     opm = hyruns.OptionManager(duration_base=duration_base,
                                duration_repeat=duration_repeat,
@@ -517,6 +517,11 @@ def process(config, script_paths, logger, data):
 
         grr_prod, grr_route, gro_route, demrr_route = \
                 set_parameters(config, modref)
+        logger.info(f"GRR prod = {grr_prod.round(0)}", ntab=1)
+        logger.info(f"GRR route = {grr_route.round(0)}", ntab=1)
+        logger.info(f"DEM route = {demrr_route.round(2)}", ntab=1)
+        logger.info(f"GRO route = {gro_route.round(0)}", ntab=1)
+
         grr_prod_p = grr_prod.copy()
         grr_prod_m = grr_prod.copy()
         grr_route_p = grr_route.copy()
@@ -663,11 +668,27 @@ def process(config, script_paths, logger, data):
                           write_index=True)
 
             plt.close("all")
-            fig, ax = plt.subplots(figsize=(12, 5), layout="tight")
-            df.filter(regex="RO_ROUTE", axis=1).plot(ax=ax)
-            ax.set_yscale("function",
-                          functions=(forward_plot_scale,
-                                     backward_plot_scale))
+            fig, axs = plt.subplots(nrows=2, ncols=2,
+                                    sharex=True, sharey=True,
+                                    figsize=(12, 10), layout="tight")
+            for ireach, ax in enumerate(axs.flat):
+                if ireach >= nreaches:
+                    continue
+
+                r = f"_{ireach:03d}"
+                df.loc[:, f"RO_ROUTE{r}"].plot(ax=ax, label="RO-Route")
+                df.loc[:, f"AGG{r}"].plot(ax=ax, label="Agg")
+
+                tax = ax.twinx()
+                df.loc[:, f"RR_ROUTE{r}"].plot(ax=tax, color="0.5")
+                ax.plot([], [], color="0.5", label="RR-Route")
+
+                ax.set_yscale("function",
+                              functions=(forward_plot_scale,
+                                         backward_plot_scale))
+                ax.set_title(f"Reach {ireach}")
+                ax.legend(loc=2)
+
             fig.savefig(fs.parent / f"{fs.stem}.png")
 
         # --------------------------------------------------
