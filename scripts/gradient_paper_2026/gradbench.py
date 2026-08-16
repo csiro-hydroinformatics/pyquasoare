@@ -61,26 +61,26 @@ def get_options():
     duration_base = 100
     duration_repeat = 1
 
-    #stationids = data_reader.SITEIDS
-    stationids = data_reader.SITEIDS[:3]
+    stationids = data_reader.SITEIDS
 
-    nreaches = [3] #[1, 10, 100]
+    nreaches_ref = 10
+    nreaches = [1, nreaches_ref, 100]
 
-    nalphas = [10, 100, 1000]
+    nalphas_ref = 100
+    nalphas = [10, nalphas_ref, 1000]
 
-    numdiff_eps = [1e-5] #[1e-3, 1e-5, 1e-7]
+    numdiff_eps_ref = 1e-5
+    numdiff_eps = [1e-3, numdiff_eps_ref, 1e-7, 1e-9, 1e-11]
 
-    nrepeat = 5 #50
+    nrepeat = 50
     nbatch = 1
     batches = np.arange(nbatch)
 
-    #gamma_means = [
-    #    (500, 50, 10),
-    #    (50, 50, 1),
-    #    (500, 5, 1),
-    #    (500, 50, 10)
-    #    ]
-    gamma_means = [(500, 50, 1000)]
+    gamma_means = [
+        (500, 50, 1000),
+        (5000, 5000, 10000),
+        (50, 5, 10)
+        ]
 
     gamma_std = 0.3
     demand_mean = -0.5
@@ -101,6 +101,21 @@ def get_options():
                                nalphas=nalphas,
                                numdiff_eps=numdiff_eps,
                                gamma_mean=gamma_means)
+    tasks = []
+    count = 0
+    for taskid in range(opm.ntasks):
+        task = opm.get_task(taskid)
+
+        nre = task.nreaches
+        nal = task.nalphas
+        eps = task.numdiff_eps
+        match = int(nre == nreaches_ref) \
+                + int(nal == nalphas_ref) \
+                + int(eps == numdiff_eps_ref)
+        if match >= 2:
+            tasks.append(task)
+
+    opm.tasks = tasks
     return opm
 
 
@@ -285,6 +300,7 @@ def set_parameters(config, mod):
     gamma_std = config.options.context["gamma_std"]
 
     gammas = np.zeros(nres)
+
     # .. RR prod reservoir
     s = random_scalings(gamma_std, nreaches)
     grr_prod = gamma_mean[0] * s
@@ -296,7 +312,8 @@ def set_parameters(config, mod):
     gammas[1::nrp] = grr_route
 
     # .. RO reservoir -> m3
-    factor = mod.Pmean * mod.area * np.arange(1, nreaches + 1) / 86.4 * gamma_mean[2]
+    factor = mod.Pmean * mod.area * np.arange(1, nreaches + 1)
+    factor *= gamma_mean[2] / 86.4
     s = random_scalings(gamma_std, nreaches)
     gro_route = factor * s
     gammas[2::nrp] = gro_route
@@ -325,6 +342,7 @@ def backwardP(y):
 
 def forwardE(x):
     return x
+
 
 def backwardE(y):
     return np.maximum(y, 0.)

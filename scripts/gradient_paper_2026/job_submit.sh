@@ -35,7 +35,7 @@ fi
 # Mimick a 2d array using 1d bash arrays
 declare -A JOBCONFIGS
 
-# Copula fitting job
+# Benchmarking job
 JOBCONFIGS["0,0"]="gradbench"  # Job name
 JOBCONFIGS["0,1"]="5"          # number of cpus
 JOBCONFIGS["0,2"]=$ARRAYS_FIT  # arrays
@@ -43,29 +43,13 @@ JOBCONFIGS["0,3"]="1"          # use user supplied array if any
 JOBCONFIGS["0,4"]="X"          # job dependency
 JOBCONFIGS["0,5"]="X"          # job id
 
-## General postprocessing job (depends on copula fitting)
-#JOBCONFIGS["1,0"]="copulaprocess1"  # Job name
-#JOBCONFIGS["1,1"]="1"            # number of cpus
-#JOBCONFIGS["1,2"]=$ARRAYS_PROC   # arrays
-#JOBCONFIGS["1,3"]="1"            # use user supplied array if any
-#JOBCONFIGS["1,4"]="0"            # parent job number
-#JOBCONFIGS["1,5"]="X"            # job id
-#
-## MVN postprocessing job (depends on copula fitting)
-#JOBCONFIGS["2,0"]="copulaprocess2"   # Job name
-#JOBCONFIGS["2,1"]="1"            # number of cpus
-#JOBCONFIGS["2,2"]=$ARRAYS_PROC    # arrays
-#JOBCONFIGS["2,3"]="1"            # use user supplied array if any
-#JOBCONFIGS["2,4"]="0"            # parent job number
-#JOBCONFIGS["2,5"]="X"            # job id
-#
-## MVN postprocessing concat job (depends on MVN postprocessing)
-#JOBCONFIGS["3,0"]="copulaconcat"    # Job name
-#JOBCONFIGS["3,1"]="1"            # number of cpus
-#JOBCONFIGS["3,2"]="0"            # arrays
-#JOBCONFIGS["3,3"]="0"            # use user supplied array if any
-#JOBCONFIGS["3,4"]="1,2"          # parent job number
-#JOBCONFIGS["3,5"]="X"            # job id
+# concat job
+JOBCONFIGS["1,0"]="gradbenchconcat"  # Job name
+JOBCONFIGS["1,1"]="1"            # number of cpus
+JOBCONFIGS["1,2"]="0"            # arrays
+JOBCONFIGS["1,3"]="0"            # use user supplied array if any
+JOBCONFIGS["1,4"]="0"            # parent job number
+JOBCONFIGS["1,5"]="X"            # job id
 
 
 LENGTH=${#JOBCONFIGS[@]}
