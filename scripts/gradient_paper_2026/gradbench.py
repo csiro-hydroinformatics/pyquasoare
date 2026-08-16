@@ -106,6 +106,7 @@ def get_options():
     for taskid in range(opm.ntasks):
         task = opm.get_task(taskid)
 
+        # Ensure that at least 2 reference options are met
         nre = task.nreaches
         nal = task.nalphas
         eps = task.numdiff_eps
@@ -113,8 +114,7 @@ def get_options():
                 + int(nal == nalphas_ref) \
                 + int(eps == numdiff_eps_ref)
         if match >= 2:
-            tasks.append(task)
-
+            tasks.append(task.options)
     opm.tasks = tasks
     return opm
 
