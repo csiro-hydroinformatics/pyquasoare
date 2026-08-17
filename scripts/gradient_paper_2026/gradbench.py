@@ -19,7 +19,7 @@ import argparse
 from pathlib import Path
 from collections import namedtuple
 
-#import warnings
+import warnings
 #warnings.filterwarnings("ignore")
 
 import numpy as np
@@ -58,13 +58,14 @@ FLUX_FUNCTIONS = {
 
 def get_options():
     timestep = "daily"
-    duration_base = 100
+    # Duration depends on number of reaches
+    duration_base = {1: 100, 3: 50, 5: 50, 50: 10}
     duration_repeat = 1
 
     stationids = data_reader.SITEIDS
 
-    nreaches_ref = 10
-    nreaches = [1, nreaches_ref, 100]
+    nreaches_ref = 5
+    nreaches = [1, nreaches_ref, 50]
 
     nalphas_ref = 100
     nalphas = [10, nalphas_ref, 1000]
@@ -156,10 +157,12 @@ def get_logger(config, script_paths):
 
 def get_data(config, script_paths, logger):
     stationid = config.task.stationid
+    logger.info(f"Load data for stations {stationid}")
     stations = data_reader.get_stations()
     area = stations.loc[stationid, "CATCHMENTAREA[km2]"]
 
-    nval = config.options.context["duration_base"] * 365
+    nreaches = config.task.nreaches
+    nval = config.options.context["duration_base"][nreaches] * 365
     ntot = config.options.context["duration_repeat"] * 365
     nreps = ntot // nval
 
@@ -172,10 +175,12 @@ def get_data(config, script_paths, logger):
     hydroclim = hydroclim.loc[:, ["P", "PET"]]
 
     data = namedtuple("Data", ["hydroclim", "area"])(hydroclim, area)
+    logger.info(".. done")
 
     return data
 
-def configure_model(config, area):
+def configure_model(logger, config, area):
+    logger.info(f"Create and configure model")
     nreaches = config.task.nreaches
     nres_per_reach = 4
     nres = nres_per_reach * nreaches
@@ -208,11 +213,13 @@ def configure_model(config, area):
 
     mod.nreaches = nreaches
     mod.nres_per_reach = nres_per_reach
+    logger.info(".. done")
 
     return mod
 
 
-def set_coefs_linear(mod):
+def set_coefs_linear(logger, mod):
+    logger.info("Setting model coefs")
     nreaches = mod.nreaches
     nres_per_reach = mod.nres_per_reach
     for ireach in range(nreaches):
@@ -233,9 +240,10 @@ def set_coefs_linear(mod):
 
         # Set Transluent coefs
         mod.set_coefs_linear(ibase + 3, "transluent")
+    logger.info(".. done")
 
 
-def allocate_model(mod, hydroclim, grad=True):
+def allocate_model(logger, mod, hydroclim, grad=True):
     nval = len(hydroclim)
 
     # .. gradients against all capacities
@@ -249,7 +257,7 @@ def allocate_model(mod, hydroclim, grad=True):
                  variables_specs=vspecs)
 
 
-def set_qstars(mod, hydroclim):
+def set_qstars(logger, mod, hydroclim):
     mod.Pmean = hydroclim[:, 0].mean()
 
     # Set 0 flow inputs for first reach
@@ -289,7 +297,7 @@ def set_qstars(mod, hydroclim):
         mod.set_Qstars(ibase + 1, Qstars1)
 
 
-def set_parameters(config, mod):
+def set_parameters(logger, config, mod):
     # Model charac
     nreaches = mod.nreaches
     nrp = mod.nres_per_reach
@@ -367,8 +375,8 @@ def backward_plot_scale(y, eps=1e-2):
 def compute_flux_error(bench, alt, transform=None, nan="ignore"):
     nreaches = bench.shape[1] // 4
     ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
-    fa = alt[:, ires, 5]
     fb = bench[:, ires, 5]
+    fa = alt[:, ires, 5]
     if transform is not None:
         fw = forward_asinh if transform=="asinh" else lambda x: x
         fb = fw(fb)
@@ -377,7 +385,16 @@ def compute_flux_error(bench, alt, transform=None, nan="ignore"):
     err = np.abs(fa - fb)
     if nan == "keep":
         err[np.isnan(fa) | np.isnan(fb)] = np.nan
-    return err
+
+    emax = np.nanmax(err)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        var = ((fb - np.nanmean(fb, axis=0))**2).sum(axis=0)
+        eff = (err**2).sum(axis=0) / var
+    coefdet = np.nanmax(eff)
+
+    return emax, coefdet
 
 
 def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
@@ -394,7 +411,17 @@ def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
     err = np.abs(dfb - dfa)
     if nan == "keep":
         err[np.isnan(dfa) | np.isnan(dfb)] = np.nan
-    return err
+
+    emax = np.nanmax(err)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        var = ((dfb - np.nanmean(dfb, axis=0))**2).sum(axis=0)
+        eff = (err**2).sum(axis=0) / var
+
+    coefdet = np.nanmax(eff)
+
+    return emax, coefdet
 
 def convert_fluxes(area, nres_per_reach, gammas,
                    fluxes, dfluxes):
@@ -432,16 +459,17 @@ def process(config, script_paths, logger, data):
     fsims.mkdir(exist_ok=True)
 
     # Setup up model
-    modref = configure_model(config, data.area)
+    modref = configure_model(logger, config, data.area)
     # .. difference models
-    modneutral = configure_model(config, data.area)
-    modlow = configure_model(config, data.area)
-    modhigh = configure_model(config, data.area)
+    modneutral = configure_model(logger, config, data.area)
+    modlow = configure_model(logger, config, data.area)
+    modhigh = configure_model(logger, config, data.area)
 
     # Allocate model with extended hydroclim data
     debug = config.debug
     context = config.options.context
-    dbase = 20 if debug else context["duration_base"]
+    nreaches = config.task.nreaches
+    dbase = 20 if debug else context["duration_base"][nreaches]
     drep = 1 if debug else context["duration_repeat"]
     n = dbase * 365
     hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
@@ -449,10 +477,10 @@ def process(config, script_paths, logger, data):
     #if debug:
     #    hclim = hclim[:2000]
 
-    allocate_model(modref, hclim)
-    allocate_model(modneutral, hclim, False)
-    allocate_model(modlow, hclim, False)
-    allocate_model(modhigh, hclim, False)
+    allocate_model(logger, modref, hclim)
+    allocate_model(logger, modneutral, hclim, False)
+    allocate_model(logger, modlow, hclim, False)
+    allocate_model(logger, modhigh, hclim, False)
 
     # Define job
     batch = config.task.batch
@@ -460,7 +488,7 @@ def process(config, script_paths, logger, data):
     nrepeat = 3 if config.debug else config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
-    # initialise gradient data
+    logger.info("initialise gradient data")
     nreaches = config.task.nreaches
     nres = modref.nreservoirs
     nres_per_reach = modref.nres_per_reach
@@ -479,7 +507,7 @@ def process(config, script_paths, logger, data):
     areas = np.ones(nreaches) * modref.area
     x0 = 0.5
 
-    # initialise benchmark data
+    logger.info("initialise benchmark data")
     nval = len(hclim)
     x_rr_prod = np.zeros((nval, nreaches))
     dx_rr_prod = np.zeros((nres, nval, nreaches))
@@ -488,6 +516,7 @@ def process(config, script_paths, logger, data):
     dx_rr_route = np.zeros((nres, nval, nreaches))
     x_ro_route = np.zeros((nval, nreaches))
     dx_ro_route = np.zeros((nres, nval, nreaches))
+    logger.info(".. step 1")
 
     fx_rr_prod = np.zeros((nval, nreaches))
     fx_rr_prod_p = np.zeros((nval, nreaches))
@@ -501,13 +530,15 @@ def process(config, script_paths, logger, data):
     fx_ro_route_p = np.zeros((nval, nreaches))
     fx_ro_route_m = np.zeros((nval, nreaches))
     dfx_ro_route = np.zeros((nres, nval, nreaches))
+    logger.info(".. step 2")
 
     fluxes_bench = modref.fluxes.copy()
     fluxes_bench.fill(np.nan)
     dfluxes_bench = modref.dfluxes.copy()
     dfluxes_bench.fill(np.nan)
+    logger.info(".. step 3")
 
-    # initialise numerical difference data
+    logger.info("initialise numerical difference data")
     numdiff_eps = 1e-2 if config.debug else config.task.numdiff_eps
     dfluxes_quas_diff1 = modref.dfluxes.copy() * np.nan
     dfluxes_quas_diff2 = modref.dfluxes.copy() * np.nan
@@ -519,22 +550,24 @@ def process(config, script_paths, logger, data):
     mnames = ["bench", "bench_diff1", "bench_diff2",
               "quasoare", "quasoare_diff1", "quasoare_diff2"]
     cc = [f"runtime_{m}" for m in mnames] + ["runtime_quasoare_neutral"]
-    cc += [f"fx_errmax_quasoare"]
+    cc += ["fx_errmax_quasoare", "fx_coefdet_quasoare"]
     cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
+    cc += [f"dfx_coefdet_{m}" for m in mnames[1:]]
     results = pd.DataFrame(0., index=np.arange(nrepeat),
                            columns=cc)
 
     # repeat experiment
+    logger.info("")
     for irepeat in range(nrepeat):
-        logger.info(f"Repeat #{irepeat + 1} / {nrepeat}")
+        logger.info(f"## Repeat #{irepeat + 1} / {nrepeat} ###", nret=2)
         # Set random model inputs
-        set_qstars(modref, hclim)
+        set_qstars(logger, modref, hclim)
         modneutral.Qstars = modref.Qstars
         modlow.Qstars = modref.Qstars
         modhigh.Qstars = modref.Qstars
 
         grr_prod, grr_route, gro_route, demrr_route = \
-                set_parameters(config, modref)
+                set_parameters(logger, config, modref)
         logger.info(f"GRR prod = {grr_prod.round(0)}", ntab=1)
         logger.info(f"GRR route = {grr_route.round(0)}", ntab=1)
         logger.info(f"DEM route = {demrr_route.round(2)}", ntab=1)
@@ -637,10 +670,10 @@ def process(config, script_paths, logger, data):
             modlow.set_alphas(res, xmin, xmax)
             modhigh.set_alphas(res, xmin, xmax)
 
-        set_coefs_linear(modref)
-        set_coefs_linear(modneutral)
-        set_coefs_linear(modlow)
-        set_coefs_linear(modhigh)
+        set_coefs_linear(logger, modref)
+        set_coefs_linear(logger, modneutral)
+        set_coefs_linear(logger, modlow)
+        set_coefs_linear(logger, modhigh)
 
         # Run Quasoare
         t0 = time.time()
@@ -653,7 +686,8 @@ def process(config, script_paths, logger, data):
 
         # Print one simulation to make sure it makes sense
         if irepeat == 0:
-            nval = 2000
+            logger.info("Plotting first simul")
+            nval = min(2000, len(pin))
             kk = np.arange(-nval, 0)
             nsims = nres_per_reach + 2
             df = np.empty((nval, nreaches * nsims))
@@ -710,7 +744,7 @@ def process(config, script_paths, logger, data):
             fig.savefig(fs.parent / f"{fs.stem}.png")
 
         # --------------------------------------------------
-        # Run numerical difference - grad model
+        logger.info("Run numerical difference - grad model")
         # .. run diff for the capacity of reach reservoir - order 1
         t0 = time.time()
         modneutral.run()
@@ -875,7 +909,7 @@ def process(config, script_paths, logger, data):
         dt_bench_diff2 = time.time() - t0
 
         # --------------------------------------------------
-        # Postprocess data
+        logger.info("Postprocess data")
         # Convert the routing fluxes in m3/s to mm/d
         # + convert grad against capacity to grad against capacity
         # scaling
@@ -912,23 +946,29 @@ def process(config, script_paths, logger, data):
         results.loc[irepeat, "runtime_quasoare_neutral"] = dt_quas_neutral
 
         nan = "keep" if debug else "ignore"
-        fx_err = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
-        results.loc[irepeat, "fx_errmax_quasoare"] = fx_err.max()
+        emax, coefdet = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
+        results.loc[irepeat, "fx_errmax_quasoare"] = emax
+        results.loc[irepeat, "fx_coefdet_quasoare"] = coefdet
 
-        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
-        results.loc[irepeat, "dfx_errmax_quasoare"] = np.nanmax(dfx_err)
+        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
+        results.loc[irepeat, "dfx_errmax_quasoare"] = emax
+        results.loc[irepeat, "dfx_coefdet_quasoare"] = coefdet
 
-        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
-        results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = np.nanmax(dfx_err)
+        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
+        results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax
+        results.loc[irepeat, "dfx_coefdet_quasoare_diff1"] = coefdet
 
-        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
-        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = np.nanmax(dfx_err)
+        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
+        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax
+        results.loc[irepeat, "dfx_coefdet_quasoare_diff2"] = coefdet
 
-        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
-        results.loc[irepeat, "dfx_errmax_bench_diff1"] = np.nanmax(dfx_err)
+        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
+        results.loc[irepeat, "dfx_errmax_bench_diff1"] = emax
+        results.loc[irepeat, "dfx_coefdet_bench_diff1"] = coefdet
 
-        dfx_err = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
-        results.loc[irepeat, "dfx_errmax_bench_diff2"] = np.nanmax(dfx_err)
+        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
+        results.loc[irepeat, "dfx_errmax_bench_diff2"] = emax
+        results.loc[irepeat, "dfx_coefdet_bench_diff2"] = coefdet
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
@@ -978,6 +1018,7 @@ if __name__ == "__main__":
     opm.save(fopm)
 
     logger = get_logger(config, script_paths)
+    task.log(logger)
 
     # Data
     data = get_data(config, script_paths, logger)
