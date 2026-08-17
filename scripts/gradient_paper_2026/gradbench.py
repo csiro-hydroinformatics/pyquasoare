@@ -59,7 +59,7 @@ FLUX_FUNCTIONS = {
 def get_options():
     timestep = "daily"
     # Duration depends on number of reaches
-    duration_base = {1: 100, 3: 50, 5: 50, 50: 10}
+    duration_base = {1: 100, 3: 50, 5: 20, 50: 5}
     duration_repeat = 1
 
     stationids = data_reader.SITEIDS
