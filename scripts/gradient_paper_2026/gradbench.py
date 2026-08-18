@@ -59,16 +59,16 @@ FLUX_FUNCTIONS = {
 def get_options():
     timestep = "daily"
     # Duration depends on number of reaches
-    duration_base = {1: 100, 3: 50, 5: 20, 50: 5}
+    duration_base = {1: 100, 3: 50, 5: 20, 20: 5, 50: 5}
     duration_repeat = 1
 
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref, 50]
+    nreaches = [1, nreaches_ref, 20, 50]
 
     nalphas_ref = 100
-    nalphas = [10, nalphas_ref, 1000]
+    nalphas = [10, 50, nalphas_ref, 500, 1000]
 
     numdiff_log10eps_ref = -5
     numdiff_log10eps = [-3, numdiff_log10eps_ref, -7, -9, -11]
@@ -392,9 +392,10 @@ def compute_flux_error(bench, alt, transform=None, nan="ignore"):
         warnings.simplefilter("ignore")
         var = ((fb - np.nanmean(fb, axis=0))**2).sum(axis=0)
         eff = (err**2).sum(axis=0) / var
-    coefdet = np.nanmax(eff)
 
-    return emax, coefdet
+    log10coefdet = np.log10(np.nanmax(eff))
+
+    return emax, log10coefdet
 
 
 def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
@@ -419,9 +420,9 @@ def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
         var = ((dfb - np.nanmean(dfb, axis=0))**2).sum(axis=0)
         eff = (err**2).sum(axis=0) / var
 
-    coefdet = np.nanmax(eff)
+    log10coefdet = np.nanmax(eff)
 
-    return emax, coefdet
+    return emax, log10coefdet
 
 def convert_fluxes(area, nres_per_reach, gammas,
                    fluxes, dfluxes):
@@ -551,9 +552,9 @@ def process(config, script_paths, logger, data):
     mnames = ["bench", "bench_diff1", "bench_diff2",
               "quasoare", "quasoare_diff1", "quasoare_diff2"]
     cc = [f"runtime_{m}" for m in mnames] + ["runtime_quasoare_neutral"]
-    cc += ["fx_errmax_quasoare", "fx_coefdet_quasoare"]
+    cc += ["fx_errmax_quasoare", "fx_log10coefdet_quasoare"]
     cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
-    cc += [f"dfx_coefdet_{m}" for m in mnames[1:]]
+    cc += [f"dfx_log10coefdet_{m}" for m in mnames[1:]]
     results = pd.DataFrame(0., index=np.arange(nrepeat),
                            columns=cc)
 
@@ -704,8 +705,11 @@ def process(config, script_paths, logger, data):
                 df[:, ireach * nsims + 3] = -modref.fluxes[kk, nrp * ireach + 1, 5]
                 # Sim - ro route
                 df[:, ireach * nsims + 4] = -modref.fluxes[kk, nrp * ireach + 2, 5]
-                # Sim - sum
-                df[:, ireach * nsims + 5] = -modref.fluxes[kk, nrp * ireach + 3, 5]
+                # Sim - sum >> converted to mm/d
+                area_up = data.area * (ireach + 1)
+                factor = 86.4 * MODEL_TIMESTEP / area_up
+                rosim = -factor * modref.fluxes[kk, nrp * ireach + 3, 5]
+                df[:, ireach * nsims + 5] = rosim
                 r = f"_{ireach:03d}"
                 cols.extend([f"P{r}", f"PE{r}", f"RR_PROD{r}",
                              f"RR_ROUTE{r}", f"RO_ROUTE{r}",
@@ -947,29 +951,29 @@ def process(config, script_paths, logger, data):
         results.loc[irepeat, "runtime_quasoare_neutral"] = dt_quas_neutral
 
         nan = "keep" if debug else "ignore"
-        emax, coefdet = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
+        emax, log10coefdet = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
         results.loc[irepeat, "fx_errmax_quasoare"] = emax
-        results.loc[irepeat, "fx_coefdet_quasoare"] = coefdet
+        results.loc[irepeat, "fx_log10coefdet_quasoare"] = log10coefdet
 
-        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
+        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
         results.loc[irepeat, "dfx_errmax_quasoare"] = emax
-        results.loc[irepeat, "dfx_coefdet_quasoare"] = coefdet
+        results.loc[irepeat, "dfx_log10coefdet_quasoare"] = log10coefdet
 
-        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
+        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
         results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax
-        results.loc[irepeat, "dfx_coefdet_quasoare_diff1"] = coefdet
+        results.loc[irepeat, "dfx_log10coefdet_quasoare_diff1"] = log10coefdet
 
-        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
+        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
         results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax
-        results.loc[irepeat, "dfx_coefdet_quasoare_diff2"] = coefdet
+        results.loc[irepeat, "dfx_log10coefdet_quasoare_diff2"] = log10coefdet
 
-        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
+        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
         results.loc[irepeat, "dfx_errmax_bench_diff1"] = emax
-        results.loc[irepeat, "dfx_coefdet_bench_diff1"] = coefdet
+        results.loc[irepeat, "dfx_log10coefdet_bench_diff1"] = log10coefdet
 
-        emax, coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
+        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
         results.loc[irepeat, "dfx_errmax_bench_diff2"] = emax
-        results.loc[irepeat, "dfx_coefdet_bench_diff2"] = coefdet
+        results.loc[irepeat, "dfx_log10coefdet_bench_diff2"] = log10coefdet
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"

@@ -28,7 +28,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from hydrodiy.io import csv, iutils
-from hydrodiy.plot import putils
+from hydrodiy.plot import putils, violinplot
 
 # Package to plot spatial data
 from hydrodiy.io import csv, iutils
@@ -80,51 +80,57 @@ def process(config, script_paths, logger, data):
             "nalphas": 100
             }
 
-    numdiff_eps = 1e-5
-    perf = perf.loc[perf.TASK_OPT_numdiff_eps == numdiff_eps]
+    numdiff_log10eps = -5
+    perf = perf.loc[perf.TASK_OPT_numdiff_log10eps == numdiff_log10eps]
 
     # Create figure
-    plt.close("all")
+    for metric in ["errmax", "coefdet"]:
+        plt.close("all")
+        mosaic = [[f"fx/{vn}", f"dfx/{vn}"]
+                  for vn in ["nreaches", "nalphas", "gamma_mean"]]
+        fncols, fnrows = len(mosaic[0]), len(mosaic)
+        awidth, aheight = config.awidth, config.aheight
+        figsize = (awidth*fncols, aheight*fnrows)
+        fig = plt.figure(constrained_layout=True,
+                         figsize=figsize)
 
-    mosaic = [[f"fx/{vn}", f"dfx/{vn}"]
-              for vn in ["nreaches", "nalphas", "gamma_mean"]]
-    fncols, fnrows = len(mosaic[0]), len(mosaic)
-    awidth, aheight = config.awidth, config.aheight
-    figsize = (awidth*fncols, aheight*fnrows)
-    fig = plt.figure(constrained_layout=True,
-                     figsize=figsize)
+        gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
+        axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
 
-    gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
-    axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
+        for iax, (aname, ax) in enumerate(axs.items()):
+            logger.info(f"Plot {metric}/{aname}")
+            toplot, varn = aname.split("/")
 
-    for aname, ax in axs.items():
-        toplot, varn = aname.split("/")
+            idx = np.ones(len(perf)).astype(bool)
+            for vn, value in refs.items():
+                if vn == varn:
+                    continue
+                idx &= perf.loc[:, f"TASK_OPT_{vn}"] == value
 
-        idx = np.ones(len(perf)).astype(bool)
-        for vn, value in refs.items():
-            if vn == varn:
+            df = perf.loc[idx]
+            opts = df.filter(regex="TASK_OPT", axis=1).drop_duplicates()
+
+            df = pd.pivot_table(df,
+                                index=("TASK_OPT_stationid", "REPEAT"),
+                                columns=f"TASK_OPT_{varn}",
+                                values=f"{toplot}_{metric}_quasoare")
+            try:
+                vl = violinplot.Violin(df)
+            except:
                 continue
-            idx &= perf.loc[:, f"TASK_OPT_{vn}"] == value
+            vl.draw(ax=ax)
 
-        df = perf.loc[idx].filter(regex=f"^{toplot}_", axis=1)
-        import pdb; pdb.set_trace()
+            # Axis
+            title = f"({letters[iax]}) {aname}"
+            ax.set(title=title,
+                   xlabel="",
+                   ylabel=metric)
 
-
-        # Decoration
-        ax.legend(shadow=True, framealpha=0.7)
-
-        # Axis
-        title = f"{name}: Row {irow} / Column {icol}"
-        ax.set_title(title)
-        ax.set_xlabel("X label")
-        ax.set_xlabel("Y label")
-
-    fig.suptitle("Overall title")
-
-    # Save file
-    fp = fimg / f"image.{config.imgext}"
-    fig.savefig(fp, dpi=config.fdpi, transparent=config.ftransparent)
-    putils.blackwhite(fp)
+        # Save file
+        fp = script_paths.fimg / \
+                f"figA_gradbench_{metric}_v{config.version}.{config.imgext}"
+        fig.savefig(fp, dpi=config.fdpi, transparent=config.ftransparent)
+        #putils.blackwhite(fp)
 
 
 if __name__ == "__main__":
@@ -141,14 +147,14 @@ if __name__ == "__main__":
     awidth = 6
     aheight = 5
     fdpi = 300
-    imext = "png"
+    imgext = "png"
     ftransparent = False
 
     Config = namedtuple("Config", ["version", "awidth",
                                    "aheight", "fdpi",
-                                   "ftransparent", "imext"])
+                                   "ftransparent", "imgext"])
     config = Config(version, awidth, aheight, fdpi,
-                    ftransparent, imext)
+                    ftransparent, imgext)
 
     # Baseline
     script_paths = get_script_paths(config)
