@@ -70,8 +70,8 @@ def get_options():
     nalphas_ref = 100
     nalphas = [10, nalphas_ref, 1000]
 
-    numdiff_eps_ref = 1e-5
-    numdiff_eps = [1e-3, numdiff_eps_ref, 1e-7, 1e-9, 1e-11]
+    numdiff_log10eps_ref = -5
+    numdiff_log10eps = [-3, numdiff_log10eps_ref, -7, -9, -11]
 
     nrepeat = 50
     nbatch = 1
@@ -100,7 +100,7 @@ def get_options():
                                stationid=stationids,
                                nreaches=nreaches,
                                nalphas=nalphas,
-                               numdiff_eps=numdiff_eps,
+                               numdiff_log10eps=numdiff_log10eps,
                                gamma_mean=gamma_means)
     tasks = []
     count = 0
@@ -110,10 +110,10 @@ def get_options():
         # Ensure that at least 2 reference options are met
         nre = task.nreaches
         nal = task.nalphas
-        eps = task.numdiff_eps
+        eps = task.numdiff_log10eps
         match = int(nre == nreaches_ref) \
                 + int(nal == nalphas_ref) \
-                + int(eps == numdiff_eps_ref)
+                + int(eps == numdiff_log10eps_ref)
         if match >= 2:
             tasks.append(task.options)
     opm.tasks = tasks
@@ -539,7 +539,8 @@ def process(config, script_paths, logger, data):
     logger.info(".. step 3")
 
     logger.info("initialise numerical difference data")
-    numdiff_eps = 1e-2 if config.debug else config.task.numdiff_eps
+    numdiff_eps = 1e-2 if config.debug else 10**config.task.numdiff_log10eps
+
     dfluxes_quas_diff1 = modref.dfluxes.copy() * np.nan
     dfluxes_quas_diff2 = modref.dfluxes.copy() * np.nan
 
