@@ -537,7 +537,7 @@ class MultiReservoirModel():
         self.variables_type_id = None
         self.Qstars = None
         self.dQstars_ext = None
-        self.x0 = None
+        self._x0 = None
         self.x = None
         self.dx = None
         self.fluxes = None
@@ -602,6 +602,27 @@ class MultiReservoirModel():
                 raise ValueError(errmsg)
 
             self._gammas = value.astype(np.float64)
+
+    @property
+    def x0(self):
+        x0 = self._x0
+        if x0 is None:
+            raise ValueError("x0s are not set.")
+        return x0
+
+    @x0.setter
+    def x0(self, value):
+        nres = self.nreservoirs
+        if isinstance(value, float) or isinstance(value, int):
+            self._x0 = value * np.ones(nres)
+        else:
+            value = np.array(value)
+            if value.shape != (nres, ):
+                errmsg = f"Expected x0 of dim ({nres},)."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._x0 = value.astype(np.float64)
 
     @property
     def flux_scalings(self):
@@ -711,7 +732,7 @@ class MultiReservoirModel():
         Qst.fill(np.nan)
         self.Qstars = Qst
         self.dQstars_ext = np.zeros((nvariables, nfxi))
-        self.x0 = 0.5 * np.ones(nres)
+        self.x0 = 0.5
         self.x = np.zeros((ntimesteps, nres))
         self.dx = np.zeros((ntimesteps, nres, nvariables))
         self.fluxes = np.zeros((ntimesteps, nres, nfxo))
