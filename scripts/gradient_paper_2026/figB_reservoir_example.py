@@ -118,12 +118,18 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
     x_start = x0
     xi_start = np.zeros(4) # 4 variables = 1 capacity + 3 flux scalings
 
-    names = ["t", "j", "niter", "t_start", "t_end", "time",
+    scalars = ["t", "j", "niter", "t_start", "t_end", "time",
              "x_start", "x_end", "integ_x",
-             "xi_start", "xi_end", "integ_xi",
+             "xi_start"
              "q1", "q2", "q3",
              "Q1", "Q2", "Q3"]
-    outputs = {n : [] for n in names}
+    vectors = ["xi_start", "xi_end", "integ_xi"]
+    outputs = {"scalars": []}
+    for v in vectors:
+        outputs[v] = []
+
+    # interpolation band
+    j = np.sum(x0 - alphas >= 0) - 1
 
     # Timeseries loop
     for t in range(nval):
@@ -140,14 +146,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
         t_end = 0
         Q1, Q2, Q3, Q4, Q5, Q6 = [0] * 6
 
-        # interpolation band
-        j = np.sum(x0 - alphas >= 0) - 1
-
-        while t_end < timestep:
-            mess = f"\nt={t:<2d} - n={niter:<2d} - j={j:<2d}\n" \
-                    + f"\tt_sta={t_start:9.3e} " \
-                    + f"x_stat={x_start:9.3e}\n"
-
+        while not isnull(timestep - t_end):
             # Coefficients
             mu1j, mu2j, mu3j = coefs[:, j, 1]
             Mj = (qst1 * mu1j + qst2 * mu2j + qst3 * mu3j) / gamma
@@ -155,12 +154,26 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
             sig1j, sig2j, sig3j = coefs[:, j, 0]
             Sj = (qst1 * sig1j + qst2 * sig2j + qst3 * sig3j) / gamma
 
+            a0 = alphas[j]
+            a1 = alphas[j + 1]
+
             # Integrate forward
             funval = Mj + Sj * x_start
             x_end = forward(Mj, Sj, t_start, x_start, timestep)
 
-            a0 = alphas[j]
-            a1 = alphas[j + 1]
+            mess = f"\nt={t:<2d} - n={niter:<2d}\n" \
+                    + f"\tj={j:<2d} a0={a0:10.3e} a1={a1:10.3e}\n" \
+                    + f"\tMj={Mj:10.3e} Sj={Sj:10.3e}\n" \
+                    + f"\tt_sta={t_start:10.3e} " \
+                    + f"x_sta={x_start:10.3e}\n"
+
+            if x_start < a0 or x_start > a1:
+                errmsg = "x_start not in [a0, a1]"
+                if debug:
+                    logger.info(mess)
+                    logger.error(errmsg)
+                    import pdb; pdb.set_trace()
+                raise ValueError(errmsg)
 
             if np.isnan(x_end):
                 raise ValueError("x_end is nan")
@@ -169,7 +182,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 # We stay within the same interpolation band
                 # for the rest of the timestep
                 t_end = timestep
-
+                mess += f"\tstraight to end j={j}\n"
             else:
                 # We go out of the current band
                 if funval < 0:
@@ -185,11 +198,16 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 tau = inverse(Mj, Sj, x_start, x_end)
                 if tau <= 0:
                     errmsg = "tau < 0"
-                    #raise ValueError(errmsg)
+                    if debug:
+                        logger.info(mess)
+                        logger.error(errmsg)
+                        import pdb; pdb.set_trace()
+                    raise ValueError(errmsg)
 
                 t_end = t_start + tau
+                mess += f"\tanother band -> j={j}\n"
 
-            mess += f"\tt_end={t_end:9.3e} x_end={x_end:9.3e} j={j}\n"
+            mess += f"\tt_end={t_end:10.3e} x_end={x_end:10.3e} j={j}\n"
             if debug:
                 logger.info(mess)
 
@@ -234,7 +252,6 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                             qst2 * sig2j / gamma,
                             sig3j / timestep])
 
-
             # Sensitivity
             Wj = wfun(Sj, t_start, t_end)
 
@@ -249,24 +266,16 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 integ_xi = (xi_end - xi_start - dMj * tau - dSj * integ_x) / Sj
 
             # Store
-            outputs["t"].append(t)
-            outputs["j"].append(j)
-            outputs["niter"].append(niter)
-            outputs["t_start"].append(t_start)
-            outputs["t_end"].append(t_end)
-            outputs["time"].append(t + t_end)
-
-            outputs["x_start"].append(x_start)
-            outputs["x_end"].append(x_end)
-            outputs["integ_x"].append(integ_x)
-
-            outputs["q1"].append(q1)
-            outputs["q2"].append(q2)
-            outputs["q3"].append(q3)
-            outputs["Q1"].append(Q1)
-            outputs["Q2"].append(Q2)
-            outputs["Q3"].append(Q3)
-
+            sc = {
+                "t": t, "j": j, "niter": niter,
+                "t_start": t_start, "t_end": t_end,
+                "time": t + t_end,
+                "x_start": x_start, "x_end": x_end,
+                "integ_x": integ_x,
+                "q1": q1, "q2": q2, "q3": q3,
+                "Q1": Q1, "Q2": Q2, "Q3": Q3
+                }
+            outputs["scalars"].append(sc)
             outputs["xi_start"].append(xi_start)
             outputs["xi_end"].append(xi_end)
             outputs["integ_xi"].append(integ_xi)
@@ -282,6 +291,9 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
             if niter > len(alphas) + 2:
                 raise ValueError("Too many iterations")
+    outputs["scalars"] = pd.DataFrame(outputs["scalars"])
+    for v in vectors:
+        outputs[v] = np.row_stack(outputs[v])
 
     return outputs
 
@@ -295,15 +307,9 @@ def process(config, script_paths, logger, data):
     timestep = 1
 
     # Build quadratic model
-    nalphas = 10
+    nalphas = 50
     funs = gradients.FLUX_FUNCTIONS["quadrouting"]
     alphas = gradients.get_alphas(nalphas)[0]
-    #funs = [
-    #    lambda x: np.ones_like(x),
-    #    lambda x: np.zeros_like(x),
-    #    lambda x: x**2
-    #    ]
-    #alphas = np.linspace(0, 1, 5)
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
 
     # Set inputs
@@ -315,8 +321,8 @@ def process(config, script_paths, logger, data):
 
     # Run model timestep-by-timestep
     logger.info("Integrate details")
-    x0 = 0.01
-    debug = True
+    x0 = 0.1
+    debug = False
     outputs = integrate_details(alphas, gamma, Qstars, coefs, x0,
                                 timestep=timestep,
                                 logger=logger,
@@ -332,14 +338,17 @@ def process(config, script_paths, logger, data):
     fig, axs = plt.subplots(ncols=2,
                            layout="constrained",
                            figsize=figsize)
+    ax = axs[0]
+
     ax = axs[1]
     ax.plot(time, Qstars[:, 0], label="input")
 
-    ax.plot(time, -fluxes[:, 2], label="C")
+    ax.plot(time, -fluxes[:, 2], "s-", label="C")
 
-    t = np.array([time[0] + pd.Timedelta(days=d) for d in outputs["time"]])
-    q = -np.array(outputs["Q3"])
-    ax.plot(t, q, label="detail")
+    sc = outputs["scalars"]
+    t = np.array([time[0] + pd.Timedelta(days=d - 1) for d in sc.time])
+    q = -sc.Q3.values
+    ax.plot(t, q, "o-", label="detail")
 
     #tax = ax.twinx()
     #tax.plot(time, niter, color="0.6")
