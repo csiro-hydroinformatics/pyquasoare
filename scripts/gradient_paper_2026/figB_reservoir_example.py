@@ -70,8 +70,7 @@ def get_data(config, script_paths, logger):
 
     timestep = config.timestep
     hydroclim = data_reader.get_data(stationid, timestep, nval=None)
-    #hydroclim = hydroclim.loc["2022-02-27":"2022-03-04"]
-    hydroclim = hydroclim.loc["2022-02-27":"2022-02-28"]
+    hydroclim = hydroclim.loc["2022-02-27":"2022-03-04"]
 
     hydroclim = hydroclim.rename(columns={
         "RAINFALL[mm_day-1]": "P",
@@ -120,11 +119,9 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
     scalars = ["t", "j", "niter", "t_start", "t_end", "time",
              "x_start", "x_end", "integ_x",
-             "xi_start"
-             "q1", "q2", "q3",
-             "Q1", "Q2", "Q3"]
+             "xi_start"]
     vectors = ["xi_start", "xi_end", "integ_xi",
-               "dfxH1", "dfxH2", "dfxH3"]
+               "dfxG", "dfxH", "q", "Q"]
     outputs = {"scalars": []}
     for v in vectors:
         outputs[v] = []
@@ -135,45 +132,42 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
     # Timeseries loop
     for t in range(nval):
         # Inflow and demand potential fluxes
-        qst1 = Qstars[t, 0]
-        qst2 = Qstars[t, 1]
-        qst3 = -gamma / timestep
+        qst = np.array([Qstars[t, 0], Qstars[t, 1], -gamma / timestep])
 
         # Initialise timestep loop
         niter = 0
         t_start = 0
         t_end = 0
-        Q1, Q2, Q3 = [0] * 3
-        dfxH1 = np.zeros(4)
-        dfxH2 = np.zeros(4)
-        dfxH3 = np.zeros(4)
+        Q = np.zeros(3)
+
+        dfxG = np.zeros((4, 3))
+        dfxH = np.zeros((4, 3))
 
         sc = {
             "t": t, "j": j, "niter": niter,
             "t_start": t_start, "t_end": t_end,
             "time": t + t_end,
             "x_start": x_start, "x_end": x_start,
-            "integ_x": 0.,
-            "q1": 0., "q2": 0., "q3": 0.,
-            "Q1": Q1, "Q2": Q2, "Q3": Q3
+            "integ_x": 0.
             }
         outputs["scalars"].append(sc)
         outputs["xi_start"].append(xi_start)
         outputs["xi_end"].append(xi_start)
         outputs["integ_xi"].append(xi_start * 0.)
 
-        outputs["dfxH1"].append(dfxH1.copy())
-        outputs["dfxH2"].append(dfxH2.copy())
-        outputs["dfxH3"].append(dfxH3.copy())
+        outputs["q"].append(np.zeros(3))
+        outputs["Q"].append(Q.copy())
+        outputs["dfxG"].append(dfxG.copy())
+        outputs["dfxH"].append(dfxH.copy())
 
         # Quasoare loop
         while not isnull(timestep - t_end):
             # Coefficients
-            mu1j, mu2j, mu3j = coefs[:, j, 1]
-            Mj = (qst1 * mu1j + qst2 * mu2j + qst3 * mu3j) / gamma
+            musj = coefs[:, j, 1]
+            Mj = (qst * musj / gamma).sum()
 
-            sig1j, sig2j, sig3j = coefs[:, j, 0]
-            Sj = (qst1 * sig1j + qst2 * sig2j + qst3 * sig3j) / gamma
+            sigsj = coefs[:, j, 0]
+            Sj = (qst * sigsj / gamma).sum()
 
             a0 = alphas[j]
             a1 = alphas[j + 1]
@@ -216,35 +210,25 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
             if isnull(x_end - x_start):
                 raise ValueError("x_end = x_start")
 
-            # Integral of x between t_start and t_end
+            # Integral of x and f(x) between t_start and t_end
             tau = t_end - t_start
             integ_x = (x_end - x_start) / Sj - Mj / Sj * tau
+            integ_fx = sigsj * integ_x + musj * tau
 
             # Integral of fluxes between t_start and t_end
-            if isnull(Sj):
-                q1 = tau * (mu1j + sig1j * (x_start + Mj * tau / 2)) / timestep
-                q2 = tau * (mu2j + sig2j * (x_start + Mj * tau / 2)) / timestep
-                q3 = tau * (mu3j + sig3j * (x_start + Mj * tau / 2)) / timestep
-            else:
-                Rj = Mj / Sj
-                q1 = qst1 / timestep * ((mu1j - sig1j * Rj) * tau + sig1j / Sj * (x_end - x_start))
-                q2 = qst2 / timestep * ((mu2j - sig2j * Rj) * tau + sig2j / Sj * (x_end - x_start))
-                q3 = qst3 / timestep * ((mu3j - sig3j * Rj) * tau + sig3j / Sj * (x_end - x_start))
-
-            Q1 += q1
-            Q2 += q2
-            Q3 += q3
+            q = qst / timestep * integ_fx
+            Q += q
 
             # Gradient of coefficients
-            dMj = np.array([-(qst1 * mu1j + qst2 * mu2j) / gamma**2,
-                            qst1 * mu1j / gamma,
-                            qst2 * mu2j / gamma,
-                            -mu3j / timestep])
+            dMj = np.array([-(qst[0] * musj[0] + qst[1] * musj[1]) / gamma**2,
+                            qst[0] * musj[0] / gamma,
+                            qst[1] * musj[1] / gamma,
+                            -musj[2] / timestep])
 
-            dSj = np.array([-(qst1 * sig1j + qst2 * sig2j) / gamma**2,
-                            qst1 * sig1j / gamma,
-                            qst2 * sig2j / gamma,
-                            -sig3j / timestep])
+            dSj = np.array([-(qst[0] * sigsj[0] + qst[1] * sigsj[1]) / gamma**2,
+                            qst[0] * sigsj[0] / gamma,
+                            qst[1] * sigsj[1] / gamma,
+                            -sigsj[2] / timestep])
 
             # Sensitivity
             Wj = wfun(Sj, t_start, t_end)
@@ -254,6 +238,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
                 integ_xi = dMj * tau**2 / 2
             else:
+                Rj = Mj / Sj
                 dRj = (dMj - Rj * dSj) / Sj
                 xi_end = Wj * xi_start + dRj * (Wj - 1.)\
                     + (x_start + Rj) * tau * dSj * Wj
@@ -261,19 +246,19 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 integ_xi = (xi_end - xi_start - dMj * tau - dSj * integ_x) / Sj
 
             # Flux derivatives
-            # .. Qstars are constants = derivative is null -> G = 0
-            # .. only H term is computed
-            dmu1 = np.array([0., mu1j, 0., 0.])
-            dsig1 = np.array([0., sig1j, 0., 0.])
-            dfxH1 += qst1 / timestep * (dmu1 * tau + dsig1 * integ_x + sig1j * integ_xi)
+            # .. first term (G)
+            g = np.zeros((4, 3))
+            g[0, 2] = -integ_fx[2] / timestep**2
+            dfxG += g
 
-            dmu2 = np.array([0., 0., mu2j, 0.])
-            dsig2 = np.array([0., 0., sig2j, 0.])
-            dfxH2 += qst2 / timestep * (dmu2 * tau + dsig2 * integ_x + sig2j * integ_xi)
-
-            dmu3 = np.array([0., 0., 0., mu3j])
-            dsig3 = np.array([0., 0., 0., sig3j])
-            dfxH3 += qst3 / timestep * (dmu3 * tau + dsig3 * integ_x + sig3j * integ_xi)
+            # .. second term (H)
+            dm = np.zeros((4, 3))
+            ds = np.zeros((4, 3))
+            k = np.arange(3)
+            dm[k + 1, k] = musj
+            ds[k + 1, k] = sigsj
+            dfxH += qst[None, :] / timestep * (dm * tau + ds * integ_x
+                                               + sigsj[None, :] * integ_xi[:, None])
 
             # Store
             sc = {
@@ -281,18 +266,17 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 "t_start": t_start, "t_end": t_end,
                 "time": t + t_end / timestep,
                 "x_start": x_start, "x_end": x_end,
-                "integ_x": integ_x,
-                "q1": q1, "q2": q2, "q3": q3,
-                "Q1": Q1, "Q2": Q2, "Q3": Q3
+                "integ_x": integ_x
                 }
             outputs["scalars"].append(sc)
+            outputs["q"].append(q)
+            outputs["Q"].append(Q.copy())
             outputs["xi_start"].append(xi_start)
             outputs["xi_end"].append(xi_end)
             outputs["integ_xi"].append(integ_xi)
 
-            outputs["dfxH1"].append(dfxH1.copy())
-            outputs["dfxH2"].append(dfxH2.copy())
-            outputs["dfxH3"].append(dfxH3.copy())
+            outputs["dfxG"].append(dfxG.copy())
+            outputs["dfxH"].append(dfxH.copy())
 
             # Loop for next band
             x_start = x_end
@@ -305,7 +289,10 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
     outputs["scalars"] = pd.DataFrame(outputs["scalars"])
     for v in vectors:
-        outputs[v] = np.vstack(outputs[v])
+        if re.search("dfx", v):
+            outputs[v] = np.array(outputs[v])
+        else:
+            outputs[v] = np.vstack(outputs[v])
 
     return outputs
 
@@ -313,7 +300,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 def process(config, script_paths, logger, data):
     logger.info(f"Configure model", nret=1)
     hclim = data.hydroclim
-    nsubsteps = 4
+    nsubsteps = 1
     timestep = 1. / nsubsteps
     delta = pd.Timedelta(days=timestep)
 
@@ -325,7 +312,7 @@ def process(config, script_paths, logger, data):
     area = data.area
 
     # Build quadratic model
-    nalphas = 40
+    nalphas = 20
     funs = gradients.FLUX_FUNCTIONS["quadrouting"]
     alphas = gradients.get_alphas(nalphas)[0]
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
@@ -380,7 +367,7 @@ def process(config, script_paths, logger, data):
 
     plt.close("all")
     ncols = 5
-    nrows = 3
+    nrows = 2
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig, axs = plt.subplots(ncols=ncols, nrows=nrows,
                             layout="constrained",
@@ -410,18 +397,15 @@ def process(config, script_paths, logger, data):
     ax.plot(time, Qstars[:, 0], "ok--", label="input")
     tax = ax.twinx()
     tax.plot(time, fluxes[:, 2], "s-", label="Quas-C")
-    q = sc.Q3.values
+
+    q = outputs["Q"][:, 2]
     tax.plot(sc.date, q, ".-", label="Quas-Py")
     ax.set(title="Q3")
     ax.legend()
     ax.grid(axis="x")
 
-    #ax.plot(time, -fluxes[:, 1], "s-", label="C")
-    #q = -sc.Q2.values
-    #ax.plot(sc.date, q, ".-", label="detail")
-    #ax.set(title="Q2")
-
-    dfx = outputs["dfxH3"]
+    dfx = outputs["dfxH"] + outputs["dfxG"]
+    dfx = dfx[:, :, 2]
     for iv in range(4):
         ax = axs[1, 1 + iv]
         nu = gamma if iv == 0 else 1.
@@ -436,21 +420,15 @@ def process(config, script_paths, logger, data):
 
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.5)
 
-        #ax.plot(time, nu * dfluxes_n[:, iv, 1], "-", color="0.5", lw=5,
-        #        alpha=0.5, label="Numerical")
-        #ax.plot(time, nu * dfluxes[:, iv, 1], "s-", label="Quas-C")
-        #ax.plot(sc.date, nu * dfx[:, iv], ".-", label="Quas-Py")
-        #ax.set(title=f"diff Q2 / v{iv + 1}")
-
         ax.grid(axis="x")
         if iv == 0:
             ax.legend()
 
-    integ_dx = outputs["integ_xi"]
-    for iv in range(4):
-        ax = axs[2, 1 + iv]
-        ax.plot(sc.date, integ_dx[:, iv], ".-", color="tab:orange", label="Quas-Py")
-        ax.grid(axis="x")
+    #integ_dx = outputs["integ_xi"]
+    #for iv in range(4):
+    #    ax = axs[2, 1 + iv]
+    #    ax.plot(sc.date, integ_dx[:, iv], ".-", color="tab:orange", label="Quas-Py")
+    #    ax.grid(axis="x")
 
     # Save file
     fp = script_paths.fimg / \
