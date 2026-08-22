@@ -314,9 +314,11 @@ def process(config, script_paths, logger, data):
     area = data.area
 
     # Build quadratic model
-    nalphas = 10
     funs = gradients.FLUX_FUNCTIONS["quadrouting"]
-    alphas = gradients.get_alphas(nalphas)[0]
+    #nalphas = 15
+    #alphas = gradients.get_alphas(nalphas)[0]
+    alphas = 0.2 * np.arange(6)
+    nalphas = len(alphas)
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
 
     # Set inputs
@@ -329,7 +331,7 @@ def process(config, script_paths, logger, data):
 
     # Run model timestep-by-timestep
     logger.info("Integrate details")
-    x0 = 0.2
+    x0 = 0.3
     debug = False
     outputs = integrate_details(alphas, gamma, Qstars, coefs, x0,
                                 timestep=timestep,
@@ -384,6 +386,8 @@ def process(config, script_paths, logger, data):
     ax = axs[0, 0]
     ax.plot(time, x, "s-")
     ax.plot(sc.date, sc.x_end, ".-")
+    for a in alphas:
+        putils.line(ax, 1, 0, 0, a, "--", color="0.5")
     ax.set(title="x")
     ax.grid(axis="x")
 
