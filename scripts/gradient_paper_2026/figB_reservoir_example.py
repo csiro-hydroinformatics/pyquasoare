@@ -119,7 +119,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
     scalars = ["t", "j", "niter", "t_start", "t_end", "time",
              "x_start", "x_end", "integ_x",
-             "xi_start"]
+             "xi_start", "end_timestep"]
     vectors = ["xi_start", "xi_end", "integ_xi",
                "dfxG", "dfxH", "q", "Q"]
     outputs = {"scalars": []}
@@ -148,7 +148,8 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
             "t_start": t_start, "t_end": t_end,
             "time": t + t_end,
             "x_start": x_start, "x_end": x_start,
-            "integ_x": 0.
+            "integ_x": 0.,
+            "end_timestep": 0
             }
         outputs["scalars"].append(sc)
         outputs["xi_start"].append(xi_start)
@@ -266,7 +267,8 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
                 "t_start": t_start, "t_end": t_end,
                 "time": t + t_end / timestep,
                 "x_start": x_start, "x_end": x_end,
-                "integ_x": integ_x
+                "integ_x": integ_x,
+                "end_timestep": int(isnull(timestep - t_end))
                 }
             outputs["scalars"].append(sc)
             outputs["q"].append(q)
@@ -312,7 +314,7 @@ def process(config, script_paths, logger, data):
     area = data.area
 
     # Build quadratic model
-    nalphas = 20
+    nalphas = 10
     funs = gradients.FLUX_FUNCTIONS["quadrouting"]
     alphas = gradients.get_alphas(nalphas)[0]
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
@@ -327,7 +329,7 @@ def process(config, script_paths, logger, data):
 
     # Run model timestep-by-timestep
     logger.info("Integrate details")
-    x0 = 0.1
+    x0 = 0.2
     debug = False
     outputs = integrate_details(alphas, gamma, Qstars, coefs, x0,
                                 timestep=timestep,
@@ -336,34 +338,39 @@ def process(config, script_paths, logger, data):
     sc = outputs["scalars"]
     sc.loc[:, "date"] = time[0] + (sc.time - 1) * delta
 
-    # Run model for complete timeseries
+    # Run C code to check results
     niter, x, dx, fluxes, dfluxes = gradients.grad_reservoir(alphas, gamma,
                                                              Qstars, coefs,
                                                              x0=x0,
                                                              timestep=timestep)
-    # Numerical diff 2
-    eps = 1e-6
-    dx_n = dx.copy()
-    dfluxes_n = dfluxes.copy()
-    for iv in range(4):
-        gamma_l = gamma - eps if iv == 0 else gamma
-        gamma_h = gamma + eps if iv == 0 else gamma
-        coefs_l = coefs.copy()
-        coefs_h = coefs.copy()
-        if iv >= 1:
-            coefs_l[iv - 1] *= (1 - eps)
-            coefs_h[iv - 1] *= (1 + eps)
 
-        _, x_l, _, fluxes_l, _ = gradients.grad_reservoir(alphas, gamma_l,
-                                                          Qstars, coefs_l,
-                                                          x0=x0,
-                                                          timestep=timestep)
-        _, x_h, _, fluxes_h, _ = gradients.grad_reservoir(alphas, gamma_h,
-                                                          Qstars, coefs_h,
-                                                          x0=x0,
-                                                          timestep=timestep)
-        dx_n[:, iv] = (x_h - x_l) / 2 / eps
-        dfluxes_n[:, iv, :] = (fluxes_h - fluxes_l) / 2 / eps
+    iend = sc.end_timestep == 1
+    assert np.allclose(sc.loc[iend, "x_end"], x)
+    assert np.allclose(outputs["Q"][iend], fluxes[:, :3])
+
+    # Numerical diff 2
+    #eps = 1e-6
+    #dx_n = dx.copy()
+    #dfluxes_n = dfluxes.copy()
+    #for iv in range(4):
+    #    gamma_l = gamma - eps if iv == 0 else gamma
+    #    gamma_h = gamma + eps if iv == 0 else gamma
+    #    coefs_l = coefs.copy()
+    #    coefs_h = coefs.copy()
+    #    if iv >= 1:
+    #        coefs_l[iv - 1] *= (1 - eps)
+    #        coefs_h[iv - 1] *= (1 + eps)
+
+    #    _, x_l, _, fluxes_l, _ = gradients.grad_reservoir(alphas, gamma_l,
+    #                                                      Qstars, coefs_l,
+    #                                                      x0=x0,
+    #                                                      timestep=timestep)
+    #    _, x_h, _, fluxes_h, _ = gradients.grad_reservoir(alphas, gamma_h,
+    #                                                      Qstars, coefs_h,
+    #                                                      x0=x0,
+    #                                                      timestep=timestep)
+    #    dx_n[:, iv] = (x_h - x_l) / 2 / eps
+    #    dfluxes_n[:, iv, :] = (fluxes_h - fluxes_l) / 2 / eps
 
     plt.close("all")
     ncols = 5
@@ -384,8 +391,8 @@ def process(config, script_paths, logger, data):
     for iv in range(4):
         ax = axs[0, 1 + iv]
         nu = gamma if iv == 0 else 1.
-        ax.plot(time, nu * dx_n[:, iv], "-", color="0.5", lw=5,
-                alpha=0.5)
+        #ax.plot(time, nu * dx_n[:, iv], "-", color="0.5", lw=5,
+        #        alpha=0.5)
         ax.plot(time, nu * dx[:, iv], "s-")
         ax.plot(sc.date, nu * v[:, iv], ".-")
 
@@ -410,12 +417,12 @@ def process(config, script_paths, logger, data):
         ax = axs[1, 1 + iv]
         nu = gamma if iv == 0 else 1.
 
-        ax.plot(time, nu * dfluxes_n[:, iv, 2], "-", color="0.5", lw=5,
-                alpha=0.5, label="Numerical")
+        #ax.plot(time, nu * dfluxes_n[:, iv, 2], "-", color="0.5", lw=5,
+        #        alpha=0.5, label="Numerical")
         ax.plot(time, nu * dfluxes[:, iv, 2], "s-", label="Quas-C")
         ax.plot(sc.date, nu * dfx[:, iv], ".-", label="Quas-Py")
 
-        vtxt = "$\eta_\Gamma$" if iv == 0 else f"$\eta_{{{iv + 1}}}^f$"
+        vtxt = "$\\eta_\\Gamma$" if iv == 0 else f"$\\eta_{{{iv + 1}}}^f$"
         ax.set(title=f"diff Q3 / {vtxt}")
 
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.5)
