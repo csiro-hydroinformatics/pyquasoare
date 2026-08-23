@@ -299,6 +299,22 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
     return outputs
 
 
+def plot_timeseries(ax, time, values, end_timestep, color,
+                    linked=True):
+    nval = len(time) - 1
+    for i in range(nval):
+        t, v = time[i], values[i]
+        tn, vn = time[i + 1], values[i + 1]
+        label = "Intermediary results" if i == 0 else ""
+        ax.plot([t, tn], [v, vn], "o-", color=color,
+                mec=color, mfc="w",
+                label=label)
+    idx = end_timestep == 1
+    ms = 8
+    ax.plot(time[idx], values[idx], "o", color=color,
+            ms=ms, label="End of timestep")
+
+
 def process(config, script_paths, logger, data):
     logger.info(f"Configure model", nret=1)
     hclim = data.hydroclim
@@ -375,71 +391,71 @@ def process(config, script_paths, logger, data):
     #    dfluxes_n[:, iv, :] = (fluxes_h - fluxes_l) / 2 / eps
 
     plt.close("all")
-    ncols = 5
+    ncols = 3
     nrows = 2
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig, axs = plt.subplots(ncols=ncols, nrows=nrows,
                             layout="constrained",
-                            figsize=figsize,
-                            sharex=True)
+                            figsize=figsize)
+    axs[1, 0].axis("off")
 
+    # QuaSoARe approximation
     ax = axs[0, 0]
-    ax.plot(time, x, "s-")
-    ax.plot(sc.date, sc.x_end, ".-")
-    for a in alphas:
-        putils.line(ax, 1, 0, 0, a, "--", color="0.5")
-    ax.set(title="x")
-    ax.grid(axis="x")
+    x = np.linspace(0, 1, 100)
+    dx = -x**2
+    ax.plot(dx, x, "k-", label="True")
 
-    v = outputs["xi_end"]
-    for iv in range(4):
-        ax = axs[0, 1 + iv]
-        nu = gamma if iv == 0 else 1.
-        #ax.plot(time, nu * dx_n[:, iv], "-", color="0.5", lw=5,
-        #        alpha=0.5)
-        ax.plot(time, nu * dx[:, iv], "s-")
-        ax.plot(sc.date, nu * v[:, iv], ".-")
+    dxa = -alphas**2
+    ax.plot(dxa, alphas, "sk", label="Interpolation nodes")
+    dxi = np.interp(x, alphas, dxa)
+    col = "tab:blue"
+    ax.plot(dxi, x, "-", color=col,
+            label="Linear interpolation")
 
-        vtxt = "$\eta_\Gamma$" if iv == 0 else f"$\eta_{{{iv + 1}}}^f$"
-        ax.set(title=f"diff x / {vtxt}")
-        ax.grid(axis="x")
-
-    ax = axs[1, 0]
-    ax.plot(time, Qstars[:, 0], "ok--", label="input")
-    tax = ax.twinx()
-    tax.plot(time, fluxes[:, 2], "s-", label="Quas-C")
-
-    q = outputs["Q"][:, 2]
-    tax.plot(sc.date, q, ".-", label="Quas-Py")
-    ax.set(title="Q3")
+    title = "(a) Linear approximation of discharge flux function"
+    ax.set(title=title, yticks=alphas)
+    ax.grid(axis="y")
     ax.legend()
+
+    # reservoir level timeseries
+    ax = axs[0, 1]
+    col = "tab:blue"
+    plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep, col)
+    ax.set(title="x")
+    title = "(b) Reservoir filling level ($x$)"
+    ax.set(title=title, yticks=alphas)
+    ax.grid(axis="both")
+
+    # derivative of reservoir level timeseries
+    ax = axs[0, 2]
+    dx = outputs["xi_end"][:, 0]
+    col = "tab:blue"
+    plot_timeseries(ax, sc.date, dx, sc.end_timestep, col)
+    ax.sharex(axs[0, 1])
+    title = "(c) Gradient of reservoir filling level ($dx/d\Gamma$)"
+    ax.set(title=title)
     ax.grid(axis="x")
 
-    dfx = outputs["dfxH"] + outputs["dfxG"]
-    dfx = dfx[:, :, 2]
-    for iv in range(4):
-        ax = axs[1, 1 + iv]
-        nu = gamma if iv == 0 else 1.
+    # Flux timeseries
+    ax = axs[1, 1]
+    q = outputs["Q"][:, 2]
+    col = "tab:blue"
+    plot_timeseries(ax, sc.date, q, sc.end_timestep, col)
+    ax.sharex(axs[0, 1])
+    title = "(e) Discharge flux ($Q_3$)"
+    ax.set(title=title)
+    ax.grid(axis="x")
+    ax.legend()
 
-        #ax.plot(time, nu * dfluxes_n[:, iv, 2], "-", color="0.5", lw=5,
-        #        alpha=0.5, label="Numerical")
-        ax.plot(time, nu * dfluxes[:, iv, 2], "s-", label="Quas-C")
-        ax.plot(sc.date, nu * dfx[:, iv], ".-", label="Quas-Py")
-
-        vtxt = "$\\eta_\\Gamma$" if iv == 0 else f"$\\eta_{{{iv + 1}}}^f$"
-        ax.set(title=f"diff Q3 / {vtxt}")
-
-        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.5)
-
-        ax.grid(axis="x")
-        if iv == 0:
-            ax.legend()
-
-    #integ_dx = outputs["integ_xi"]
-    #for iv in range(4):
-    #    ax = axs[2, 1 + iv]
-    #    ax.plot(sc.date, integ_dx[:, iv], ".-", color="tab:orange", label="Quas-Py")
-    #    ax.grid(axis="x")
+    # Flux derivative timeseries
+    ax = axs[1, 2]
+    dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
+    plot_timeseries(ax, sc.date, dq, sc.end_timestep, col)
+    title = "(e) Gradient of discharge ($dQ_3/d\Gamma$)"
+    ax.set(title=title)
+    ax.sharex(axs[0, 1])
+    ax.grid(axis="x")
+    ax.legend()
 
     # Save file
     fp = script_paths.fimg / \
