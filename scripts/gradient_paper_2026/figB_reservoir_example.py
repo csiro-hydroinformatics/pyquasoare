@@ -25,6 +25,8 @@ from string import ascii_lowercase as letters
 import matplotlib as mpl
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib import ticker as mticker
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils, violinplot
@@ -300,19 +302,44 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
 
 def plot_timeseries(ax, time, values, end_timestep, color,
-                    linked=True):
+                    continuous=False):
     nval = len(time) - 1
     for i in range(nval):
         t, v = time[i], values[i]
         tn, vn = time[i + 1], values[i + 1]
-        label = "Intermediary results" if i == 0 else ""
-        ax.plot([t, tn], [v, vn], "o-", color=color,
-                mec=color, mfc="w",
-                label=label)
+        if end_timestep[i] == 1:
+            continue
+
+        if continuous:
+            ax.plot([t, tn], [v, vn], "-", color=color)
+        else:
+            ax.plot([t, t], [v, vn], "-", color=color)
+            ax.plot([t, tn], [vn, vn], "-", color=color)
+
+        ax.plot(t, v, ".", color=color)
+        ax.plot(tn, vn, "o", mec=color, mfc="w", zorder=10)
+
+    ax.plot([], [], "o-", mec=color, mfc="w", color=color,
+            label="Intermediary results")
+
     idx = end_timestep == 1
     ms = 8
     ax.plot(time[idx], values[idx], "o", color=color,
-            ms=ms, label="End of timestep")
+            ms=ms, label="End of timestep",
+            zorder=11)
+
+
+def format_time_xaxis(ax, time, label=True):
+    ax.xaxis.set_major_locator(mdates.DayLocator())
+    fmt = mdates.DateFormatter("")
+    ax.xaxis.set_major_formatter(fmt)
+    ax.grid(axis="x")
+
+    if label:
+        ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[12]))
+        fmt = mdates.DateFormatter("%d %b\n%y")
+        ax.xaxis.set_minor_formatter(fmt)
+        ax.tick_params(axis='x', which='minor', tick1On=False, tick2On=False)
 
 
 def process(config, script_paths, logger, data):
@@ -347,7 +374,7 @@ def process(config, script_paths, logger, data):
 
     # Run model timestep-by-timestep
     logger.info("Integrate details")
-    x0 = 0.3
+    x0 = 0.1
     debug = False
     outputs = integrate_details(alphas, gamma, Qstars, coefs, x0,
                                 timestep=timestep,
@@ -366,29 +393,11 @@ def process(config, script_paths, logger, data):
     assert np.allclose(sc.loc[iend, "x_end"], x)
     assert np.allclose(outputs["Q"][iend], fluxes[:, :3])
 
-    # Numerical diff 2
-    #eps = 1e-6
-    #dx_n = dx.copy()
-    #dfluxes_n = dfluxes.copy()
-    #for iv in range(4):
-    #    gamma_l = gamma - eps if iv == 0 else gamma
-    #    gamma_h = gamma + eps if iv == 0 else gamma
-    #    coefs_l = coefs.copy()
-    #    coefs_h = coefs.copy()
-    #    if iv >= 1:
-    #        coefs_l[iv - 1] *= (1 - eps)
-    #        coefs_h[iv - 1] *= (1 + eps)
+    logger.info("print table")
+    import pdb; pdb.set_trace()
 
-    #    _, x_l, _, fluxes_l, _ = gradients.grad_reservoir(alphas, gamma_l,
-    #                                                      Qstars, coefs_l,
-    #                                                      x0=x0,
-    #                                                      timestep=timestep)
-    #    _, x_h, _, fluxes_h, _ = gradients.grad_reservoir(alphas, gamma_h,
-    #                                                      Qstars, coefs_h,
-    #                                                      x0=x0,
-    #                                                      timestep=timestep)
-    #    dx_n[:, iv] = (x_h - x_l) / 2 / eps
-    #    dfluxes_n[:, iv, :] = (fluxes_h - fluxes_l) / 2 / eps
+
+    logger.info("plot")
 
     plt.close("all")
     ncols = 3
@@ -397,16 +406,16 @@ def process(config, script_paths, logger, data):
     fig, axs = plt.subplots(ncols=ncols, nrows=nrows,
                             layout="constrained",
                             figsize=figsize)
-    axs[1, 0].axis("off")
 
     # QuaSoARe approximation
     ax = axs[0, 0]
     x = np.linspace(0, 1, 100)
     dx = -x**2
-    ax.plot(dx, x, "k-", label="True")
+    ax.plot(dx, x, "-", color="0.4", label="True")
 
     dxa = -alphas**2
-    ax.plot(dxa, alphas, "sk", label="Interpolation nodes")
+    ax.plot(dxa, alphas, "s",
+            color="0.6", label="Interpolation nodes")
     dxi = np.interp(x, alphas, dxa)
     col = "tab:blue"
     ax.plot(dxi, x, "-", color=col,
@@ -414,48 +423,52 @@ def process(config, script_paths, logger, data):
 
     title = "(a) Linear approximation of discharge flux function"
     ax.set(title=title, yticks=alphas)
-    ax.grid(axis="y")
     ax.legend()
+
+    # reservoir level timeseries
+    ax = axs[1, 0]
+    title = "(d) Potential Inflow $Q^*_1$"
+    ax.step(time, Qstars[:, 0], where="post")
+    ax.set(title=title)
+    format_time_xaxis(ax, time)
 
     # reservoir level timeseries
     ax = axs[0, 1]
     col = "tab:blue"
-    plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep, col)
-    ax.set(title="x")
+    plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep, col,
+                    True)
     title = "(b) Reservoir filling level ($x$)"
     ax.set(title=title, yticks=alphas)
-    ax.grid(axis="both")
+    format_time_xaxis(ax, time, False)
+    ax.sharey(axs[0, 0])
+    ax.legend(loc=2, fontsize="large")
 
     # derivative of reservoir level timeseries
     ax = axs[0, 2]
     dx = outputs["xi_end"][:, 0]
     col = "tab:blue"
-    plot_timeseries(ax, sc.date, dx, sc.end_timestep, col)
-    ax.sharex(axs[0, 1])
-    title = "(c) Gradient of reservoir filling level ($dx/d\Gamma$)"
+    plot_timeseries(ax, sc.date, dx, sc.end_timestep, col,
+                    True)
+    title = "(c) Gradient of reservoir filling level ($dx/d\\Gamma$)"
     ax.set(title=title)
-    ax.grid(axis="x")
+    format_time_xaxis(ax, time, False)
 
     # Flux timeseries
     ax = axs[1, 1]
     q = outputs["Q"][:, 2]
     col = "tab:blue"
     plot_timeseries(ax, sc.date, q, sc.end_timestep, col)
-    ax.sharex(axs[0, 1])
     title = "(e) Discharge flux ($Q_3$)"
     ax.set(title=title)
-    ax.grid(axis="x")
-    ax.legend()
+    format_time_xaxis(ax, time)
 
     # Flux derivative timeseries
     ax = axs[1, 2]
     dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
     plot_timeseries(ax, sc.date, dq, sc.end_timestep, col)
-    title = "(e) Gradient of discharge ($dQ_3/d\Gamma$)"
+    title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
     ax.set(title=title)
-    ax.sharex(axs[0, 1])
-    ax.grid(axis="x")
-    ax.legend()
+    format_time_xaxis(ax, time)
 
     # Save file
     fp = script_paths.fimg / \
