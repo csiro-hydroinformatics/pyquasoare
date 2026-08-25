@@ -27,6 +27,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import ticker as mticker
+from matplotlib.patches import Rectangle
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils, violinplot
@@ -146,7 +147,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
         dfxH = np.zeros((4, 3))
 
         sc = {
-            "t": t, "j": j, "niter": niter,
+            "t": t, "j": j, "niter": niter, "qstar1": qst[0],
             "t_start": t_start, "t_end": t_end,
             "time": t + t_end,
             "x_start": x_start, "x_end": x_start,
@@ -265,7 +266,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
             # Store
             sc = {
-                "t": t, "j": j, "niter": niter,
+                "t": t, "j": j, "niter": niter, "qstar1": qst[0],
                 "t_start": t_start, "t_end": t_end,
                 "time": t + t_end / timestep,
                 "x_start": x_start, "x_end": x_end,
@@ -301,32 +302,46 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
     return outputs
 
 
-def plot_timeseries(ax, time, values, end_timestep, color,
-                    continuous=False):
+def plot_timeseries(ax, time, values, end_timestep, color1,
+                    color2, continuous=False):
     nval = len(time) - 1
-    for i in range(nval):
-        t, v = time[i], values[i]
-        tn, vn = time[i + 1], values[i + 1]
-        if end_timestep[i] == 1:
-            continue
-
-        if continuous:
-            ax.plot([t, tn], [v, vn], "-", color=color)
-        else:
-            ax.plot([t, t], [v, vn], "-", color=color)
-            ax.plot([t, tn], [vn, vn], "-", color=color)
-
-        ax.plot(t, v, ".", color=color)
-        ax.plot(tn, vn, "o", mec=color, mfc="w", zorder=10)
-
-    ax.plot([], [], "o-", mec=color, mfc="w", color=color,
-            label="Intermediary results")
-
+    dt = time[1] - time[0]
     idx = end_timestep == 1
-    ms = 8
-    ax.plot(time[idx], values[idx], "o", color=color,
-            ms=ms, label="End of timestep",
-            zorder=11)
+
+    if continuous:
+        for i in range(nval):
+            t, v = time[i], values[i]
+            tn, vn = time[i + 1], values[i + 1]
+            if end_timestep[i] == 1:
+                continue
+
+            label = "Intermediary results" if i == 0 else ""
+            ax.plot([t, tn], [v, vn], "-", color=color1)
+            ax.plot(tn, vn, "o", color=color2, label=label,
+                    zorder=10)
+
+        ms = 8
+        ax.plot(time[idx], values[idx], "o", color=color1,
+                ms=ms, label="End of timestep",
+                zorder=11)
+    else:
+        ax.bar(time[idx] - pd.Timedelta(hours=12), values[idx], 1,
+               ec=color1, fc="none",
+               linewidth=3, zorder=11)
+
+        for i in range(nval):
+            t, v = time[i], values[i]
+            tn, vn = time[i + 1], values[i + 1]
+            if end_timestep[i] == 1:
+                continue
+
+            t0 = t.round("D")
+            rect = Rectangle((t0, 0), tn - t0, vn,
+                             linewidth=2,
+                             edgecolor=color2,
+                             facecolor="none",
+                             zorder=10)
+            ax.add_patch(rect)
 
 
 def format_time_xaxis(ax, time, label=True):
@@ -388,14 +403,33 @@ def process(config, script_paths, logger, data):
                                                              Qstars, coefs,
                                                              x0=x0,
                                                              timestep=timestep)
-
     iend = sc.end_timestep == 1
     assert np.allclose(sc.loc[iend, "x_end"], x)
     assert np.allclose(outputs["Q"][iend], fluxes[:, :3])
 
     logger.info("print table")
-    import pdb; pdb.set_trace()
+    df = sc.copy()
+    df.loc[:, "xi_start"] = outputs["xi_start"][:, 0]
+    df.loc[:, "xi_end"] = outputs["xi_end"][:, 0]
+    df.loc[:, "dfxG"] = outputs["dfxG"][:, 0, 2]
+    df.loc[:, "dfxH"] = outputs["dfxH"][:, 0, 2]
 
+    cc = ["t", "qstar1", "t_start", "x_start", "xi_start", "t_end", "x_end",
+          "integ_x", "xi_end", "dfxG", "dfxH"]
+    df = df.loc[df.t_end > 0, cc].reset_index(drop=True).round(4)
+
+    for tu in df.t.unique():
+        idx = np.where(df.t == tu)[0]
+        if len(idx) > 1:
+            idx = idx[1:]
+            df.loc[idx, "t"] = np.nan
+            df.loc[idx, "qstar1"] = np.nan
+
+    fd = script_paths.fimg / \
+            f"figB_resevoir_example.csv"
+    csv.write_csv(df, fd, "Reservoir example data",
+                  script_paths.source_file,
+                  compress=False, lineterminator="\n")
 
     logger.info("plot")
 
@@ -428,15 +462,18 @@ def process(config, script_paths, logger, data):
     # reservoir level timeseries
     ax = axs[1, 0]
     title = "(d) Potential Inflow $Q^*_1$"
-    ax.step(time, Qstars[:, 0], where="post")
+    ax.bar(time + pd.Timedelta(hours=12), Qstars[:, 0], 1,
+           ec="midnightblue", fc="none",
+           linewidth=3, zorder=10)
     ax.set(title=title)
     format_time_xaxis(ax, time)
 
     # reservoir level timeseries
     ax = axs[0, 1]
-    col = "tab:blue"
-    plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep, col,
-                    True)
+    col1 = "midnightblue"
+    col2 = "cornflowerblue"
+    plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep,
+                    col1, col2, True)
     title = "(b) Reservoir filling level ($x$)"
     ax.set(title=title, yticks=alphas)
     format_time_xaxis(ax, time, False)
@@ -447,8 +484,8 @@ def process(config, script_paths, logger, data):
     ax = axs[0, 2]
     dx = outputs["xi_end"][:, 0]
     col = "tab:blue"
-    plot_timeseries(ax, sc.date, dx, sc.end_timestep, col,
-                    True)
+    plot_timeseries(ax, sc.date, dx, sc.end_timestep,
+                    col1, col2, True)
     title = "(c) Gradient of reservoir filling level ($dx/d\\Gamma$)"
     ax.set(title=title)
     format_time_xaxis(ax, time, False)
@@ -456,8 +493,7 @@ def process(config, script_paths, logger, data):
     # Flux timeseries
     ax = axs[1, 1]
     q = outputs["Q"][:, 2]
-    col = "tab:blue"
-    plot_timeseries(ax, sc.date, q, sc.end_timestep, col)
+    plot_timeseries(ax, sc.date, q, sc.end_timestep, col1, col2)
     title = "(e) Discharge flux ($Q_3$)"
     ax.set(title=title)
     format_time_xaxis(ax, time)
@@ -465,7 +501,7 @@ def process(config, script_paths, logger, data):
     # Flux derivative timeseries
     ax = axs[1, 2]
     dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
-    plot_timeseries(ax, sc.date, dq, sc.end_timestep, col)
+    plot_timeseries(ax, sc.date, dq, sc.end_timestep, col1, col2)
     title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
     ax.set(title=title)
     format_time_xaxis(ax, time)
