@@ -120,11 +120,11 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
     x_start = x0
     xi_start = np.zeros(4) # 4 variables = 1 capacity + 3 flux scalings
 
-    scalars = ["t", "j", "niter", "t_start", "t_end", "time",
+    scalars = ["t + 1", "j", "niter", "t_start", "t_end", "time",
              "x_start", "x_end", "integ_x",
              "xi_start", "end_timestep"]
     vectors = ["xi_start", "xi_end", "integ_xi",
-               "dfxG", "dfxH", "q", "Q"]
+               "integ_fx", "dfxG", "dfxH", "q", "Q"]
     outputs = {"scalars": []}
     for v in vectors:
         outputs[v] = []
@@ -147,7 +147,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
         dfxH = np.zeros((4, 3))
 
         sc = {
-            "t": t, "j": j, "niter": niter, "qstar1": qst[0],
+            "t": t + 1, "j": j, "niter": niter, "qstar1": qst[0],
             "t_start": t_start, "t_end": t_end,
             "time": t + t_end,
             "x_start": x_start, "x_end": x_start,
@@ -160,6 +160,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
         outputs["integ_xi"].append(xi_start * 0.)
 
         outputs["q"].append(np.zeros(3))
+        outputs["integ_fx"].append(Q.copy())
         outputs["Q"].append(Q.copy())
         outputs["dfxG"].append(dfxG.copy())
         outputs["dfxH"].append(dfxH.copy())
@@ -266,7 +267,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
 
             # Store
             sc = {
-                "t": t, "j": j, "niter": niter, "qstar1": qst[0],
+                "t": t + 1, "j": j, "niter": niter, "qstar1": qst[0],
                 "t_start": t_start, "t_end": t_end,
                 "time": t + t_end / timestep,
                 "x_start": x_start, "x_end": x_end,
@@ -276,6 +277,7 @@ def integrate_details(alphas, gamma, Qstars, coefs, x0,
             outputs["scalars"].append(sc)
             outputs["q"].append(q)
             outputs["Q"].append(Q.copy())
+            outputs["integ_fx"].append(integ_fx.copy())
             outputs["xi_start"].append(xi_start)
             outputs["xi_end"].append(xi_end)
             outputs["integ_xi"].append(integ_xi)
@@ -318,16 +320,16 @@ def plot_timeseries(ax, time, values, end_timestep, color1,
             label = "Intermediary results" if i == 0 else ""
             ax.plot([t, tn], [v, vn], "-", color=color1)
             ax.plot(tn, vn, "o", color=color2, label=label,
-                    zorder=10)
+                    zorder=1)
 
         ms = 8
         ax.plot(time[idx], values[idx], "o", color=color1,
                 ms=ms, label="End of timestep",
-                zorder=11)
+                zorder=2)
     else:
         ax.bar(time[idx] - pd.Timedelta(hours=12), values[idx], 1,
                ec=color1, fc="none",
-               linewidth=3, zorder=11)
+               linewidth=3, zorder=2)
 
         for i in range(nval):
             t, v = time[i], values[i]
@@ -340,8 +342,11 @@ def plot_timeseries(ax, time, values, end_timestep, color1,
                              linewidth=2,
                              edgecolor=color2,
                              facecolor="none",
-                             zorder=10)
+                             zorder=1)
             ax.add_patch(rect)
+
+        ax.plot([], [], color=color1, lw=3, label="End of timestep")
+        ax.plot([], [], color=color2, lw=2, label="Intermediary result")
 
 
 def format_time_xaxis(ax, time, label=True):
@@ -352,7 +357,7 @@ def format_time_xaxis(ax, time, label=True):
 
     if label:
         ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[12]))
-        fmt = mdates.DateFormatter("%d %b\n%y")
+        fmt = mdates.DateFormatter("%d %b")
         ax.xaxis.set_minor_formatter(fmt)
         ax.tick_params(axis='x', which='minor', tick1On=False, tick2On=False)
 
@@ -381,7 +386,7 @@ def process(config, script_paths, logger, data):
 
     # Set inputs
     Qstars = np.zeros((nsubsteps * nval, 2))
-    Qstars[:, 0] = np.repeat(hclim.Q, nsubsteps)
+    Qstars[:, 0] = np.round(np.repeat(hclim.Q, nsubsteps), 0)
     #Qstars[:, 1] = -5. # Demand
 
     # Set params
@@ -407,16 +412,19 @@ def process(config, script_paths, logger, data):
     assert np.allclose(sc.loc[iend, "x_end"], x)
     assert np.allclose(outputs["Q"][iend], fluxes[:, :3])
 
+    # --------------------
     logger.info("print table")
     df = sc.copy()
     df.loc[:, "xi_start"] = outputs["xi_start"][:, 0]
     df.loc[:, "xi_end"] = outputs["xi_end"][:, 0]
     df.loc[:, "dfxG"] = outputs["dfxG"][:, 0, 2]
     df.loc[:, "dfxH"] = outputs["dfxH"][:, 0, 2]
+    df.loc[:, "integ_fx"] = outputs["integ_fx"][:, 2]
 
     cc = ["t", "qstar1", "t_start", "x_start", "xi_start", "t_end", "x_end",
-          "integ_x", "xi_end", "dfxG", "dfxH"]
-    df = df.loc[df.t_end > 0, cc].reset_index(drop=True).round(4)
+          "integ_x", "integ_fx", "xi_end", "dfxG", "dfxH"]
+    df = df.loc[df.t_end > 0, cc].reset_index(drop=True)
+    #import pdb; pdb.set_trace()
 
     for tu in df.t.unique():
         idx = np.where(df.t == tu)[0]
@@ -431,6 +439,7 @@ def process(config, script_paths, logger, data):
                   script_paths.source_file,
                   compress=False, lineterminator="\n")
 
+    # --------------------
     logger.info("plot")
 
     plt.close("all")
@@ -445,65 +454,91 @@ def process(config, script_paths, logger, data):
     ax = axs[0, 0]
     x = np.linspace(0, 1, 100)
     dx = -x**2
-    ax.plot(dx, x, "-", color="0.4", label="True")
+    ax.plot(x, dx, "-", color="0.4", label="True")
 
     dxa = -alphas**2
-    ax.plot(dxa, alphas, "s",
+    ax.plot(alphas, dxa, "s",
             color="0.6", label="Interpolation nodes")
     dxi = np.interp(x, alphas, dxa)
     col = "tab:blue"
-    ax.plot(dxi, x, "-", color=col,
+    ax.plot(x, dxi, "-", color=col,
             label="Linear interpolation")
+    ax.plot([], [], ":", color="0.5", label="Interpolation bands")
+
+    #for j in range(nalphas - 1):
+    #    aj = alphas[j]
+    #    ajp = alphas[j + 1]
+    #    da = ajp - aj
+    #    da2 = ajp**2 - aj**2
+    #    s = -da2 / da
+    #    m = -aj**2 + da2 / da * aj
+    #    xx = np.linspace(aj, ajp, 10)
+    #    ax.plot(xx, m + s * xx, "-", color="purple", lw=5)
 
     title = "(a) Linear approximation of discharge flux function"
-    ax.set(title=title, yticks=alphas)
-    ax.legend()
+    ax.set(title=title, xticks=alphas,
+           xlabel="Reservoir level $x$ [-]",
+           ylabel="Flux function $f_3(x)$ [-]")
+    ax.legend(fontsize="large", framealpha=1.)
+    ax.grid(axis="x", ls=":")
 
-    # reservoir level timeseries
+    # Potential inflows
     ax = axs[1, 0]
     title = "(d) Potential Inflow $Q^*_1$"
     ax.bar(time + pd.Timedelta(hours=12), Qstars[:, 0], 1,
            ec="midnightblue", fc="none",
            linewidth=3, zorder=10)
-    ax.set(title=title)
+    ax.set(title=title,
+           ylabel="Flux [mm.d$^{-1}$]")
     format_time_xaxis(ax, time)
 
     # reservoir level timeseries
     ax = axs[0, 1]
     col1 = "midnightblue"
     col2 = "cornflowerblue"
+    ax.plot(sc.date[0], x0, "or", label="Initial condition",
+            zorder=12, ms=8)
     plot_timeseries(ax, sc.date, sc.x_end, sc.end_timestep,
                     col1, col2, True)
+    ax.plot([], [], ":", color="0.5", label="Interpolation bands")
     title = "(b) Reservoir filling level ($x$)"
-    ax.set(title=title, yticks=alphas)
-    format_time_xaxis(ax, time, False)
-    ax.sharey(axs[0, 0])
-    ax.legend(loc=2, fontsize="large")
+    ax.set(title=title, yticks=alphas,
+           ylabel="Reservoir level $x$ [-]")
+    format_time_xaxis(ax, time, True)
+    ax.legend(loc=4, fontsize="large", framealpha=1.)
+    ax.grid(axis="y", ls=":")
 
     # derivative of reservoir level timeseries
     ax = axs[0, 2]
+    ax.plot(sc.date[0], 0., "or", label="Initial condition",
+            zorder=12, ms=8)
     dx = outputs["xi_end"][:, 0]
     col = "tab:blue"
     plot_timeseries(ax, sc.date, dx, sc.end_timestep,
                     col1, col2, True)
     title = "(c) Gradient of reservoir filling level ($dx/d\\Gamma$)"
-    ax.set(title=title)
-    format_time_xaxis(ax, time, False)
+    ax.set(title=title,
+           ylabel="Reservoir level gradient $dx/d\\Gamma$ [mm$^{-1}$]")
+    format_time_xaxis(ax, time, True)
 
     # Flux timeseries
     ax = axs[1, 1]
     q = outputs["Q"][:, 2]
     plot_timeseries(ax, sc.date, q, sc.end_timestep, col1, col2)
     title = "(e) Discharge flux ($Q_3$)"
-    ax.set(title=title)
+    ax.set(title=title,
+           ylabel="Flux [mm.d$^{-1}$]")
     format_time_xaxis(ax, time)
+    ax.legend(fontsize="large", framealpha=1., loc=3,
+              bbox_to_anchor=(0., 0.15))
 
     # Flux derivative timeseries
     ax = axs[1, 2]
     dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
     plot_timeseries(ax, sc.date, dq, sc.end_timestep, col1, col2)
     title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
-    ax.set(title=title)
+    ax.set(title=title,
+           ylabel="Flux gradient [d$^{-1}$]")
     format_time_xaxis(ax, time)
 
     # Save file
@@ -525,8 +560,8 @@ if __name__ == "__main__":
     # Config
     timestep = "daily"
     stationid = args.stationid
-    awidth = 5
-    aheight = 4
+    awidth = 4.5
+    aheight = 3.5
     fdpi = 300
     imgext = "png"
     ftransparent = False
