@@ -1216,262 +1216,42 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
         & (dtq < dtn), mess
 
 
-@pytest.mark.parametrize("gamma", [10, 1000])
-@pytest.mark.parametrize("demand", [-0.1])
-@pytest.mark.parametrize("timestep", TIMESTEPS)
-@pytest.mark.parametrize("nreaches", [1, 2, 5])
-@pytest.mark.parametrize("diff", [1, 2, 3]) # 4 does not work yet
-def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
-                                          diff, allclose, debug_mode):
-    pytest.skip("Too complex")
-    noriginal = 365 * 5
-    nrepeat = 100
-    nval = nrepeat * noriginal
-    pin = np.empty((nval, nreaches))
-    ein = np.empty((nval, nreaches))
-    # Random catchment areas
-    areas = np.linspace(100, 500, nreaches)
-    for isite, siteid in enumerate(data_reader.SITEIDS[:nreaches]):
-        df = data_reader.get_data(siteid, "daily")[-noriginal:]
-        assert df.shape[0] == noriginal
-        df = df.interpolate().iloc[-noriginal:]
-        df = np.tile(df, (nrepeat, 1))
-        pin[:, isite] = df[:, 0]
-        ein[:, isite] = df[:, 1]
+@pytest.mark.parametrize("nres", [2, 5, 11, 50])
+@pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
+def test_gr4j_nash_cascade(nres, X4, allclose):
+    nalphas = 100
+    nuh = nres - 2
+    mod = gradients.MultiReservoirModel(nres, nalphas,
+                                        errors="raise")
+    # Links
+    mod.add_link_bypass_shortfall(0, 1)
 
+    for iuh in range(nuh):
+        mod.add_link_outflow(iuh + 1, iuh + 2)
 
-    vref = np.cumsum(pin.mean(axis=0) * areas * 1e3) # m3/day
+    # Coefs
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
+    for iuh in range(nuh):
+        mod.set_coefs_linear(2 + iuh, "linrouting")
 
-    # run benchmarks
-    x0 = 0.5
-    gammas_rr_prod = np.array([gamma] * nreaches)
-    zr = np.zeros(nreaches)
-    o = np.array([1.] + [0.] * (nreaches - 1))
-    dgammas_rr_prod = o if diff == 1 else zr
-    gammas_rr_route = np.array([gamma / 10] * nreaches)
-    dgammas_rr_route = o if diff == 2 else zr
-    gammas_ro_route = vref
-    dgammas_ro_route = o if diff == 3 else zr
-    demands_rr_route = np.ones(nreaches) * demand
-    ddemands_rr_route = o if diff == 4 else zr
+    # allocate
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim = hclim.iloc[:600]
+    ntimesteps = len(hclim)
+    mod.allocate(ntimesteps)
 
-    t0 = time.time()
-    out = benchmarks.gradbench_semidist_tangent(timestep, pin, ein, x0, areas,
-                                                gammas_rr_prod,
-                                                dgammas_rr_prod,
-                                                gammas_rr_route,
-                                                dgammas_rr_route,
-                                                gammas_ro_route,
-                                                dgammas_ro_route,
-                                                demands_rr_route,
-                                                ddemands_rr_route)
-    dtb = time.time() - t0
-    x_rr_prod, dx_rr_prod, \
-        x_rr_route, dx_rr_route, \
-        x_ro_route, dx_ro_route, \
-        fx_rr_prod, dfx_rr_prod, \
-        fx_rr_route, dfx_rr_route, \
-        fx_ro_route, dfx_ro_route = out
+    # Set inputs
+    inputs = np.ascontiguousarray(hclim.values)
+    inputs[:, 1] *= -1
+    mod.set_Qstars(0, inputs)
 
-    # run quasoare
-    nres_per_reach = 4
-    nres = nreaches * nres_per_reach
-    mod = gradients.MultiReservoirModel(nres, errors="raise")
+    # Set parameters
+    X0, X1 = 1e-2, 400
+    mod.gammas = [X0, X1] + [1] * nuh
+    for iuh in range(nuh):
+        mod.flux_scalings[2 + iuh, 2] = nuh * 1.25 / X4
 
-    # .. gradients against capacity in top reach
-    #    if diff <= 3 or demand if diff == 4 (i.e. demand flux scaling)
-    vspecs = [[diff - 1, 0]] if diff != 4 else [[1, 2]]
-
-    # (test gradients against all variables)
-    #vspecs = [[r, t] for r in range(mod.nreservoirs) for t in range(4)]
-    #print(f"\n{len(vspecs)} variables")
-
-    mod.allocate(nval, timestep=timestep,
-                 variables_specs=vspecs)
-
-    # Set alphas
-    nalphas = 500
-    xmaxs = np.zeros(mod.nreservoirs)
-    for ireach in range(nreaches):
-        xmaxs[nres_per_reach * ireach] = np.max(x_rr_prod[:, ireach])
-        xmaxs[nres_per_reach * ireach + 1] = np.max(x_rr_route[:, ireach])
-        xmaxs[nres_per_reach * ireach + 2] = np.max(x_ro_route[:,  ireach])
-        xmaxs[nres_per_reach * ireach + 3] = 1
-
-    nu = 1e-5
-    lows = np.array([-nu, 0., nu / 10, nu])
-
-    alphas = [np.repeat(lows[None, :], mod.nreservoirs, 0),
-              2 * nu + xmaxs[:, None] * np.linspace(0, 1.,
-                                                    nalphas - 4)[None, :]]
-    mod.alphas = np.column_stack(alphas)
-
-    # Set data and network
-    for ireach in range(nreaches):
-        ibase = nres_per_reach * ireach
-        # RR prod = ibase
-        # RR routing = ibase + 1
-        # RO routing = ibase + 2
-        # Transluent = ibase + 3
-
-        # .. inputs ..
-        # Set RR prod inputs
-        Qst = np.column_stack([pin[:, ireach], -ein[:, ireach]])
-        mod.set_Qstars(ibase, Qst)
-
-        # Set RR route inputs
-        Qst = np.ones((nval, 2))
-        Qst[:, 0] = np.nan
-        mod.set_Qstars(ibase + 1, Qst)
-
-        # .. coefs ...
-        # Set RR prod coefs
-        mod.set_coefs_linear(ibase, FLUX_FUNCTIONS["gr4jprodquad"])
-
-        # Set RR route coefs
-        mod.set_coefs_linear(ibase + 1, FLUX_FUNCTIONS["gr4jroutequad"])
-
-        # Set RO route coefs
-        mod.set_coefs_linear(ibase + 2, FLUX_FUNCTIONS["quadrouting"])
-
-        # Set Transluent coefs
-        mod.set_coefs_linear(ibase + 3, "transluent")
-
-        # .. links ...
-        # RR prod -> RR routing
-        mod.add_link_outflow(ibase, ibase + 1)
-
-        # RR route -> transluent with conversion
-        conv = areas[ireach] * timestep / 86.4
-        mod.add_link_outflow(ibase + 1, ibase + 3, conv)
-
-        # Transluent upstream -> RO route
-        if ireach > 0:
-            mod.add_link_outflow(ibase - 1, ibase + 2)
-
-        # RO Route -> transluent
-        mod.add_link_outflow(ibase + 2, ibase + 3)
-
-    # Set capacity
-    g = np.ones(nreaches * nres_per_reach)
-    g[::nres_per_reach] = gammas_rr_prod
-    g[1::nres_per_reach] = gammas_rr_route
-    g[2::nres_per_reach] = gammas_ro_route
-    mod.gammas = g
-
-    # Set demands for rr route reservoirs
-    mod.flux_scalings[1::nres_per_reach, 1] = demand
-
-    # Run model
-    t0 = time.time()
     mod.run()
-    dtq = time.time() - t0
 
-    if debug_mode:
-        import matplotlib.pyplot as plt
-        plt.close("all")
-        # Skip model routing reservoir (replaced by transluent)
-        nres = (nres_per_reach - 1) * nreaches
-        aw, ah = 4, 3
-        fig, axs = plt.subplots(nrows=2, ncols=nres,
-                                figsize=(nres * aw, 2 * ah), layout="constrained",
-                                sharex=True)
-
-        for res in range(nres):
-            ireach = res // 3
-            ires_mod_base = nres_per_reach * ireach
-
-            if res % 3 == 0:
-                yb = fx_rr_prod[-noriginal:, ireach]
-                dyb = dfx_rr_prod[-noriginal:, ireach]
-                rtype = "RR prod"
-                ires_mod = ires_mod_base
-            elif res % 3 == 1:
-                yb = fx_rr_route[-noriginal:, ireach]
-                dyb = dfx_rr_route[-noriginal:, ireach]
-                rtype = "RR route"
-                ires_mod = ires_mod_base + 1
-            elif res % 3 == 2:
-                yb = fx_ro_route[-noriginal:, ireach]
-                dyb = dfx_ro_route[-noriginal:, ireach]
-                rtype = "RO route"
-                ires_mod = ires_mod_base + 3
-
-            yq = -mod.fluxes[-noriginal:, ires_mod, 5]
-            dyq = -mod.dfluxes[-noriginal:, 0, ires_mod, 5]
-
-            if diff < 4:
-                g0 = mod.gammas[diff]
-                dyb *= g0
-                dyq *= g0
-
-            ax = axs[0, res]
-            ax.plot(yb, label="benchmark")
-            ax.plot(yq, label="quasoare")
-            tax = ax.twinx()
-
-            ef, err = eff(yb, yq)
-            tax.plot(err, lw=0.8, color="0.6", alpha=0.2)
-            ax.text(0.02, 0.98, f"Emax={err:0.1e}\nEff={ef:0.1e}",
-                    va="top", ha="left", transform=ax.transAxes)
-
-            title = f"R{res} ({rtype})"
-            ylabel = "Flow [m3/s]" if res % 3 == 2 else "Runoff [mm/d]"
-            ax.set(title=title, ylabel=ylabel)
-            if res == 0:
-                ax.legend()
-
-            ax = axs[1, res]
-            ax.plot(dyb)
-            ax.plot(dyq)
-            tax = ax.twinx()
-            ef, err = eff(dyb, dyq)
-            tax.plot(err, lw=0.8, color="0.6", alpha=0.2)
-            ax.text(0.02, 0.98, f"Emax={err:0.1e}\nEff={ef:0.1e}",
-                    va="top", ha="left", transform=ax.transAxes)
-
-            ax.set(ylabel=ylabel)
-
-        ftitle = f"Diff {diff} Δb={dtb:4.2e}s Δq={dtq:4.2e}s"
-        fig.suptitle(ftitle, fontweight="bold", fontsize=15)
-        fp = FTEST / "sim.png"
-        fig.savefig(fp)
-        print(f"\nResults printed to {fp}")
-
-    print(f"\nTime: dtb={dtb:4.2e} dtq={dtq:4.2e} / ratio = {dtq / dtb:0.1f}")
-    #assert dtq < dtb * 65
-
-    # Error on rr prod
-    nrp = nres_per_reach
-    ef, err = eff(fx_rr_prod, -mod.fluxes[:, ::nrp, 5])
-    ef = np.max(ef)
-    logtxt = f"FRP={ef:3.1e}"
-    #assert ef < 5e-5
-
-    ef, err = eff(dfx_rr_prod, -mod.dfluxes[:, 0, ::nrp, 5])
-    ef = np.max(ef)
-    logtxt += f" DRP={ef:3.1e}"
-    #assert ef < 5e-5
-
-    # Error on rr route
-    ef, err = eff(fx_rr_route, -mod.fluxes[:, 1::nrp, 5])
-    ef = np.max(ef)
-    logtxt += f" FRR={ef:3.1e}"
-    #assert ef < 5e-5
-
-    ef, err = eff(dfx_rr_route, -mod.dfluxes[:, 0, 1::nrp, 5])
-    ef = np.max(ef)
-    logtxt += f" DRR={ef:3.1e}"
-    #assert ef < 5e-5
-
-    # Error on ro route
-    ef, err = eff(fx_ro_route, -mod.fluxes[:, 3::nrp, 5])
-    ef = np.max(ef)
-    logtxt += f" FRO={ef:3.1e}"
-    #assert ef < 5e-5
-
-    ef, err = eff(dfx_ro_route, -mod.dfluxes[:, 0, 3::nrp, 5])
-    ef = np.max(ef)
-    logtxt += f" DRO={ef:3.1e}"
-    #assert ef < 5e-5
-    print(f"{logtxt}\n")
