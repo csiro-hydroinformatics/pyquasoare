@@ -156,6 +156,12 @@ int c_get_error_message(int err_code, char message[100]){
     else if(err_code == QUASOARE_NAN_FLUX)
         strncpy(message, "Flux is nan", len);
 
+    else if(err_code == QUASOARE_NAN_INTEGX)
+        strncpy(message, "Integral of x is nan", len);
+
+    else if(err_code == QUASOARE_NAN_INTEGX2)
+        strncpy(message, "Integral of x^2 is nan", len);
+
     else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
         strncpy(message, "Negative flux function", len);
 

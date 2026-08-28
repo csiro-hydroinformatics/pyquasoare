@@ -335,6 +335,12 @@ int c_quad_fluxes_increment(int nfluxes,
         }
     }
 
+    if(isnan(integS))
+        return QUASOARE_NAN_INTEGX;
+
+    if(isnan(integS2))
+        return QUASOARE_NAN_INTEGX2;
+
     /* increment fluxes */
     for(i = 0; i < nfluxes; i++){
         aij = aj_vector[i];

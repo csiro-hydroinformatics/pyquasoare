@@ -178,7 +178,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     unsigned int ifx_original;
 
     double M = 0., S = 0.;
-    double term0, term1, xmax;
+    double term0, term1, term01, xmax;
     double mij = 0., sij = 0.;
     double expmb = 0.;
     double flx;
@@ -374,23 +374,26 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         xmax = fabs(x_start) < fabs(x_end) ? fabs(x_end) : fabs(x_start);
         term0 = fabs(M);
         term1 = fabs(S * xmax);
+        term01 = term0 < term1 ? term1 : term0;
 
-        if(term0 * QUASOARE_FLUX_TERM_RTOL1 > term1 || isnull(term1)) {
+        if(term0 * QUASOARE_FLUX_TERM_RTOL1 > term1 || isnull(term1) || term01 < QUASOARE_EPS) {
             integ_x = (x_start + M * tau / 2) * tau;
         }
         else {
             expmb = c_lin_expmxy(tau, S);
             integ_x = x_start * expmb + (expmb - tau) * (M / S);
         }
+        if(isnan(integ_x))
+            return QUASOARE_NAN_INTEGX;
 
         /* Increment fluxes during the last unsigned interval */
         for(inp = 0; inp < nfxi; inp++){
             integ_fx[inp] = sj_vect[inp] * integ_x + mj_vect[inp] * tau;
             flx = Qstars_ext[inp] / timestep * integ_fx[inp];
 
-            if(isnan(flx)) {
+            if(isnan(flx))
                 return QUASOARE_NAN_FLUX;
-            }
+
             if(nit == 1)
                 fluxes[inp] = flx;
             else
@@ -870,10 +873,10 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                 /* Affect flux */
                 Qstars_timestep[resdown_pfx_id] += input_weight * fluxes[idx_up_f];
 
-                fprintf(stdout, "\t\t(R%d,F%d) -> (R%d,F%d) w=%3.3e x fx=%3.3e = %3.3e\n",
-                        resup_id, resup_ofx_id, res, resdown_pfx_id,
-                        input_weight, fluxes[idx_up_f],
-                        Qstars_timestep[resdown_pfx_id]);
+                //fprintf(stdout, "\t\t(R%d,F%d) -> (R%d,F%d) w=%3.3e x fx=%3.3e = %3.3e\n",
+                //        resup_id, resup_ofx_id, res, resdown_pfx_id,
+                //        input_weight, fluxes[idx_up_f],
+                //        Qstars_timestep[resdown_pfx_id]);
 
                 /* Derivative of Qstars */
                 for(dvar = 0; dvar < nvariables; dvar++) {
