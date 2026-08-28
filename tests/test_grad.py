@@ -1219,7 +1219,6 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
 @pytest.mark.parametrize("nres", [2, 5, 11, 50])
 @pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
 def test_gr4j_nash_cascade(nres, X4, allclose):
-    #pytest.skip("WIP")
     nalphas = 100
     nuh = nres - 2
     mod = gradients.MultiReservoirModel(nres, nalphas,
@@ -1239,7 +1238,6 @@ def test_gr4j_nash_cascade(nres, X4, allclose):
     # allocate
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
-    #hclim = hclim.iloc[:368]
     ntimesteps = len(hclim)
     mod.allocate(ntimesteps)
 
@@ -1256,3 +1254,43 @@ def test_gr4j_nash_cascade(nres, X4, allclose):
 
     mod.run()
 
+
+def test_flux_scalings(allclose):
+    nalphas = 100
+    moda = gradients.MultiReservoirModel(1, nalphas,
+                                        errors="raise")
+    moda.set_coefs_linear(0, "gr4jprod")
+
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim.iloc[:, 1] *= -1
+    ntimesteps = len(hclim)
+    moda.allocate(ntimesteps)
+    moda.set_Qstars(0, hclim)
+    moda.gammas = 100.
+    moda.x0 = 0.5
+
+    modb = moda.clone()
+    modc = moda.clone()
+
+    # Two different manners to reduce rainfall by 50%
+    etaP = 0.5
+    # .. setting flux scalings
+    modb.flux_scalings[0, 0] = etaP
+    # ... reducing Qstars
+    modc.Qstars[:, 0, 0] *= etaP
+
+    assert allclose(moda.Qstars, modb.Qstars)
+    assert np.abs(moda.Qstars - modc.Qstars).max() > 1.
+    assert np.abs(modb.flux_scalings - modc.flux_scalings).max() > 1e-1
+
+    moda.run()
+    modb.run()
+    modc.run()
+
+    # Simuls are different from basecase
+    assert np.abs(moda.fluxes[:, :, :3] - modc.fluxes[:, :, :3]).max() > 0.1
+
+    # The first 3 fluxes are identical
+    # .. but the not the last 3 because Qstars is not the same
+    assert allclose(modb.fluxes[:, :, :3], modc.fluxes[:, :, :3])
