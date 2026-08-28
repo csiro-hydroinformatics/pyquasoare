@@ -347,6 +347,9 @@ int c_quad_fluxes_increment(int nfluxes,
         c_check += cij;
 
         fluxes[i] += aij * integS2 + bij * integS + cij * tau;
+
+        if(isnan(fluxes[i]))
+            return QUASOARE_NAN_FLUX;
     }
 
     if(notequal(a, a_check, QUASOARE_ATOL, QUASOARE_RTOL) ||
