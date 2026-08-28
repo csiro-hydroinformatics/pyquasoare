@@ -1219,7 +1219,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
 @pytest.mark.parametrize("nres", [2, 5, 11, 50])
 @pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
 def test_gr4j_nash_cascade(nres, X4, allclose):
-    pytest.skip("WIP")
+    #pytest.skip("WIP")
     nalphas = 100
     nuh = nres - 2
     mod = gradients.MultiReservoirModel(nres, nalphas,
@@ -1239,7 +1239,7 @@ def test_gr4j_nash_cascade(nres, X4, allclose):
     # allocate
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
-    hclim = hclim.iloc[:368]
+    #hclim = hclim.iloc[:368]
     ntimesteps = len(hclim)
     mod.allocate(ntimesteps)
 
