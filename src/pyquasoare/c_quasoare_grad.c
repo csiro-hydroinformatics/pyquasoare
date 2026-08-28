@@ -388,9 +388,9 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             integ_fx[inp] = sj_vect[inp] * integ_x + mj_vect[inp] * tau;
             flx = Qstars_ext[inp] / timestep * integ_fx[inp];
 
-            if(isnan(flx))
+            if(isnan(flx)) {
                 return QUASOARE_NAN_FLUX;
-
+            }
             if(nit == 1)
                 fluxes[inp] = flx;
             else
@@ -774,7 +774,8 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
         /* loop through reservoirs */
         for(res = 0; res < nreservoirs; res++) {
-            fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
+            //fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
+
             current_reservoir_id = res;
 
             /* initialise the derivatives of the 3 inputs */
@@ -929,10 +930,10 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                                     &(fluxes[idx_f]),
                                     &(dfluxes[idx_df]));
 
-            fprintf(stdout, "\n\t=> fluxes t=%d res=%d ierr=%d",
-                    t, res, ierr);
-            for(out=0; out < nfxo; out++)
-                fprintf(stdout, "\n\t\tQ[%d] = %3.3e", out, fluxes[idx_f + out]);
+            //fprintf(stdout, "\n\t=> fluxes t=%d res=%d ierr=%d",
+            //        t, res, ierr);
+            //for(out=0; out < nfxo; out++)
+            //    fprintf(stdout, "\n\t\tQ[%d] = %3.3e", out, fluxes[idx_f + out]);
 
             //fprintf(stdout, "\n\t=> dfluxes t=%d res=%d", t, res);
             //for(int dvar=0; dvar < nvariables; dvar ++) {
