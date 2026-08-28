@@ -293,9 +293,11 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             qi = Qstars_ext[inp] / gamma;
             M += mij * qi;
             S += sij * qi;
+
+            //fprintf(stdout, "\n\t\tInput %d: sc=%3.3e mij=%3.3e qi=%3.3e g=%3.3e M = %3.3e",
+            //        inp, flux_scalings[inp], coefs_linear[idx_c],
+            //        Qstars_ext[inp], gamma, M);
         }
-        //fprintf(stdout, "\n\t\tM = %3.3e", M);
-        //fprintf(stdout, "\n\t\tS = %3.3e", S);
 
         /* Check coefficients */
         if(isnan(M) || isnan(S))
@@ -386,6 +388,9 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             integ_fx[inp] = sj_vect[inp] * integ_x + mj_vect[inp] * tau;
             flx = Qstars_ext[inp] / timestep * integ_fx[inp];
 
+            if(isnan(flx))
+                return QUASOARE_NAN_FLUX;
+
             if(nit == 1)
                 fluxes[inp] = flx;
             else
@@ -404,6 +409,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                 else
                     fluxes[inp + nfxi] += flx - Qstars_ext[inp] / timestep * tau;
             }
+
         }
 
         /* Total outflow = bypasss + drainage */
@@ -768,7 +774,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
         /* loop through reservoirs */
         for(res = 0; res < nreservoirs; res++) {
-            //fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
+            fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
             current_reservoir_id = res;
 
             /* initialise the derivatives of the 3 inputs */
@@ -863,7 +869,10 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                 /* Affect flux */
                 Qstars_timestep[resdown_pfx_id] += input_weight * fluxes[idx_up_f];
 
-                //fprintf(stdout, "\t\t(R%d,F%d) -> (R%d,F%d) w=%3.3e x fx=%3.3e = %3.3e\n", resup_id, resup_ofx_id, res, resdown_pfx_id, input_mapping_weight, fluxes[idx_up_f], Qstars_timestep[resdown_pfx_id]);
+                fprintf(stdout, "\t\t(R%d,F%d) -> (R%d,F%d) w=%3.3e x fx=%3.3e = %3.3e\n",
+                        resup_id, resup_ofx_id, res, resdown_pfx_id,
+                        input_weight, fluxes[idx_up_f],
+                        Qstars_timestep[resdown_pfx_id]);
 
                 /* Derivative of Qstars */
                 for(dvar = 0; dvar < nvariables; dvar++) {
@@ -920,9 +929,10 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                                     &(fluxes[idx_f]),
                                     &(dfluxes[idx_df]));
 
-            //fprintf(stdout, "\n\t=> fluxes t=%d res=%d", t, res);
-            //for(out=0; out < nfxo; out++)
-            //    fprintf(stdout, "\n\t\tQ[%d] = %3.3e", out, fluxes[idx_f + out]);
+            fprintf(stdout, "\n\t=> fluxes t=%d res=%d ierr=%d",
+                    t, res, ierr);
+            for(out=0; out < nfxo; out++)
+                fprintf(stdout, "\n\t\tQ[%d] = %3.3e", out, fluxes[idx_f + out]);
 
             //fprintf(stdout, "\n\t=> dfluxes t=%d res=%d", t, res);
             //for(int dvar=0; dvar < nvariables; dvar ++) {
