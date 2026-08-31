@@ -142,15 +142,17 @@ def configure_gr4j(logger, config, data):
     return gr
 
 
-def set_parameters(mod, X0, X1, X2, X3, X4):
+def set_parameters(mod, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     nres = mod.nreservoirs
     nuh = nres - 3
     mod.gammas = [X0, X1] + [1] * nuh + [X3]
     for iuh in range(nuh):
         # See Santos (2018), Eq. 6
-        mod.flux_scalings[2 + iuh, 2] = nuh * 1.25 / X4
+        mod.coefs_linear[2 + iuh, 2] *= nuh * 1.25 / X4
 
     mod.flux_scalings[nres - 1, 1] = X2
+    mod.flux_scalings[0, 0] = eta_P
+    mod.flux_scalings[0, 1] = eta_E
 
 
 def process(config, script_paths, logger, data):
@@ -161,38 +163,23 @@ def process(config, script_paths, logger, data):
     gr = configure_gr4j(logger, config, data)
 
     # Good parameters
-    #X0 = 1e-2
-    #X1 = 400
-    #X2 = -0.5
-    #X3 = 100.
-    #X4 = 1.
-
-    X0 = 1e-2
+    X0 = 1.
     X1 = 400
     X2 = -0.5
     X3 = 100.
-    X4 = 1.99
+    X4 = 1.
     set_parameters(mod, X0, X1, X2, X3, X4)
-    gr.params.values = [X1, X2, X3, X4]
 
-    X0b, X1b, X2b, X3b, X4b = X0, X1, X2, X3, X4
-    X2b = -10.
-    set_parameters(modb, X0b, X1b, X2b, X3b, X4b)
+    gr.params.values = [X1, X2, X3, X4]
 
     # Run model
     mod.run()
-    modb.run()
     gr.run()
-
-    fx = mod.fluxes[:, 2:-1, 5]
-    import pdb; pdb.set_trace()
-
 
     # Timeseries data
     qobs = -data.hydroclim.Q
     time = qobs.index
     qsim = pd.Series(mod.fluxes[:, -1, 5], index=time)
-    qsimb = pd.Series(modb.fluxes[:, -1, 5], index=time)
 
     grsim = gr.to_dataframe(index=time)
 
@@ -214,63 +201,47 @@ def process(config, script_paths, logger, data):
     logger.info(f"\n{perf}")
 
     # Plot
+    start, end = "2015", "2022"
     #start, end = "2022-02-01", "2022-04-15"
-    start, end = "2022-02-22", "2022-03-10"
+    #start, end = "2022-02-22", "2022-03-10"
 
     logger.info("Plot vs GR4J")
-    nrows, ncols = 3, 3
+    mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
+    ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols,
-                            figsize=figsize,
-                            layout="constrained",
-                            sharex=True)
-    nres = mod.nreservoirs
-    for iax, ax in enumerate(axs.flat):
-        df_add = None
-        if iax == 0:
-            se1 = X1 * pd.Series(mod.x[:, 1], index=time).loc[start:end]
-            se2 = grsim.S.loc[start:end]
-            title = "S"
-        elif iax == 1:
-            se1 = -pd.Series(mod.fluxes[:, 1, 5], index=time).loc[start:end]
-            se2 = grsim.PR.loc[start:end]
-            title = "PR"
-        elif iax == 2:
-            se1 = -pd.Series(mod.fluxes[:, 1, 1] + mod.fluxes[:, 0, 1],
-                             index=time).loc[start:end]
-            se2 = grsim.AE.loc[start:end]
-            title = "AE"
-        elif iax == 3:
-            se1 = -pd.Series(mod.fluxes[:, -2, 5], index=time).loc[start:end]
-            se2 = (grsim.Q1 + grsim.Q9).loc[start:end]
-            title = "Q1+Q9"
+    plt.close("all")
+    fig = plt.figure(figsize=figsize, layout="constrained")
+    axs = fig.subplot_mosaic(mosaic, sharex=True)
+    for aname, ax in axs.items():
+        if aname == "UH":
+            v1 = grsim.loc[start:end, "Q1"] + grsim.loc[start:end, "Q9"]
+        else:
+            v1 = grsim.loc[start:end, aname]
 
-            df_add = -pd.DataFrame(mod.fluxes[:, 2:-1, 5], index=time)
-            df_add = df_add.loc[start:end]
+        if aname == "S":
+            v2 = mod.x[:, 1] * X1
+        elif aname == "PR":
+            v2 = -mod.fluxes[:, 1, 5]
+        elif aname == "AE":
+            v2 = -mod.fluxes[:, 0, 1] - mod.fluxes[:, 1, 1]
+        elif aname == "R":
+            v2 = mod.x[:, -1] * X3
+        elif aname == "QR":
+            v2 = -mod.fluxes[:, -1, 2]
+        elif aname == "Q":
+            v2 = -mod.fluxes[:, -1, 5]
+        elif aname == "UH":
+            v2 = -mod.fluxes[:, -2, 5]
 
-        elif iax == 6:
-            se1 = X3 * pd.Series(mod.x[:, -1], index=time).loc[start:end]
-            se2 = grsim.R.loc[start:end]
-            title = "R"
-        elif iax == 7:
-            se1 = -pd.Series(mod.fluxes[:, -1, 2], index=time).loc[start:end]
-            se2 = grsim.QR.loc[start:end]
-            title = "QR"
-        elif iax == 8:
-            se1 = -pd.Series(mod.fluxes[:, -1, 5], index=time).loc[start:end]
-            se2 = grsim.Q.loc[start:end]
-            title = "Q"
+        v2 = pd.Series(v2, index=grsim.index).loc[start:end]
 
-        se1.plot(ax=ax, label="Quas")
-        se2.plot(ax=ax, label="GR4J")
-        if df_add is not None:
-            df_add.plot(ax=ax)
-
-        ax.set(title=title)
-        ax.legend()
+        v1.plot(ax=ax, label="GR4J")
+        v2.plot(ax=ax, label="Quas")
+        ax.set(title=aname)
 
     fp = script_paths.fimg / "gr4j_comparison.png"
     fig.savefig(fp)
+
 
     logger.info("Plot grad")
     plt.close("all")
@@ -285,7 +256,6 @@ def process(config, script_paths, logger, data):
     ax = axs[0]
     qobs[start:end].plot(ax=ax, label="Observed", color="k", ls="--")
     qsim[start:end].plot(ax=ax, label="$Q_3$", lw=2)
-    #qsimb[start:end].plot(ax=ax, label="$Q_3^b$", lw=2)
 
     sqeps = math.sqrt(eps)
     fwd = lambda x: (np.sqrt(eps + np.abs(x)) - sqeps) * np.sign(x)
@@ -324,7 +294,8 @@ def process(config, script_paths, logger, data):
         dq[start:end].plot(ax=ax, lw=2)
         #dqb[start:end].plot(ax=ax, lw=2)
 
-        ax.set_yscale("function", functions=(fwd, inv))
+        #ax.set_yscale("function", functions=(fwd, inv))
+        ax.set_yscale("asinh")
 
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
         ax.set_title(title, va="top", ha="left",
@@ -338,11 +309,8 @@ def process(config, script_paths, logger, data):
             imax = i
             dqmax = dqm
 
-
     for i in range(nvars):
-        if i == imax:
-            continue
-        axs[i + 1].sharey(axs[imax + 1])
+        axs[i + 1].set_ylim((-dqmax, dqmax))
 
     fp = script_paths.fimg / "gr4j_fluxes.png"
     fig.savefig(fp)
@@ -363,7 +331,7 @@ if __name__ == "__main__":
     timestep = "daily"
 
     nalphas = 50
-    nuh = 11
+    nuh = 2
 
     stationid = args.stationid
     awidth = 7
