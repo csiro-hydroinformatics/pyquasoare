@@ -221,7 +221,7 @@ def grad_reservoir(alphas, gamma,
     enforce_potential_inflow_pos = int(enforce_potential_inflow_pos)
 
     if flux_scalings is None:
-        flux_scalings = np.ones(NFLUXES_INPUTS)
+        flux_scalings = np.ones(NFLUXES_POTENTIAL)
 
     if niter is None:
         niter = np.zeros(nval, dtype=np.int32)
@@ -287,7 +287,7 @@ def grad_model(alphas, gammas,
     nvariables = variables_reservoir_id.shape[0]
 
     if flux_scalings is None:
-        flux_scalings = np.ones((nreservoirs, NFLUXES_INPUTS))
+        flux_scalings = np.ones((nreservoirs, NFLUXES_POTENTIAL))
 
     if x is None:
         x = np.zeros((nval, nreservoirs), dtype=np.float64)
@@ -525,7 +525,7 @@ class MultiReservoirModel():
         self._errors = errors
         self._gammas = None
 
-        self._flux_scalings = np.ones((nreservoirs, NFLUXES_INPUTS))
+        self._flux_scalings = np.ones((nreservoirs, NFLUXES_POTENTIAL))
 
         self.nalphas = nalphas
         self._alphas = get_alphas(nalphas,
@@ -634,13 +634,13 @@ class MultiReservoirModel():
     @flux_scalings.setter
     def flux_scalings(self, value):
         nres = self.nreservoirs
-        nfxi = NFLUXES_INPUTS
+        nfxp = NFLUXES_POTENTIAL
         if isinstance(value, float) or isinstance(value, int):
-            self._flux_scalings = value * np.ones((nres, nfxi))
+            self._flux_scalings = value * np.ones((nres, nfxp))
         else:
             value = np.array(value)
-            if value.shape != (nres, nfxi):
-                errmsg = f"Expected flux_scalings of dim ({nres},{nfxi})."\
+            if value.shape != (nres, nfxp):
+                errmsg = f"Expected flux_scalings of dim ({nres},{nfxp})."\
                          + f" Got {value.shape}."
                 raise ValueError(errmsg)
 

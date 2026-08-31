@@ -261,7 +261,7 @@ int c_quad_fluxes_increment(int nfluxes,
                             double Delta, double qD, double sbar,
                             double t0, double t1, double s0, double s1,
                             double * fluxes){
-    int i, is_lin;
+    int i;
     double tau = t1 - t0;
     double aij, bij, cij;
     double a = Aj, a_check = 0.;
