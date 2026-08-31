@@ -53,84 +53,14 @@ double c_grad_inverse(double M, double S, double x0, double x){
 }
 
 
-/*
- * deriv :
- * deriv[0] = dM/dη
- * deriv[1] = dS/dη
- * deriv[2] = dμ1j/dη
- * deriv[3] = dμ2j/dη
- * deriv[4] = dμ3j/dη
- * deriv[5] = dσ1j/dη
- * deriv[6] = dσ2j/dη
- * deriv[7] = dσ3j/dη
- */
-int c_grad_coefs_derivative(double timestep, unsigned int type_id,
-                            double gamma,
-                            double * flux_scalings,
-                            double * Qstars_ext,
-                            double * mj_vect,
-                            double * sj_vect,
-                            double * deriv) {
-    unsigned int i, dvar;
-    double mij, sij;
-    double scaling;
-
-    unsigned int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
-    unsigned int ncoefs = QUASOARE_GRAD_NPIECEWISEPARAMS;
-    unsigned int ifxdr = QUASOARE_GRAD_IFLUX_DRAINAGE;
-
-    for(dvar = 0; dvar < QUASOARE_GRAD_NDERIV; dvar++)
-        deriv[dvar] = 0;
-
-    /* Extract data from vectors */
-    if(type_id == QUASOARE_GRAD_VARTYPE_CAPACITY) {
-        /* Gradient against capacity of the current reservoir */
-        deriv[0] = -(Qstars_ext[0] * mj_vect[0]
-                     + Qstars_ext[1] * mj_vect[1]) / gamma / gamma;
-
-        deriv[1] = -(Qstars_ext[0] * sj_vect[0]
-                     + Qstars_ext[1] * sj_vect[1]) / gamma / gamma;
-
-        /* other derivatives are null because coefficients are
-         * independent of Γ */
-    }
-    else {
-        /* Gradient against flux scaling */
-
-        /* Scaling flux number is assumed to be type of variable - 1 */
-        if(type_id < QUASOARE_GRAD_VARTYPE_SCALING_INFLOW
-                || type_id > QUASOARE_GRAD_VARTYPE_SCALING_DRAINAGE)
-            return QUASOARE_GRAD_TYPEID_NOT_FOUND;
-
-        i = type_id - 1;
-
-        mij = mj_vect[i];
-        sij = sj_vect[i];
-        scaling = flux_scalings[i];
-
-        if(isnull(scaling))
-            return QUASOARE_GRAD_ZERO_FLUX_SCALING;
-
-        /* Gradient against scaling applied to inflow, demand o or demand flux function */
-        deriv[0] = Qstars_ext[i] * mij / gamma;
-        deriv[1] = Qstars_ext[i] * sij / gamma;
-
-        deriv[ncoefs + i] = mij;
-        deriv[ncoefs + nfxi + i] = sij;
-    }
-    return 0;
-}
-
 /* Integrate reservoir equation over 1 time step and compute associated fluxes
  * flux_scalings are scaling factors applied to
  * s[0] : f1 (inputs)
  * s[1] : f2 (demand)
- * s[2] : f3 (outputs)
  * The id of the variables is also matching this definition
  * id = 0 : derivative against reservoir
- * id = 1 : derivative of scaling applied to input flux function
- * id = 2 : derivative of scaling applied to demand flux function
- * id = 3 : derivative of scaling applied to output flux function
+ * id = 1 : derivative of scaling applied to potential inflow
+ * id = 2 : derivative of scaling applied to potential demand
  *
  * input_mapping : vector of nreservoirs × 6 output fluxes × nreservoirs × 2 input fluxes
  *   columns = [res1 / w(out1) w(out2) .. w(out6)] [res2 / w(out1) ..] ...
@@ -191,12 +121,15 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     double mj_vect[QUASOARE_GRAD_NFLUXES_INPUTS];
     double sj_vect[QUASOARE_GRAD_NFLUXES_INPUTS];
 
-    /* Extended Qstars_timestep */
-    double Qstars_ext[QUASOARE_GRAD_NFLUXES_INPUTS];
-    Qstars_ext[0] = Qstars[0];
-    Qstars_ext[1] = Qstars[1];
-    Qstars_ext[2] = -gamma / timestep;
+    /* Variables related to potential fluxes */
     double qi;
+    double scaling;
+    /* .. extended Qstars including discharge fluxes
+     *    + rescaling applied */
+    double rescaled_Qstars_ext[QUASOARE_GRAD_NFLUXES_INPUTS];
+    rescaled_Qstars_ext[0] = flux_scalings[0] * Qstars[0];
+    rescaled_Qstars_ext[1] = flux_scalings[1] * Qstars[1];
+    rescaled_Qstars_ext[2] = -gamma / timestep;
 
     /* Variables related to gradients */
     unsigned int reservoir_id, type_id;
@@ -204,11 +137,14 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     double dx_start, dx_end;
     double integ_x, integ_dx;
     double integ_fx[QUASOARE_GRAD_NFLUXES_INPUTS];
-    double integ_dfx[QUASOARE_GRAD_NFLUXES_INPUTS];
-    /*... dM dS dmij[i=1,2,3] dsig[i=1,2,3] : total 8 doubles */
-    double deriv_coefs[QUASOARE_GRAD_NDERIV];
-    double dmuij[QUASOARE_GRAD_NFLUXES_INPUTS];
-    double dsij[QUASOARE_GRAD_NFLUXES_INPUTS];
+    double integ_dfx[QUASOARE_GRAD_NFLUXES_INPUTS] = {0.};
+
+    /* dmuij and dsij are used but never changed to other than 0 values.
+     * This is a placeholder for future code to include derivatives against
+     * linear approx coefficients */
+    double dmuij[QUASOARE_GRAD_NFLUXES_INPUTS] = {0.};
+    double dsij[QUASOARE_GRAD_NFLUXES_INPUTS] = {0.};
+
     double H, G;
 
     /* Max number of iteration
@@ -280,17 +216,12 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                     (mij + sij * alpha0 < 0 || mij + sij * alpha1 < 0))
                 return QUASOARE_NEGATIVE_FLUX_FUNCTION;
 
-            /* apply scaling */
-            mij *= flux_scalings[inp];
-            sij *= flux_scalings[inp];
-
             /* Store flux coefficents */
             mj_vect[inp] = mij;
             sj_vect[inp] = sij;
 
-            /* Add coefficients to obtain approximation of reservoir equation
-             * function */
-            qi = Qstars_ext[inp] / gamma;
+            /* Add coefficients to obtain approximation of reservoir equation */
+            qi = rescaled_Qstars_ext[inp] / gamma;
             M += mij * qi;
             S += sij * qi;
 
@@ -311,9 +242,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
         /* Check continuity except for first iteration */
         if(nit > 1){
-            if(notequal(funval_prev, funval, QUASOARE_ATOL, QUASOARE_RTOL)) {
+            if(notequal(funval_prev, funval, QUASOARE_ATOL, QUASOARE_RTOL))
                 return QUASOARE_NOT_CONTINUOUS;
-            }
         }
 
         /* Try integrating up to the end of the time step */
@@ -376,7 +306,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         term1 = fabs(S * xmax);
         term01 = term0 < term1 ? term1 : term0;
 
-        if(term0 * QUASOARE_FLUX_TERM_RTOL1 > term1 || isnull(term1) || term01 < QUASOARE_EPS) {
+        if(term0 * QUASOARE_FLUX_TERM_RTOL1 > term1 || isnull(term1)
+                || term01 < QUASOARE_EPS) {
             integ_x = (x_start + M * tau / 2) * tau;
         }
         else {
@@ -388,8 +319,12 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
         /* Increment fluxes during the last unsigned interval */
         for(inp = 0; inp < nfxi; inp++){
+            /* Potential flux including flux scaling */
+            qi = rescaled_Qstars_ext[inp];
+
+            /* Compute fi(x) integral */
             integ_fx[inp] = sj_vect[inp] * integ_x + mj_vect[inp] * tau;
-            flx = Qstars_ext[inp] / timestep * integ_fx[inp];
+            flx = qi / timestep * integ_fx[inp];
 
             if(isnan(flx))
                 return QUASOARE_NAN_FLUX;
@@ -408,9 +343,9 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
              * */
             if(inp == ifxi || inp == ifxd) {
                 if(nit == 1)
-                    fluxes[inp + nfxi] = flx - Qstars_ext[inp] / timestep * tau;
+                    fluxes[inp + nfxi] = flx - qi / timestep * tau;
                 else
-                    fluxes[inp + nfxi] += flx - Qstars_ext[inp] / timestep * tau;
+                    fluxes[inp + nfxi] += flx - qi / timestep * tau;
             }
 
         }
@@ -436,6 +371,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
             /* Baseline index for flux derivatives */
             idx_df0 = nfxo * nreservoirs * dvar;
 
+            /* Derivative of M, S against η */
             if (current_reservoir_id != reservoir_id) {
                 /* -- variable belongs to a different reservoir -- */
                 dM = (mj_vect[0] * dQstars_ext[idx_dq0]
@@ -444,32 +380,47 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                 dS = (sj_vect[0] * dQstars_ext[idx_dq0]
                       + sj_vect[1] * dQstars_ext[idx_dq0 + 1]) / gamma;
 
-                /* 3. dμij and dσij is null because η belongs to another
-                 * reservoir */
-                for(inp = 0; inp < nfxi; inp ++){
-                    dmuij[inp] = 0;
-                    dsij[inp] = 0;
-                }
-
             } else {
-                /* -- variable belongs to the same reservoir --- */
+                /* -- variable belongs to the same reservoir -- */
+                if (type_id == QUASOARE_GRAD_VARTYPE_CAPACITY) {
+                    /* >> Gradient against capacity of the current reservoir << */
+                    dM = -(rescaled_Qstars_ext[0] * mj_vect[0]
+                        + rescaled_Qstars_ext[1] * mj_vect[1]) / gamma / gamma;
 
-                /* Derivative of M, S, μij and σij vs η */
-                ierr = c_grad_coefs_derivative(timestep,
-                                               type_id, gamma,
-                                               flux_scalings,
-                                               Qstars_ext,
-                                               mj_vect, sj_vect,
-                                               deriv_coefs);
-                if(ierr > 0)
-                    return ierr;
+                    dS = -(rescaled_Qstars_ext[0] * sj_vect[0]
+                        + rescaled_Qstars_ext[1] * sj_vect[1]) / gamma / gamma;
 
-                dM = deriv_coefs[0];
-                dS = deriv_coefs[1];
-                for(inp = 0; inp < nfxi; inp ++){
-                    dmuij[inp] = deriv_coefs[ncoefs + inp];
-                    dsij[inp] = deriv_coefs[ncoefs + nfxi + inp];
+                    /* Derivative of Qstars */
+                    dQstars_ext[idx_dq0] = 0.;
+                    dQstars_ext[idx_dq0 + 1] = 0.;
+                    dQstars_ext[idx_dq0 + 2] = -1. / timestep;
                 }
+                else if (type_id == QUASOARE_GRAD_VARTYPE_SCALING_INFLOW ||
+                        type_id == QUASOARE_GRAD_VARTYPE_SCALING_DEMAND) {
+                    /* >> Gradient against potentiel flux scaling << */
+
+                    /* Scaling flux number is assumed to be type of variable - 1 */
+                    inp = type_id - 1;
+
+                    scaling = flux_scalings[inp];
+                    if(isnull(scaling))
+                        return QUASOARE_GRAD_ZERO_FLUX_SCALING;
+
+                    mij = mj_vect[inp];
+                    sij = sj_vect[inp];
+
+                    qi = rescaled_Qstars_ext[inp] / scaling;
+                    dM = qi * mij / gamma;
+                    dS = qi * sij / gamma;
+
+                    /* Derivative of Qstars : all null except inp */
+                    dQstars_ext[idx_dq0] = 0.;
+                    dQstars_ext[idx_dq0 + 1] = 0.;
+                    dQstars_ext[idx_dq0 + 2] = 0.;
+                    dQstars_ext[idx_dq0 + inp] = qi;
+                }
+                else
+                    return QUASOARE_GRAD_TYPEID_NOT_FOUND;
             }
 
             /* Initialise dx */
@@ -493,12 +444,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                     integ_dfx[inp] = dmuij[inp] * tau + dsij[inp] * integ_x
                         + sj_vect[inp] * integ_dx;
 
-            } else {
+            } else
                 dx_end = dx_start;
-
-                for(inp = 0; inp < nfxi; inp++)
-                    integ_dfx[inp] = 0;
-            }
 
             if(!isfinite(dx_end))
                 return QUASOARE_GRAD_IS_INFINITE;
@@ -513,7 +460,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                     /* Inflow, demand and drainage fluxes */
                     idx_dq = idx_dq0 + out;
                     G = dQstars_ext[idx_dq] / timestep * integ_fx[out];
-                    H = Qstars_ext[out] * integ_dfx[out] / timestep;
+                    H = rescaled_Qstars_ext[out] * integ_dfx[out] / timestep;
 
                 } else if (out == ifxb || out == ifxs) {
                     /* Bypass and demand shortfall */
@@ -521,14 +468,14 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                     idx_dq = idx_dq0 + ifx_original;
                     G = dQstars_ext[idx_dq]
                         * (integ_fx[ifx_original] - tau) / timestep;
-                    H = Qstars_ext[ifx_original] * integ_dfx[ifx_original] / timestep;
+                    H = rescaled_Qstars_ext[ifx_original] * integ_dfx[ifx_original] / timestep;
 
                 } else if (out == ifxo) {
                     /* Total outflow  = drainage + bypass*/
                     G = (dQstars_ext[idx_dq0 + ifxdr] * integ_fx[ifxdr]
                         + dQstars_ext[idx_dq0 + ifxi] * (integ_fx[ifxi] - tau))/ timestep;
-                    H = (Qstars_ext[ifxdr] * integ_dfx[ifxdr]
-                        + Qstars_ext[ifxi] * integ_dfx[ifxi]) / timestep;
+                    H = (rescaled_Qstars_ext[ifxdr] * integ_dfx[ifxdr]
+                        + rescaled_Qstars_ext[ifxi] * integ_dfx[ifxi]) / timestep;
                 }
 
                 /* Final storage of flux derivative for the current reservoir */
@@ -617,16 +564,6 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
         variables_reservoir_id[dvar] = 0;
         variables_type_id[dvar] = dvar;
         dx[dvar] = 0.;
-
-        for(inp = 0; inp < nfxi; inp++) {
-            idx_dq = nfxi * dvar + inp;
-
-            if(dvar == QUASOARE_GRAD_VARTYPE_CAPACITY
-                    && inp == QUASOARE_GRAD_IFLUX_DRAINAGE)
-                dQstars_ext[idx_dq] = -1. / timestep;
-            else
-                dQstars_ext[idx_dq] = 0;
-        }
     }
 
     /* Time loop */
@@ -742,10 +679,6 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
     double integ_x;
     double integ_fx[QUASOARE_GRAD_NFLUXES_INPUTS];
     double integ_dfx[QUASOARE_GRAD_NFLUXES_INPUTS];
-    /*... dM dS dmij[i=1,2,3] dsig[i=1,2,3] : total 8 doubles */
-    double deriv_coefs[QUASOARE_GRAD_NDERIV];
-    double dmuij[QUASOARE_GRAD_NFLUXES_INPUTS];
-    double dsij[QUASOARE_GRAD_NFLUXES_INPUTS];
     unsigned int dvar_res_id;
     unsigned int dvar_type_id;
 
@@ -755,6 +688,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
     if(nreservoirs >= QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID)
         return QUASOARE_GRAD_NRESERVOIRS_TOOLARGE;
+
     unsigned int missid = QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID;
 
     /* Initialise storage and diff storage -> no initial diff storage */
@@ -791,16 +725,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
                 for(inp = 0; inp < nfxi; inp++) {
                     idx_dq = nfxi * dvar + inp;
-
-                    /* Variable belongs to the current reservoir.
-                     * Only non zero derivative is drainage flux
-                     * against capacity Γ */
-                    if(dvar_res_id == current_reservoir_id
-                            && dvar_type_id == QUASOARE_GRAD_VARTYPE_CAPACITY
-                            && inp == QUASOARE_GRAD_IFLUX_DRAINAGE)
-                        dQstars_ext[idx_dq] = -1. / timestep;
-                    else
-                        dQstars_ext[idx_dq] = 0;
+                    dQstars_ext[idx_dq] = 0;
                 }
             }
 
@@ -809,7 +734,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
             /* Data indexes */
             idx_q = (nres_times_t + res) * nfxp;
-            idx_fs = res * nfxi;
+            idx_fs = res * nfxp;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
             idx_a = nalphas * res;
             idx_x = nres_times_t + res;
@@ -901,11 +826,12 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          */
                         dQstars_ext[idx_dq] += input_weight * dfluxes[idx_up_df];
                     }
-                    /* Other cases of reservoirs (i.e. reservoirs
-                     * downstream or identical to current reservoir)
-                     * are ignored because their flux derivatives
+                    /* Case where variable belongs to downstream reservoir
+                     * is ignored because their flux derivatives
                      * do not contribute to the derivatives of
-                     * potential flows*/
+                     * potential flows. Case where variable belongs to
+                     * same reservoir is dealt with in the integrate routine.
+                     * */
                 }
             }
             //fprintf(stdout, "\t\tQst[0] = %3.3e\n", Qstars_timestep[0]);
