@@ -96,7 +96,7 @@ def flux_denom(fx, eps1=1e-6, eps2=1e-3):
 def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
                  exclude=10):
     num = np.abs(dfx_ref - dfx_alt)
-    denom = flux_denom(fx, eps1, eps2)
+    denom = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
     esort = np.sort(err, axis=0)
     return esort[-exclude], err.mean()
