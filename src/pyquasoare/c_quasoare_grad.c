@@ -97,7 +97,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
     unsigned int nipmd = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM;
-    unsigned int ncoefs = QUASOARE_GRAD_NPIECEWISEPARAMS;
+    unsigned int ncoefs = QUASOARE_GRAD_NPIECEWISE_PARAMS;
 
     unsigned int ifxi = QUASOARE_GRAD_IFLUX_INFLOW;
     unsigned int ifxd = QUASOARE_GRAD_IFLUX_DEMAND;
@@ -129,7 +129,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
     double rescaled_Qstars_ext[QUASOARE_GRAD_NFLUXES_INPUTS];
     rescaled_Qstars_ext[0] = flux_scalings[0] * Qstars[0];
     rescaled_Qstars_ext[1] = flux_scalings[1] * Qstars[1];
-    rescaled_Qstars_ext[2] = -gamma / timestep;
+    rescaled_Qstars_ext[2] = -flux_scalings[2] * gamma / timestep;
 
     /* Variables related to gradients */
     unsigned int reservoir_id, type_id;
@@ -393,10 +393,12 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
                     /* Derivative of Qstars */
                     dQstars_ext[idx_dq0] = 0.;
                     dQstars_ext[idx_dq0 + 1] = 0.;
-                    dQstars_ext[idx_dq0 + 2] = -1. / timestep;
+                    /* .. dQ3* / dΓ = -η3 / Δ (don't forget rescaling!) */
+                    dQstars_ext[idx_dq0 + 2] = rescaled_Qstars_ext[2] / gamma;
                 }
                 else if (type_id == QUASOARE_GRAD_VARTYPE_SCALING_INFLOW ||
-                        type_id == QUASOARE_GRAD_VARTYPE_SCALING_DEMAND) {
+                        type_id == QUASOARE_GRAD_VARTYPE_SCALING_DEMAND ||
+                        type_id == QUASOARE_GRAD_VARTYPE_SCALING_DRAINAGE) {
                     /* >> Gradient against potentiel flux scaling << */
 
                     /* Scaling flux number is assumed to be type of variable - 1 */
@@ -650,7 +652,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
     unsigned int nipmd = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM;
-    unsigned int ncoefs = QUASOARE_GRAD_NPIECEWISEPARAMS;
+    unsigned int ncoefs = QUASOARE_GRAD_NPIECEWISE_PARAMS;
 
     //fprintf(stdout, "\n\nDimensions:\n");
     //fprintf(stdout, "nalphas     = %d\n", nalphas);
@@ -734,7 +736,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
             /* Data indexes */
             idx_q = (nres_times_t + res) * nfxp;
-            idx_fs = res * nfxp;
+            idx_fs = res * nfxi;
             idx_c = nfxi * (nalphas - 1) * ncoefs * res;
             idx_a = nalphas * res;
             idx_x = nres_times_t + res;
