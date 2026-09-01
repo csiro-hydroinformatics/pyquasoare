@@ -5,7 +5,7 @@ np.import_array()
 
 # -- HEADERS --
 cdef extern from 'c_quasoare_grad.h':
-    cdef unsigned int QUASOARE_GRAD_NPIECEWISEPARAMS
+    cdef unsigned int QUASOARE_GRAD_NPIECEWISE_PARAMS
     cdef unsigned int QUASOARE_GRAD_NFLUXES_POTENTIAL
     cdef unsigned int QUASOARE_GRAD_NFLUXES_INPUTS
     cdef unsigned int QUASOARE_GRAD_NFLUXES_OUTPUTS
@@ -82,7 +82,7 @@ cdef extern from 'c_quasoare_grad.h':
 NFLUXES_POTENTIAL = QUASOARE_GRAD_NFLUXES_POTENTIAL
 NFLUXES_INPUTS = QUASOARE_GRAD_NFLUXES_INPUTS
 NFLUXES_OUTPUTS = QUASOARE_GRAD_NFLUXES_OUTPUTS
-NPIECEWISEPARAMS = QUASOARE_GRAD_NPIECEWISEPARAMS
+NPIECEWISE_PARAMS = QUASOARE_GRAD_NPIECEWISE_PARAMS
 INPUT_MAPPING_LASTDIM = QUASOARE_GRAD_INPUT_MAPPING_LASTDIM
 INPUT_MAPPING_MISSINGRESERVOIRID = QUASOARE_GRAD_INPUT_MAPPING_MISSINGRESERVOIRID
 VARTYPE_NUMBER = QUASOARE_GRAD_VARTYPE_NUMBER
@@ -168,8 +168,8 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
     if dQstars_ext.shape[1] != NFLUXES_INPUTS:
         raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")
 
-    if flux_scalings.shape[0] != NFLUXES_POTENTIAL:
-        raise ValueError("flux_scaling.shape[0] != NFLUXES_POTENTIAL")
+    if flux_scalings.shape[0] != NFLUXES_INPUTS:
+        raise ValueError("flux_scaling.shape[0] != NFLUXES_INPUTS")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
@@ -239,8 +239,8 @@ def grad_reservoir(int errors,
 
     check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, False)
 
-    if flux_scalings.shape[0] != NFLUXES_POTENTIAL:
-        raise ValueError("flux_scalings.shape[0] != NFLUXES_POTENTIAL")
+    if flux_scalings.shape[0] != NFLUXES_INPUTS:
+        raise ValueError("flux_scalings.shape[0] != NFLUXES_INPUTS")
 
     if Qstars.shape[1] != NFLUXES_POTENTIAL:
         raise ValueError("Qstars.shape[1] != NFLUXES_POTENTIAL")
@@ -327,8 +327,8 @@ def grad_model(int errors,
     if flux_scalings.shape[0] != nreservoirs:
         raise ValueError("flux_scalings.shape[0] != nreservoirs")
 
-    if flux_scalings.shape[1] != NFLUXES_POTENTIAL:
-        raise ValueError("flux_scalings.shape[1] != NFLUXES_POTENTIAL")
+    if flux_scalings.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("flux_scalings.shape[1] != NFLUXES_INPUTS")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
