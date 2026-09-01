@@ -526,7 +526,8 @@ class MultiReservoirModel():
         self._errors = errors
         self._gammas = None
 
-        self._flux_scalings = np.ones((nreservoirs, NFLUXES_POTENTIAL))
+        self._flux_scalings = np.ones((nreservoirs,
+                                       NFLUXES_INPUTS))
 
         self.nalphas = nalphas
         self._alphas = get_alphas(nalphas,
