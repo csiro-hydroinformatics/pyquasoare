@@ -10,6 +10,7 @@ import pytest
 import numpy as np
 import pandas as pd
 import scipy.integrate as sci_integrate
+import matplotlib.pyplot as plt
 
 from hydrodiy.io import iutils, csv
 
@@ -87,12 +88,15 @@ def max_abs_asinh_err(x, y, exclude=10, axis=0, eps=1e-2):
     ty = np.asinh(y / eps)
     return max_abs_raw_err(tx, ty, exclude, axis)
 
+def flux_denom(fx, eps1=1e-6, eps2=1e-3):
+    afx = np.abs(fx)
+    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
+    return afx + shift
+
 def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
                  exclude=10):
     num = np.abs(dfx_ref - dfx_alt)
-    afx = np.abs(fx_ref)
-    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
-    denom = afx + shift
+    denom = flux_denom(fx, eps1, eps2)
     err = num / denom
     esort = np.sort(err, axis=0)
     return esort[-exclude], err.mean()
@@ -519,7 +523,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
     scalings[:, 1] *= sc2
     scalings[:, 2] *= sc3
     n1, x1, fx1 = models.quad_model(alphas, scalings, coefs,
-                                    x0, timestep)
+                                    x0, timestep, errors="raise")
     fx1 *= gamma / timestep
     fx1 = np.column_stack([fx1,
                            -sc1 * Qstars[:, 0] + fx1[:, 0],
@@ -533,6 +537,8 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
                                                       flux_scalings=fxs,
                                                       errors="raise")
     assert allclose(x1, x2)
+    import pdb; pdb.set_trace()
+
     assert allclose(fx1, fx2)
     assert all(~np.isnan(x2))
     assert np.all(~np.isnan(dx2))
@@ -666,7 +672,6 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         ftol = 5e-3
 
         if debug_mode and (dx_err > xtol or dfx_err_max.max() > ftol):
-            import matplotlib.pyplot as plt
             ncols, nrows = 6, 2
             aw, ah = 3, 3
             fig, axs = plt.subplots(nrows=nrows, ncols=ncols,
@@ -969,7 +974,6 @@ def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
             dfx_c *= mod.gammas[rid]
 
         if debug_mode and ivar == 5:
-            import matplotlib.pyplot as plt
             fig, axs = plt.subplots(ncols=3, nrows=3,
                                     figsize=(12, 8),
                                     layout="constrained")
@@ -1116,7 +1120,6 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
         dxn = dx_n[:, 0]
         dyn = -dfx_n[:, 0, 5]
 
-        import matplotlib.pyplot as plt
         fig, axs = plt.subplots(ncols=2, nrows=4,
                                 sharex=True, layout="constrained",
                                 figsize=(17, 9))
@@ -1182,11 +1185,11 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
         & (dtq < dtn), mess
 
 
-@pytest.mark.parametrize("nres", [2, 5, 11, 50])
+@pytest.mark.parametrize("nuh", [2, 5, 20])
 @pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
-def test_gr4j_nash_cascade(nres, X4, allclose):
+def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     nalphas = 100
-    nuh = nres - 2
+    nres = nuh + 2
     mod = gradients.MultiReservoirModel(nres, nalphas,
                                         errors="raise")
     # Links
@@ -1205,7 +1208,8 @@ def test_gr4j_nash_cascade(nres, X4, allclose):
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
     ntimesteps = len(hclim)
-    mod.allocate(ntimesteps)
+    vspecs = [[2 + iuh, 3] for iuh in range(nuh)]
+    mod.allocate(ntimesteps, variables_specs=vspecs)
 
     # Set inputs
     inputs = np.ascontiguousarray(hclim.values)
@@ -1215,10 +1219,48 @@ def test_gr4j_nash_cascade(nres, X4, allclose):
     # Set parameters
     X0, X1 = 1e-2, 400
     mod.gammas = [X0, X1] + [1] * nuh
-    for iuh in range(nuh):
-        mod.coefs_linear[2 + iuh, 2] *= nuh * 1.25 / X4
+    sc3 = nuh * 1.25 / X4
+    mod.flux_scalings[2:, 2] = sc3
 
+    # Set numerical difference models
+    modm = mod.clone()
+    modp = mod.clone()
+    eps = 1e-6
+    for iuh in range(nuh):
+        modm.flux_scalings[2:, 2] = sc3 * X4 / (X4 - eps)
+        modp.flux_scalings[2:, 2] = sc3 * X4 / (X4 + eps)
+
+    # Run models
     mod.run()
+    modm.run()
+    modp.run()
+
+    dq1 = -mod.dfluxes[:, :, -1, 5].sum(axis=1) * nuh * 1.25 / X4**2
+    dq2 = (modp.fluxes[:, -1, 5] - modm.fluxes[:, -1, 5]) / 2 / eps
+
+    num = np.abs(dq1 - dq2)[:, None]
+    denom = flux_denom(mod.fluxes[:, -1, [5]])
+    err = num / denom
+    exclude = 50
+    emax = np.sort(err)[-exclude]
+
+    atol = 1e-4
+    if debug_mode and err.max() > atol:
+        plt.close("all")
+        fig, ax = plt.subplots()
+        err = np.abs(dq1-dq2)
+        imax = np.argmax(err)
+        ax.plot(dq1, label="Quas")
+        ax.plot(dq2, label="NumDiff")
+        ax.plot(imax, dq1[imax], "ko")
+        ax.plot(imax, dq2[imax], "ko")
+        tax = ax.twinx()
+        tax.plot(err, color="0.5")
+        tax.plot(imax, err[imax], "ko")
+        plt.show()
+        import pdb; pdb.set_trace()
+
+    assert err.max() < atol
 
 
 def test_flux_scalings(allclose):
