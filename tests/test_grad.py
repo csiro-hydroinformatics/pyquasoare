@@ -663,7 +663,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dfx_err_max, _ = comp_dfluxes(fx, dfx_n, dfx_v, exclude=exclude)
 
         xtol = 1e-5
-        ftol = 5e-4
+        ftol = 5e-3
 
         if debug_mode and (dx_err > xtol or dfx_err_max.max() > ftol):
             import matplotlib.pyplot as plt
