@@ -118,8 +118,9 @@ def configure_model(logger, config, data):
     #                + scaling of inputs
     hclim = data.hydroclim.loc[:, ["P", "PET"]]
     ntimesteps = len(hclim)
-    vspecs = [[0, 1], [0, 2]]\
-        + [[1, 0], [nres - 1, 0], [nres - 1, 1]]
+    vspecs = [[0, 1], [0, 2], [0, 0]] \
+        + [[1, 0], [nres - 1, 1], [nres - 1, 0]] \
+        + [[2 + iuh, 3] for iuh in range(nuh)]
     mod.allocate(ntimesteps, variables_specs=vspecs)
 
     # Set inputs
@@ -146,9 +147,11 @@ def set_parameters(mod, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     nres = mod.nreservoirs
     nuh = nres - 3
     mod.gammas = [X0, X1] + [1] * nuh + [X3]
+
+    # See Santos (2018), Eq. 6
+    fs3 = nuh * 1.25 / X4
     for iuh in range(nuh):
-        # See Santos (2018), Eq. 6
-        mod.coefs_linear[2 + iuh, 2] *= nuh * 1.25 / X4
+        mod.flux_scalings[2 + iuh, 2] = fs3
 
     mod.flux_scalings[nres - 1, 1] = X2
     mod.flux_scalings[0, 0] = eta_P
@@ -159,7 +162,6 @@ def process(config, script_paths, logger, data):
     logger.info("Run model")
     # Prepare model
     mod = configure_model(logger, config, data)
-    modb = configure_model(logger, config, data)
     gr = configure_gr4j(logger, config, data)
 
     # Good parameters
@@ -167,7 +169,7 @@ def process(config, script_paths, logger, data):
     X1 = 400
     X2 = -0.5
     X3 = 100.
-    X4 = 1.
+    X4 = 1.0
     set_parameters(mod, X0, X1, X2, X3, X4)
 
     gr.params.values = [X1, X2, X3, X4]
@@ -177,9 +179,9 @@ def process(config, script_paths, logger, data):
     gr.run()
 
     # Timeseries data
-    qobs = -data.hydroclim.Q
+    qobs = data.hydroclim.Q
     time = qobs.index
-    qsim = pd.Series(mod.fluxes[:, -1, 5], index=time)
+    qsim = pd.Series(-mod.fluxes[:, -1, 5], index=time)
 
     grsim = gr.to_dataframe(index=time)
 
@@ -200,10 +202,28 @@ def process(config, script_paths, logger, data):
     perf = pd.Series(perf).sort_index()
     logger.info(f"\n{perf}")
 
+    # Gradients
+    nuh = config.nuh
+    grads = pd.DataFrame(mod.dfluxes[:, :-nuh, -1, 5], index=time)
+    grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$",
+                     r"$X_0$", r"$X_1$", r"$X_2$", r"$X_3$"]
+    #grads.loc[:, r"$X_4$"] = -mod.dfluxes[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25 / X4
+
+    grads.loc[:, r"$X_4$"] = -mod.dfluxes[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
+    grads.loc[:, r"$X_1$"] *= X1
+    grads.loc[:, r"$X_2$"] *= X2
+    grads.loc[:, r"$X_3$"] *= X3
+    grads = grads.iloc[:, 3:]
+
     # Plot
-    start, end = "2015", "2022"
-    #start, end = "2022-02-01", "2022-04-15"
-    #start, end = "2022-02-22", "2022-03-10"
+    if args.zoom == 1:
+        start, end = "2015", "2022"
+    elif args.zoom == 2:
+        start, end = "2021-10", "2022"
+    elif args.zoom == 3:
+        start, end = "2022-02-01", "2022-04-15"
+    elif args.zoom == 4:
+        start, end = "2022-02-22", "2022-03-10"
 
     logger.info("Plot vs GR4J")
     mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
@@ -242,19 +262,22 @@ def process(config, script_paths, logger, data):
     fp = script_paths.fimg / "gr4j_comparison.png"
     fig.savefig(fp)
 
-
-    logger.info("Plot grad")
+    logger.info("Plot grad ts")
     plt.close("all")
 
-    nvars = len(mod.variables_type_id)
+    nvars = grads.shape[1]
     nrows, ncols = nvars + 1, 1
+    mosaic = [["flux"]] \
+             + [[f"{vn}/ratio"]
+                for vn in grads.columns]
+    ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
-    fig, axs = plt.subplots(nrows=nrows,
-                            figsize=figsize,
-                            layout="constrained",
-                            sharex=True)
-    ax = axs[0]
-    qobs[start:end].plot(ax=ax, label="Observed", color="k", ls="--")
+    fig = plt.figure(figsize=figsize,
+                     layout="constrained")
+    axs = fig.subplot_mosaic(mosaic)
+
+    ax = axs["flux"]
+    qobs[start:end].plot(ax=ax, label="Observed $q_o$", color="k", ls="--")
     qsim[start:end].plot(ax=ax, label="$Q_3$", lw=2)
 
     sqeps = math.sqrt(eps)
@@ -269,50 +292,61 @@ def process(config, script_paths, logger, data):
                  x=0.02, y=0.94)
     ax.set(ylabel="Streamflow [mm.d$^{-1}$]")
     y0, y1 = ax.get_ylim()
-    ax.set_ylim((0., y0))
+    #ax.set_ylim((0., y1))
     ax.legend()
 
     dqmax = 0.
-    vnames = ["\\eta_1^f", "\\eta_2^f",
-              "X_1", "X_3", "X_2"]
-    for i in range(nvars):
-        dq = pd.Series(mod.dfluxes[:, i, -1, 5],
-                       index=qobs.index)
-        dqb = pd.Series(modb.dfluxes[:, i, -1, 5],
-                        index=qobs.index)
+    nu = 0.5
+    sqres = (qsim**nu - qobs**nu)**2
+    dsqres = 2 * (qsim**nu - qobs**nu) * nu * qsim**(nu - 1)
 
-        vid = mod.variables_type_id[i]
-        rid = mod.variables_reservoir_id[i]
-        if vid == 0:
-            dq *= mod.gammas[rid]
-            dqb *= mod.gammas[rid]
-            title = f"Gradients ${vnames[i]}dQ_3/d{vnames[i]}$"
-        else:
-            title = f"Gradients $dQ_3/d{{{vnames[i]}}}$"
-
-        ax = axs[i + 1]
-        dq[start:end].plot(ax=ax, lw=2)
-        #dqb[start:end].plot(ax=ax, lw=2)
-
-        #ax.set_yscale("function", functions=(fwd, inv))
+    x = pd.DataFrame(mod.x, index=time)
+    def format_ax(ax):
         ax.set_yscale("asinh")
-
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+        y0, y1 = ax.get_ylim()
+        ax.set(ylabel="Gradient [mm.d$^{-1}$]")
+
+    for iplot, (vn, dq) in enumerate(grads.items()):
+        vtxt = re.sub("\\$", "", vn)
+        #if vn in ["X0", "X1", "X3"]:
+        #    title = f"Gradients ${vtxt}dQ_3/d{vtxt}$"
+        #else:
+        #    title = f"Gradients $dQ_3/d{{{vtxt}}}$"
+        title = f"${vtxt} \\times \\frac{{dF[t]}}{{d{vtxt}}}$"
+
+        ax = axs[f"{vn}/ratio"]
+        dF = (dsqres * -dq)[start:end]
+        dF.plot(ax=ax)
+        format_ax(ax)
         ax.set_title(title, va="top", ha="left",
                      x=0.02, y=0.94)
-        y0, y1 = ax.get_ylim()
-        ax.set(ylabel="Gradient [mm.d$^{-1}$]",
-               ylim=(y1, y0))
 
-        dqm = np.abs(dq[start:end]).max()
-        if dqm > dqmax:
-            imax = i
-            dqmax = dqm
+        #tax = ax.twinx()
+        #res[start:end].plot(ax=tax, color="0.5", lw=0.7)
+        #ddq = dq[start:end]
+        #if re.search("X_1", vn):
+        #    ddq *= X1
+        #elif re.search("X_3", vn):
+        #    ddq *= X3
+        #ddq.plot(ax=tax, ls="--", color="0.5", lw=0.7)
 
-    for i in range(nvars):
-        axs[i + 1].set_ylim((-dqmax, dqmax))
 
-    fp = script_paths.fimg / "gr4j_fluxes.png"
+        #ax = axs[f"{vn}/scatter"]
+
+        #if re.search("X_1", vn):
+        #    ires = 1
+        #else:
+        #    ires = x.shape[1] - 1
+
+        #explain = x.loc[start:end, ires]
+
+        #ax.plot(explain, dF, ".", alpha=0.5)
+        #format_ax(ax)
+
+
+
+    fp = script_paths.fimg / "gr4j_gradients_ts.png"
     fig.savefig(fp)
 
     logger.completed()
@@ -325,13 +359,20 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--stationid",
                         help="StationID",
                         type=str, default="203014")
+    parser.add_argument("-n", "--nuh",
+                        help="Number of UH reservoirs",
+                        type=int, default=2)
+    parser.add_argument("-z", "--zoom",
+                        help="Time zoom level",
+                        type=int, default=1)
     args = parser.parse_args()
 
     # Config
     timestep = "daily"
 
     nalphas = 50
-    nuh = 2
+    nuh = args.nuh
+    zoom = args.zoom
 
     stationid = args.stationid
     awidth = 7
@@ -344,11 +385,11 @@ if __name__ == "__main__":
                                    "aheight", "fdpi",
                                    "ftransparent", "imgext",
                                    "timestep", "stationid",
-                                   "nalphas", "nuh"])
+                                   "nalphas", "nuh", "zoom"])
     config = Config(awidth, aheight, fdpi,
                     ftransparent, imgext,
                     timestep, stationid,
-                    nalphas, nuh)
+                    nalphas, nuh, zoom)
 
     # Baseline
     script_paths = get_script_paths(config)
