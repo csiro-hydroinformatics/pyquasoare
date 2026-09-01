@@ -51,6 +51,8 @@
 
 #define QUASOARE_FLUX_TERM_RTOL1 1e-5
 #define QUASOARE_FLUX_TERM_RTOL2 1e-5
+#define QUASOARE_FLUX_TERM_ATOL 1e-50
+
 #define QUASOARE_DELTA_ATOL 1e-15
 
 /* Constants */
