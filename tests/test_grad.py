@@ -537,8 +537,6 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
                                                       flux_scalings=fxs,
                                                       errors="raise")
     assert allclose(x1, x2)
-    import pdb; pdb.set_trace()
-
     assert allclose(fx1, fx2)
     assert all(~np.isnan(x2))
     assert np.all(~np.isnan(dx2))
