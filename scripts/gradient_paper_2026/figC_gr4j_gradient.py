@@ -17,10 +17,11 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from collections import namedtuple
+from string import ascii_lowercase as letters
 
 import numpy as np
 import pandas as pd
-from string import ascii_lowercase as letters
+from scipy.optimize import minimize
 
 import matplotlib as mpl
 
@@ -42,6 +43,52 @@ from gradbench import data_reader
 # Select backend
 #mpl.use("Agg")
 
+def smooth_nodes(x, npts=5, prc=10):
+    x0, x1 = np.nanpercentile(x, [prc, 100 - prc])
+    return np.linspace(x0, x1, npts)
+
+def smooth_X(x, nodes):
+    X = np.empty((len(x), 2 * len(nodes) + 1))
+    X[:, 0] = 1.
+    for i, n in enumerate(nodes):
+        dx = x - n
+        X[:, 2 * i + 1] = np.abs(dx)
+        X[:, 2 * i + 2] = np.abs(dx) * dx
+    return X
+
+def smooth_reg(x, y):
+    nodes = smooth_nodes(x)
+    iok = ~np.isnan(x) & ~np.isnan(y)
+    X = smooth_X(x[iok], nodes)
+
+    # Quantile reg objfun
+    def ofun(theta):
+        yhat = X @ theta
+        return np.abs(yhat - y[iok]).sum()
+
+    theta0 = np.zeros(X.shape[1])
+    theta0[0] = np.nanmean(y) - np.nanmean(x)
+    opt = minimize(ofun, theta0)
+    theta = opt.x
+
+    xx = np.linspace(x[iok].min(), x[iok].max(), 500)
+    XX = smooth_X(xx, nodes)
+    yy = XX @ theta
+    return xx, yy
+
+def perf(qo, qs):
+    eps = np.abs(qo.mean()) * 1e-2
+    trans = {
+        "raw": lambda x: x,
+        "sqrt": lambda x: (np.sqrt(eps + np.abs(x)) - math.sqrt(eps)) * np.sign(x),
+        "log": lambda x: (np.log(eps + np.abs(x)) - math.log(eps)) * np.sign(x),
+        }
+    perf = pd.DataFrame(index=trans.keys(), columns=["BIAS", "NSE"])
+    for tn, t in trans.items():
+        tqo, tqs = t(qo), t(qs)
+        perf.loc[tn, "NSE"] = metrics.nse(tqo, tqs)
+        perf.loc[tn, "BIAS"] = metrics.bias(tqo, tqs)
+    return perf
 
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
@@ -73,8 +120,7 @@ def get_data(config, script_paths, logger):
 
     timestep = config.timestep
     hydroclim = data_reader.get_data(stationid, timestep, nval=None)
-    hydroclim = hydroclim.loc["2015":]
-
+    hydroclim = hydroclim.loc[config.start:config.end]
     hydroclim = hydroclim.rename(columns={
         "RAINFALL[mm_day-1]": "P",
         "PET[mm_day-1]": "PET",
@@ -93,6 +139,9 @@ def configure_model(logger, config, data):
     nalphas = config.nalphas
     nuh = config.nuh
     nres = 3 + nuh
+    nsubsteps = config.nsubsteps
+
+    # Create model
     mod = gradients.MultiReservoirModel(nres, nalphas,
                                         errors="raise")
     # Links
@@ -113,18 +162,23 @@ def configure_model(logger, config, data):
         mod.set_coefs_linear(2 + iuh, "linrouting")
     mod.set_coefs_linear(nres - 1, "gr4jroute")
 
+    # Correct for timestep related to Qstar3
+    mod.flux_scalings[:, 2] = 1. / nsubsteps
+
     # Allocate
     # .. indep var = prod / route capacity + exchange
     #                + scaling of inputs
     hclim = data.hydroclim.loc[:, ["P", "PET"]]
-    ntimesteps = len(hclim)
+    ntimesteps = len(hclim) * nsubsteps
     vspecs = [[0, 1], [0, 2], [0, 0]] \
         + [[1, 0], [nres - 1, 1], [nres - 1, 0]] \
         + [[2 + iuh, 3] for iuh in range(nuh)]
-    mod.allocate(ntimesteps, variables_specs=vspecs)
+    mod.allocate(ntimesteps, variables_specs=vspecs,
+                 timestep=1. / nsubsteps)
 
     # Set inputs
-    inputs = np.ascontiguousarray(hclim.values)
+    inputs = np.repeat(np.ascontiguousarray(hclim.values),
+                       nsubsteps, axis=0)
     inputs[:, 1] *= -1
     mod.set_Qstars(0, inputs)
 
@@ -143,13 +197,16 @@ def configure_gr4j(logger, config, data):
     return gr
 
 
-def set_parameters(mod, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
+def set_parameters(mod, nsubsteps, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     nres = mod.nreservoirs
     nuh = nres - 3
     mod.gammas = [X0, X1] + [1] * nuh + [X3]
 
     # See Santos (2018), Eq. 6
     fs3 = nuh * 1.25 / X4
+    #  + correct for timestep related to Qstar3
+    fs3 *= 1. / nsubsteps
+
     for iuh in range(nuh):
         mod.flux_scalings[2 + iuh, 2] = fs3
 
@@ -166,11 +223,11 @@ def process(config, script_paths, logger, data):
 
     # Good parameters
     X0 = 1.
-    X1 = 400
-    X2 = -0.5
-    X3 = 100.
+    X1 = 500.
+    X2 = -0.1
+    X3 = 50.
     X4 = 1.0
-    set_parameters(mod, X0, X1, X2, X3, X4)
+    set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4)
 
     gr.params.values = [X1, X2, X3, X4]
 
@@ -185,23 +242,6 @@ def process(config, script_paths, logger, data):
 
     grsim = gr.to_dataframe(index=time)
 
-    # Metrics
-    iok = qobs.notnull()
-    qo, qs = qobs[iok], qsim[iok]
-    eps = np.abs(qo.mean()) * 1e-2
-    trans = {
-        "id": lambda x: x,
-        "sqrt": lambda x: (np.sqrt(eps + np.abs(x)) - math.sqrt(eps)) * np.sign(x),
-        "log": lambda x: (np.log(eps + np.abs(x)) - math.log(eps)) * np.sign(x),
-        }
-    perf = {}
-    for tn, t in trans.items():
-        tqo, tqs = t(qo), t(qs)
-        perf[f"nse_{tn}"] = metrics.nse(tqo, tqs)
-        perf[f"bias_{tn}"] = metrics.bias(tqo, tqs)
-    perf = pd.Series(perf).sort_index()
-    logger.info(f"\n{perf}")
-
     # Gradients
     nuh = config.nuh
     grads = pd.DataFrame(mod.dfluxes[:, :-nuh, -1, 5], index=time)
@@ -213,17 +253,25 @@ def process(config, script_paths, logger, data):
     grads.loc[:, r"$X_1$"] *= X1
     grads.loc[:, r"$X_2$"] *= X2
     grads.loc[:, r"$X_3$"] *= X3
-    grads = grads.iloc[:, 3:]
+
+    grads = grads.iloc[:, 3:-1]
 
     # Plot
     if args.zoom == 1:
-        start, end = "2015", "2022"
+        start, end = "1990", "2022"
     elif args.zoom == 2:
         start, end = "2021-10", "2022"
     elif args.zoom == 3:
         start, end = "2022-02-01", "2022-04-15"
     elif args.zoom == 4:
         start, end = "2022-02-22", "2022-03-10"
+
+    # Metrics
+    iok = qobs.notnull()
+    qo, qs = qobs[iok][start:end], qsim[iok][start:end]
+    perf_df = perf(qo, qs)
+    logger.info(f"\n{perf_df}")
+
 
     logger.info("Plot vs GR4J")
     mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
@@ -267,19 +315,21 @@ def process(config, script_paths, logger, data):
 
     nvars = grads.shape[1]
     nrows, ncols = nvars + 1, 1
-    mosaic = [["flux"]] \
-             + [[f"{vn}/ratio"]
+    mosaic = [["flux", "."]] \
+             + [[f"{vn}/ratio", f"{vn}/scatter"]
                 for vn in grads.columns]
     ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig = plt.figure(figsize=figsize,
                      layout="constrained")
-    axs = fig.subplot_mosaic(mosaic)
+    kw = dict(width_ratios=[3, 2])
+    axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 
     ax = axs["flux"]
     qobs[start:end].plot(ax=ax, label="Observed $q_o$", color="k", ls="--")
     qsim[start:end].plot(ax=ax, label="$Q_3$", lw=2)
 
+    eps = qobs.mean() * 1e-2
     sqeps = math.sqrt(eps)
     fwd = lambda x: (np.sqrt(eps + np.abs(x)) - sqeps) * np.sign(x)
     inv = lambda y: np.sign(y) * ((np.abs(y) + sqeps)**2 - eps)
@@ -291,59 +341,57 @@ def process(config, script_paths, logger, data):
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
     ax.set(ylabel="Streamflow [mm.d$^{-1}$]")
-    y0, y1 = ax.get_ylim()
-    #ax.set_ylim((0., y1))
-    ax.legend()
+    ax.legend(loc=3, ncol=2, framealpha=0.)
 
-    dqmax = 0.
-    nu = 0.5
-    sqres = (qsim**nu - qobs**nu)**2
-    dsqres = 2 * (qsim**nu - qobs**nu) * nu * qsim**(nu - 1)
-
+    # Plotting data
+    res = qsim - qobs
     x = pd.DataFrame(mod.x, index=time)
-    def format_ax(ax):
-        ax.set_yscale("asinh")
-        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
-        y0, y1 = ax.get_ylim()
-        ax.set(ylabel="Gradient [mm.d$^{-1}$]")
 
     for iplot, (vn, dq) in enumerate(grads.items()):
-        vtxt = re.sub("\\$", "", vn)
-        #if vn in ["X0", "X1", "X3"]:
-        #    title = f"Gradients ${vtxt}dQ_3/d{vtxt}$"
-        #else:
-        #    title = f"Gradients $dQ_3/d{{{vtxt}}}$"
-        title = f"${vtxt} \\times \\frac{{dF[t]}}{{d{vtxt}}}$"
-
+        # Ts plot
         ax = axs[f"{vn}/ratio"]
-        dF = (dsqres * -dq)[start:end]
-        dF.plot(ax=ax)
-        format_ax(ax)
+
+        ratio = (res / -dq)[start:end]
+        ratio.plot(ax=ax)
+
+        ax.set_yscale("asinh")
+        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+
+        vtxt = re.sub("\\$", "", vn)
+        title = f"({letters[iplot + 1]})"\
+                + f"{vn} gradient ratio $\\frac{{Q_3 - q_o}}{{ {{{vtxt}}}\\ dQ_3/d{{{vtxt}}}}}$"
+        t = ax.set_title(title, va="top", ha="left",
+                         x=0.02, y=0.94, fontsize="x-large")
+        t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
+
+        ylim = -1e2, 1e2
+        ax.set(ylim=ylim,
+               ylabel="Ratio [-]")
+
+        # .. scatter plot
+        ax = axs[f"{vn}/scatter"]
+
+        if re.search("X_1", vn):
+            ires = 1
+            store_name = "Production store level"
+        else:
+            ires = x.shape[1] - 1
+            store_name = "Routing store level"
+
+        store = x.loc[start:end, ires]
+        ax.plot(store, ratio, ".", alpha=0.1)
+
+        xx, yy = smooth_reg(store, ratio)
+        ax.plot(xx, yy, "--", color="k", lw=2)
+
+        title = ""
         ax.set_title(title, va="top", ha="left",
                      x=0.02, y=0.94)
-
-        #tax = ax.twinx()
-        #res[start:end].plot(ax=tax, color="0.5", lw=0.7)
-        #ddq = dq[start:end]
-        #if re.search("X_1", vn):
-        #    ddq *= X1
-        #elif re.search("X_3", vn):
-        #    ddq *= X3
-        #ddq.plot(ax=tax, ls="--", color="0.5", lw=0.7)
-
-
-        #ax = axs[f"{vn}/scatter"]
-
-        #if re.search("X_1", vn):
-        #    ires = 1
-        #else:
-        #    ires = x.shape[1] - 1
-
-        #explain = x.loc[start:end, ires]
-
-        #ax.plot(explain, dF, ".", alpha=0.5)
-        #format_ax(ax)
-
+        ax.set_yscale("asinh")
+        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+        ax.set(ylim=ylim,
+               xlabel=store_name,
+               yticklabels=[])
 
 
     fp = script_paths.fimg / "gr4j_gradients_ts.png"
@@ -373,6 +421,9 @@ if __name__ == "__main__":
     nalphas = 50
     nuh = args.nuh
     zoom = args.zoom
+    nsubsteps = 1
+    start = "1990"
+    end = "1990"
 
     stationid = args.stationid
     awidth = 7
@@ -385,11 +436,13 @@ if __name__ == "__main__":
                                    "aheight", "fdpi",
                                    "ftransparent", "imgext",
                                    "timestep", "stationid",
-                                   "nalphas", "nuh", "zoom"])
+                                   "nalphas", "nuh", "zoom",
+                                   "nsubsteps", "start", "end"])
     config = Config(awidth, aheight, fdpi,
                     ftransparent, imgext,
                     timestep, stationid,
-                    nalphas, nuh, zoom)
+                    nalphas, nuh, zoom,
+                    nsubsteps, start, end)
 
     # Baseline
     script_paths = get_script_paths(config)
