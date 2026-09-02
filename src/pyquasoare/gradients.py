@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from pyquasoare import has_c_module, approx
 from pyquasoare.models import errors_check, error_management, get_errorsid
@@ -576,6 +577,14 @@ class MultiReservoirModel():
     @property
     def coefs_linear(self):
         return self._coefs_linear
+
+    @property
+    def variables_specs(self):
+        rid = self.variables_reservoir_id
+        vid = self.variables_type_id
+        if rid is None or vid is None:
+            raise ValueError("Variables specifications are not set.")
+        return pd.DataFrame({"reservoir_id": rid, "type_id": vid})
 
     @property
     def alphas(self):
