@@ -30,7 +30,6 @@ from hydrodiy.io import csv, iutils, hyruns
 from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
-from pyquasoare.benchmarks import benchmarks
 
 import importlib.util
 FTESTS = Path(__file__).parent.parent.parent / "tests"
@@ -59,8 +58,10 @@ FLUX_FUNCTIONS = {
 def get_options():
     timestep = "daily"
     # Duration depends on number of reaches
-    duration_base = {1: 100, 3: 50, 5: 20, 20: 5, 50: 5}
+    duration_base = {1: 100, 2: 100, 3: 50, 5: 20, 20: 5, 50: 5}
     duration_repeat = 1
+
+    nuh = 5
 
     stationids = data_reader.SITEIDS
 
@@ -74,18 +75,18 @@ def get_options():
     numdiff_log10eps = [-3, numdiff_log10eps_ref, -7, -9, -11]
 
     nrepeat = 50
-    nbatch = 1
+    nbatch = 2
     batches = np.arange(nbatch)
 
     gamma_means = [
-        (500, 50, 1000),
-        (5000, 5000, 10000),
-        (50, 5, 10)
+        (500, 50, 500),
+        (5000, 500, 5000),
+        (20, 2, 20)
         ]
 
-    gamma_std = 0.3
+    gamma_std = 0.2
     demand_mean = -0.5
-    demand_std = 0.3
+    demand_std = 0.2
 
     opm = hyruns.OptionManager(duration_base=duration_base,
                                duration_repeat=duration_repeat,
@@ -94,6 +95,7 @@ def get_options():
                                demand_mean=demand_mean,
                                demand_std=demand_std,
                                nrepeat=nrepeat,
+                               nuh=nuh,
                                nbatch=nbatch)
 
     opm.from_cartesian_product(batch=batches,
@@ -161,11 +163,6 @@ def get_data(config, script_paths, logger):
     stations = data_reader.get_stations()
     area = stations.loc[stationid, "CATCHMENTAREA[km2]"]
 
-    nreaches = config.task.nreaches
-    nval = config.options.context["duration_base"][nreaches] * 365
-    ntot = config.options.context["duration_repeat"] * 365
-    nreps = ntot // nval
-
     timestep = config.options.context["timestep"]
     hydroclim = data_reader.get_data(stationid, timestep, nval=None)
     hydroclim = hydroclim.rename(columns={
@@ -174,87 +171,156 @@ def get_data(config, script_paths, logger):
         })
     hydroclim = hydroclim.loc[:, ["P", "PET"]]
 
+    # Replicate data
+    nreaches = config.task.nreaches
+    nval = int(config.options.context["duration_base"][nreaches] * 365.25)
+    hydroclim = hydroclim.iloc[-nval:]
+    end = hydroclim.index[-1]
+    cc = hydroclim.columns
+
+    nreps = config.options.context["duration_repeat"]
+    hydroclim = np.tile(hydroclim, (nreps, 1))
+    start = end - pd.DateOffset(days=len(hydroclim) - 1)
+    time = pd.date_range(start, end, freq="D")
+    hydroclim = pd.DataFrame(hydroclim, index=time,
+                             columns=cc)
+
     data = namedtuple("Data", ["hydroclim", "area"])(hydroclim, area)
     logger.info(".. done")
 
     return data
 
+
+def get_reservoir_id(config, ireach, rtype):
+    nuh = config.options.context["nuh"]
+    nreaches = config.task.nreaches
+    nres_per_reach = 5 + nuh
+
+    ibase = nres_per_reach * ireach
+    if rtype == "openwater":
+        return ibase
+    elif rtype == "gr4jprod":
+        return ibase + 1
+    elif re.search("uh", rtype):
+        iuh = int(re.sub("uh", rtype))
+        if iuh > nuh - 1:
+            raise ValueError(f"Can't have iuh > {nuh - 1}")
+        return ibase + 2 + iuh
+    elif rtype == "gr4jroute":
+        return ibase + 2 + nuh
+    elif rtype == "quadrouting":
+        return ibase + 3 + nuh
+    elif rtype == "transluent":
+        return ibase + 4 + nuh
+    else:
+        raise ValueError(f"Can't recognise rtype {rtype}")
+
+
 def configure_model(logger, config, area):
     logger.info(f"Create and configure model")
+    nuh = config.options.context["nuh"]
     nreaches = config.task.nreaches
-    nres_per_reach = 4
+    nres_per_reach = 5 + nuh
     nres = nres_per_reach * nreaches
-    nalphas = 1000 if config.debug else config.task.nalphas
+    nalphas = 500 if config.debug else config.task.nalphas
     mod = gradients.MultiReservoirModel(nres, nalphas,
                                         errors="raise")
     mod.area = area
 
+    ires = 0
     for ireach in range(nreaches):
         ibase = nres_per_reach * ireach
-        # RR prod = ibase
-        # RR routing = ibase + 1
-        # RO routing = ibase + 2
-        # Transluent = ibase + 3
+        # Transluent = ibase + 4 + nuh
 
-        # .. links ...
-        # RR prod -> RR routing
-        mod.add_link_outflow(ibase, ibase + 1)
+        # RR intercept = ibase
+        mod.set_coefs_linear(ibase, "openwater")
 
-        # RR route -> transluent with conversion
-        conv = area * MODEL_TIMESTEP / 86.4
-        mod.add_link_outflow(ibase + 1, ibase + 3, conv)
+        # RR prod = ibase + 1
+        mod.set_coefs_linear(ibase + 1, "gr4jprod")
+        mod.add_link_bypass_shortfall(ibase, ibase + 1)
 
-        # RO route -> Transluent
-        mod.add_link_outflow(ibase + 2, ibase + 3)
+        # RR uh = ibase + 2 .. ibase + 1 + nuh
+        for iuh in range(nuh):
+            ires = ibase + 2 + iuh
+            mod.set_coefs_linear(ires, "linrouting")
+            mod.add_link_outflow(ires - 1, ires)
+
+        # RR routing = ibase + 2 + nuh
+        igr = ibase + 2 + nuh
+        mod.set_coefs_linear(igr, "gr4jroute")
+        mod.add_link_outflow(igr - 1, igr)
+
+        # RO route  = ibase + 3 + nuh
+        iro = ibase + 3 + nuh
+        mod.set_coefs_linear(iro, "quadrouting")
+
+        # Transluent = ibase + 4 + nuh
+        itrans = ibase + 4 + nuh
+        mod.set_coefs_linear(itrans, "transluent")
+        mod.add_link_outflow(iro, itrans)
+        conv = 1. / (ireach + 1) # conversion mm subcatch -> mm catch
+        mod.add_link_outflow(igr, itrans, conv)
 
         if ireach > 0:
             # Transluent upstream -> RO route
-            mod.add_link_outflow(ibase - 1, ibase + 2)
+            mod.add_link_outflow(itrans_up, iro)
+
+        itrans_up = itrans
 
     mod.nreaches = nreaches
     mod.nres_per_reach = nres_per_reach
+    mod.nuh = nuh
     logger.info(".. done")
 
     return mod
 
 
-def set_coefs_linear(logger, mod):
-    logger.info("Setting model coefs")
-    nreaches = mod.nreaches
-    nres_per_reach = mod.nres_per_reach
-    for ireach in range(nreaches):
-        ibase = nres_per_reach * ireach
-        # RR prod = ibase
-        # RR routing = ibase + 1
-        # RO routing = ibase + 2
-        # Transluent = ibase + 3
-
-        # Set RR prod coefs
-        mod.set_coefs_linear(ibase, FLUX_FUNCTIONS["gr4jprodquad"])
-
-        # Set RR route coefs
-        mod.set_coefs_linear(ibase + 1, FLUX_FUNCTIONS["gr4jroutequad"])
-
-        # Set RO route coefs
-        mod.set_coefs_linear(ibase + 2, "quadrouting")
-
-        # Set Transluent coefs
-        mod.set_coefs_linear(ibase + 3, "transluent")
-    logger.info(".. done")
-
-
 def allocate_model(logger, mod, hydroclim, grad=True):
     nval = len(hydroclim)
-
-    # .. gradients against all capacities
+    nreaches = mod.nreaches
     nres = mod.nreservoirs
     nres_per_reach = mod.nres_per_reach
+
+    # .. gradients against GR4J X1/X3 + routing capacities
     if grad:
-        vspecs = [[res, 0] for res in range(nres)]
+        vspecs = []
+        for ireach in range(nreaches):
+            ipr = get_reservoir_id(config, ireach, "gr4jprod")
+            vspecs.append([ipr, 0]) # Capacity
+
+            irr = get_reservoir_id(config, ireach, "gr4jroute")
+            vspecs.append([irr, 0]) # Capacity
     else:
         vspecs = None
+
     mod.allocate(nval, timestep=MODEL_TIMESTEP,
                  variables_specs=vspecs)
+
+def log_model(logger, mod):
+    nreaches = mod.nreaches
+    logger.info("****************************************", nret=1)
+    logger.info(f"Model description")
+    logger.info(f"nreaches   : {mod.nreaches}", ntab=1)
+    logger.info(f"nuh        : {mod.nuh}", ntab=1)
+    logger.info(f"ntimesteps : {mod.ntimesteps} / {mod.ntimesteps / 365:0.0f}y", ntab=1)
+    logger.info(f"nvars      : {len(mod.variables_reservoir_id)}", ntab=1)
+    logger.info(f"timestep   : {mod.timestep}", ntab=1)
+
+    gammas = mod.gammas
+    fxs = mod.flux_scalings
+
+    for ireach in range(nreaches):
+        logger.info(f"Reach {ireach}", nret=1)
+
+        ipr = get_reservoir_id(config, ireach, "gr4jprod")
+        logger.info(f"Gamma RR prod = {gammas[ipr]:0.1f}", ntab=1)
+
+        irr = get_reservoir_id(config, ireach, "gr4jroute")
+        logger.info(f"Gamma RR route = {gammas[irr]:0.1f}", ntab=1)
+        logger.info(f"Demand RR route = {fxs[irr, 1]:0.2f}", ntab=1)
+
+        iro = get_reservoir_id(config, ireach, "quadrouting")
+        logger.info(f"Gamma RO route = {gammas[iro]:0.1f}", ntab=1)
 
 
 def set_qstars(logger, mod, hydroclim):
@@ -263,7 +329,8 @@ def set_qstars(logger, mod, hydroclim):
     # Set 0 flow inputs for first reach
     nval = len(hydroclim)
     Qstars0 = np.zeros((nval, 2))
-    mod.set_Qstars(3, Qstars0)
+    iro = get_reservoir_id(config, 0, "quadrouting")
+    mod.set_Qstars(iro, Qstars0)
 
     Qstars1 = np.nan * np.zeros((nval, 2))
     Qstars1[:, 1] = 1.
@@ -279,7 +346,7 @@ def set_qstars(logger, mod, hydroclim):
 
     # Set inputs
     for ireach in range(mod.nreaches):
-        # Reach input noise
+        # Reach climate + noise
         # .. rainfall
         nu = np.random.normal(scale=rhoP, size=nval)
         errP = armodels.armodel_sim(alphaP, nu)
@@ -290,11 +357,12 @@ def set_qstars(logger, mod, hydroclim):
         errE = 1 + armodels.armodel_sim(alphaE, nu)
         Qstars0[:, 1] = -backwardE(tE + errE)
 
-        ibase = ireach * mod.nres_per_reach
-        mod.set_Qstars(ibase, Qstars0)
+        ipr = get_reservoir_id(config, ireach, "openwater")
+        mod.set_Qstars(ipr, Qstars0)
 
         # Reach loss qstar
-        mod.set_Qstars(ibase + 1, Qstars1)
+        irr = get_reservoir_id(config, ireach, "gr4jroute")
+        mod.set_Qstars(irr, Qstars1)
 
 
 def set_parameters(logger, config, mod):
@@ -307,37 +375,27 @@ def set_parameters(logger, config, mod):
     gamma_mean = config.task.gamma_mean
     gamma_std = config.options.context["gamma_std"]
 
-    gammas = np.zeros(nres)
-
-    # .. RR prod reservoir
-    s = random_scalings(gamma_std, nreaches)
-    grr_prod = gamma_mean[0] * s
-    gammas[::nrp] = grr_prod
-
-    # .. RR route reservoir
-    s = random_scalings(gamma_std, nreaches)
-    grr_route = gamma_mean[1] * s
-    gammas[1::nrp] = grr_route
-
-    # .. RO reservoir -> m3
-    factor = mod.Pmean * mod.area * np.arange(1, nreaches + 1)
-    factor *= gamma_mean[2] / 86.4
-    s = random_scalings(gamma_std, nreaches)
-    gro_route = factor * s
-    gammas[2::nrp] = gro_route
-
-    # .. transluent capacity
-    gammas[3::nrp] = 1.
-
-    mod.gammas = gammas
-
-    # Demand moments
     demand_mean = config.options.context["demand_mean"]
     demand_std = config.options.context["demand_std"]
-    dem = demand_mean + demand_std * np.random.standard_normal(size=nreaches)
-    mod.flux_scalings[1::nrp, 1] = dem
 
-    return grr_prod, grr_route, gro_route, dem
+    gammas = 1e-2 * np.ones(nres)
+    for ireach in range(nreaches):
+        # RR prod reservoir
+        ipr = get_reservoir_id(config, ireach, "gr4jprod")
+        gammas[ipr] = random_scalings(gamma_std) * gamma_mean[0]
+
+        # RR route reservoir
+        irr = get_reservoir_id(config, ireach, "gr4jroute")
+        gammas[irr] = random_scalings(gamma_std) * gamma_mean[1]
+
+        dem = np.random.normal(loc=demand_mean, scale=demand_std)
+        mod.flux_scalings[irr, 1] = dem
+
+        # RO reservoir
+        iro = get_reservoir_id(config, ireach, "quadrouting")
+        gammas[iro] = random_scalings(gamma_std) * gamma_mean[2]
+
+    mod.gammas = gammas
 
 
 def forwardP(x):
@@ -356,99 +414,25 @@ def backwardE(y):
     return np.maximum(y, 0.)
 
 
-def forwardasinh(x, x0=1):
-    return np.asinh(x / x0) * x0
+def random_scalings(sigma, nval=1, s0=1e-2):
+    if nval == 1:
+        return max(s0, 1 + np.random.normal(scale=sigma))
+    else:
+        return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def random_scalings(sigma, nval, s0=1e-2):
-    return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
+def flux_denom(fx, eps1=1e-6, eps2=1e-3):
+    afx = np.abs(fx)
+    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
+    return afx + shift
 
 
-def forward_plot_scale(x, eps=1e-2):
-    return (np.sqrt(eps**2 + np.abs(x)) - eps) * np.sign(x)
-
-
-def backward_plot_scale(y, eps=1e-2):
-    return ((np.abs(y) + eps)**2 - eps**2) * np.sign(y)
-
-
-def compute_flux_error(bench, alt, transform=None, nan="ignore"):
-    nreaches = bench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
-    fb = bench[:, ires, 5]
-    fa = alt[:, ires, 5]
-    if transform is not None:
-        fw = forward_asinh if transform=="asinh" else lambda x: x
-        fb = fw(fb)
-        fa = fw(fa)
-
-    err = np.abs(fa - fb)
-    if nan == "keep":
-        err[np.isnan(fa) | np.isnan(fb)] = np.nan
-
-    emax = np.nanmax(err)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        var = ((fb - np.nanmean(fb, axis=0))**2).sum(axis=0)
-        eff = (err**2).sum(axis=0) / var
-
-    log10coefdet = np.log10(np.nanmax(eff))
-
-    return emax, log10coefdet
-
-
-def compute_dflux_error(dbench, dalt, transform=None, nan="ignore"):
-    nreaches = dbench.shape[1] // 4
-    ires = (np.arange(nreaches)[:, None] + np.array([0, 1, 3])[None, :]).ravel()
-
-    dfb = dbench[:, ires, ires, 5]
-    dfa = dalt[:, ires, ires, 5]
-    if transform:
-        fw = forward_asinh if transform=="asinh" else lambda x: x
-        dfb = fw(dfb)
-        dfa = fw(dfa)
-
-    err = np.abs(dfb - dfa)
-    if nan == "keep":
-        err[np.isnan(dfa) | np.isnan(dfb)] = np.nan
-
-    emax = np.nanmax(err)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        var = ((dfb - np.nanmean(dfb, axis=0))**2).sum(axis=0)
-        eff = (err**2).sum(axis=0) / var
-
-    log10coefdet = np.nanmax(eff)
-
-    return emax, log10coefdet
-
-def convert_fluxes(area, nres_per_reach, gammas,
-                   fluxes, dfluxes):
-    nres = dfluxes.shape[2]
-    nreaches = nres // nres_per_reach
-
-    fluxes_converted = fluxes.copy()
-
-    # Convert grad against capacity to grad
-    # against capacity scaling to maintain unit
-    g = gammas[None, None, :, None]
-    dfluxes_converted = dfluxes.copy() * g
-
-    # Convert m3/s to mm/day for the transluent reservoir
-    for ireach in range(nreaches):
-        area_up = area * (ireach + 1)
-        ires_transluent = ireach * nres_per_reach + 3
-        factor = 86.4 * MODEL_TIMESTEP / area_up
-
-        fluxes_converted[:, ires_transluent] = \
-            factor * fluxes[:, ires_transluent]
-
-        dfluxes_converted[:, :, ires_transluent] = \
-            factor * dfluxes_converted[:, :, ires_transluent]
-
-    return fluxes_converted, dfluxes_converted
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3):
+    num = np.abs(dfx_ref - dfx_alt)
+    denom = flux_denom(fx_ref, eps1, eps2)
+    err = num / denom
+    emax = np.max(err, axis=0)
+    return emax
 
 
 def process(config, script_paths, logger, data):
@@ -461,27 +445,21 @@ def process(config, script_paths, logger, data):
 
     # Setup up model
     modref = configure_model(logger, config, data.area)
+
     # .. difference models
     modneutral = configure_model(logger, config, data.area)
-    modlow = configure_model(logger, config, data.area)
-    modhigh = configure_model(logger, config, data.area)
+    modlow1 = configure_model(logger, config, data.area)
+    modlow2 = configure_model(logger, config, data.area)
+    modhigh1 = configure_model(logger, config, data.area)
+    modhigh2 = configure_model(logger, config, data.area)
 
-    # Allocate model with extended hydroclim data
-    debug = config.debug
-    context = config.options.context
-    nreaches = config.task.nreaches
-    dbase = 20 if debug else context["duration_base"][nreaches]
-    drep = 1 if debug else context["duration_repeat"]
-    n = dbase * 365
-    hclim = np.tile(data.hydroclim.iloc[-n:], (drep, 1))
-
-    #if debug:
-    #    hclim = hclim[:2000]
-
+    hclim = data.hydroclim.values
     allocate_model(logger, modref, hclim)
     allocate_model(logger, modneutral, hclim, False)
-    allocate_model(logger, modlow, hclim, False)
-    allocate_model(logger, modhigh, hclim, False)
+    allocate_model(logger, modlow1, hclim, False)
+    allocate_model(logger, modlow2, hclim, False)
+    allocate_model(logger, modhigh1, hclim, False)
+    allocate_model(logger, modhigh2, hclim, False)
 
     # Define job
     batch = config.task.batch
@@ -489,198 +467,50 @@ def process(config, script_paths, logger, data):
     nrepeat = 3 if config.debug else config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
-    logger.info("initialise gradient data")
-    nreaches = config.task.nreaches
-    nres = modref.nreservoirs
-    nres_per_reach = modref.nres_per_reach
-
-    dgrr_prod = np.zeros((nres, nreaches))
-    k1 = np.arange(nreaches) * nres_per_reach
-    k2 = np.arange(nreaches)
-    dgrr_prod[k1, k2] = 1
-
-    dgrr_route = np.zeros((nres, nreaches))
-    dgrr_route[k1 + 1, k2] = 1
-
-    dgro_route = np.zeros((nres, nreaches))
-    dgro_route[k1 + 2, k2] = 1
-
-    areas = np.ones(nreaches) * modref.area
-    x0 = 0.5
-
-    logger.info("initialise benchmark data")
-    nval = len(hclim)
-    x_rr_prod = np.zeros((nval, nreaches))
-    dx_rr_prod = np.zeros((nres, nval, nreaches))
-    x_rr_route = np.zeros((nval, nreaches))
-    x_rr_route = np.zeros((nval, nreaches))
-    dx_rr_route = np.zeros((nres, nval, nreaches))
-    x_ro_route = np.zeros((nval, nreaches))
-    dx_ro_route = np.zeros((nres, nval, nreaches))
-    logger.info(".. step 1")
-
-    fx_rr_prod = np.zeros((nval, nreaches))
-    fx_rr_prod_p = np.zeros((nval, nreaches))
-    fx_rr_prod_m = np.zeros((nval, nreaches))
-    dfx_rr_prod = np.zeros((nres, nval, nreaches))
-    fx_rr_route = np.zeros((nval, nreaches))
-    fx_rr_route_p = np.zeros((nval, nreaches))
-    fx_rr_route_m = np.zeros((nval, nreaches))
-    dfx_rr_route = np.zeros((nres, nval, nreaches))
-    fx_ro_route = np.zeros((nval, nreaches))
-    fx_ro_route_p = np.zeros((nval, nreaches))
-    fx_ro_route_m = np.zeros((nval, nreaches))
-    dfx_ro_route = np.zeros((nres, nval, nreaches))
-    logger.info(".. step 2")
-
-    fluxes_bench = modref.fluxes.copy()
-    fluxes_bench.fill(np.nan)
-    dfluxes_bench = modref.dfluxes.copy()
-    dfluxes_bench.fill(np.nan)
-    logger.info(".. step 3")
-
-    logger.info("initialise numerical difference data")
-    numdiff_eps = 1e-2 if config.debug else 10**config.task.numdiff_log10eps
-
-    dfluxes_quas_diff1 = modref.dfluxes.copy() * np.nan
-    dfluxes_quas_diff2 = modref.dfluxes.copy() * np.nan
-
-    dfluxes_bench_diff1 = modref.dfluxes.copy() * np.nan
-    dfluxes_bench_diff2 = modref.dfluxes.copy() * np.nan
-
     # initialise perf results
-    mnames = ["bench", "bench_diff1", "bench_diff2",
-              "quasoare", "quasoare_diff1", "quasoare_diff2"]
-    cc = [f"runtime_{m}" for m in mnames] + ["runtime_quasoare_neutral"]
-    cc += ["fx_errmax_quasoare", "fx_log10coefdet_quasoare"]
-    cc += [f"dfx_errmax_{m}" for m in mnames[1:]]
-    cc += [f"dfx_log10coefdet_{m}" for m in mnames[1:]]
+    mnames = ["quasoare_ref"] + [f"quasoare_diff{o}" for o in [1, 2, 4]]
+    cc = [f"runtime_{m}" for m in mnames]
+    cc = [f"dfx_errmax_{m}" for m in mnames[:-1]]
     results = pd.DataFrame(0., index=np.arange(nrepeat),
                            columns=cc)
 
     # repeat experiment
     logger.info("")
-    for irepeat in range(nrepeat):
+    for irepeat in ibatches:
         logger.info(f"## Repeat #{irepeat + 1} / {nrepeat} ###", nret=2)
+
         # Set random model inputs
         set_qstars(logger, modref, hclim)
         modneutral.Qstars = modref.Qstars
-        modlow.Qstars = modref.Qstars
-        modhigh.Qstars = modref.Qstars
+        modlow1.Qstars = modref.Qstars
+        modlow2.Qstars = modref.Qstars
+        modhigh1.Qstars = modref.Qstars
+        modhigh2.Qstars = modref.Qstars
 
-        grr_prod, grr_route, gro_route, demrr_route = \
-                set_parameters(logger, config, modref)
-        logger.info(f"GRR prod = {grr_prod.round(0)}", ntab=1)
-        logger.info(f"GRR route = {grr_route.round(0)}", ntab=1)
-        logger.info(f"DEM route = {demrr_route.round(2)}", ntab=1)
-        logger.info(f"GRO route = {gro_route.round(0)}", ntab=1)
+        # Set parameters
+        set_parameters(logger, config, modref)
+        if irepeat == 0:
+            log_model(logger, modref)
 
-        grr_prod_p = grr_prod.copy()
-        grr_prod_m = grr_prod.copy()
-        grr_route_p = grr_route.copy()
-        grr_route_m = grr_route.copy()
-        gro_route_p = gro_route.copy()
-        gro_route_m = gro_route.copy()
-
-        # --------------------------------------------------
-        # Set models
-        modneutral.gammas = modref.gammas
+        modneutral.gammas = modref.gammas.copy()
         modneutral.flux_scalings = modref.flux_scalings
 
-        modlow.gammas = modref.gammas
-        modlow.flux_scalings = modref.flux_scalings
+        modlow1.gammas = modref.gammas.copy()
+        modlow1.flux_scalings = modref.flux_scalings
 
-        modhigh.gammas = modref.gammas
-        modhigh.flux_scalings = modref.flux_scalings
+        modlow2.gammas = modref.gammas.copy()
+        modlow2.flux_scalings = modref.flux_scalings
 
-        # --------------------------------------------------
-        # Run benchmark
-        pin = modref.Qstars[:, ::modref.nres_per_reach, 0]
-        # .. convert to positive ! -> classical convention in RR
-        ein = -modref.Qstars[:, ::modref.nres_per_reach, 1]
+        modhigh1.gammas = modref.gammas.copy()
+        modhigh1.flux_scalings = modref.flux_scalings
 
-        t0 = time.time()
-        # .. run tangent code for the capacity of reach reservoir
-        for res in np.arange(nres)[::-1]:
-            #if res > 0:
-            #    continue
-            out = x_rr_prod, dx_rr_prod[res], \
-                x_rr_route, dx_rr_route[res], \
-                x_ro_route, dx_ro_route[res], \
-                fx_rr_prod, dfx_rr_prod[res], \
-                fx_rr_route, dfx_rr_route[res], \
-                fx_ro_route, dfx_ro_route[res], \
+        modhigh2.gammas = modref.gammas.copy()
+        modhigh2.flux_scalings = modref.flux_scalings
 
-            benchmarks.gradbench_semidist_tangent(MODEL_TIMESTEP,
-                                                  pin, ein, x0, areas,
-                                                  grr_prod,
-                                                  dgrr_prod[res],
-                                                  grr_route,
-                                                  dgrr_route[res],
-                                                  gro_route,
-                                                  dgro_route[res],
-                                                  demrr_route,
-                                                  out)
-        dt_bench = time.time() - t0
-
-        # .. rearrange benchmark data to match model format
-        for res in np.arange(nres):
-            ireach = res // nres_per_reach
-            ires_in_reach = res % nres_per_reach
-            if ires_in_reach == 0:
-                # .. fluxes
-                fluxes_bench[:, res, 5] = -fx_rr_prod[:, ireach]
-                # .. fluxes grad
-                for resg in range(nres):
-                    dfluxes_bench[:, resg, res, 5] = -dfx_rr_prod[resg, :, ireach]
-
-            elif ires_in_reach == 1:
-                # .. fluxes
-                fluxes_bench[:, res, 5] = -fx_rr_route[:, ireach]
-                # .. fluxes grad
-                for resg in range(nres):
-                    dfluxes_bench[:, resg, res, 5] = -dfx_rr_route[resg, :, ireach]
-
-            elif ires_in_reach == 3:
-                # .. fluxes
-                fluxes_bench[:, res, 5] = -fx_ro_route[:, ireach]
-                # .. fluxes grad
-                for resg in range(nres):
-                    dfluxes_bench[:, resg, res, 5] = -dfx_ro_route[resg, :, ireach]
-
-        # --------------------------------------------------
-        # Run quasoare gradient
-        # .. Modify alphas to match benchmark
-        for res in np.arange(nres):
-            ireach = res // nres_per_reach
-            ires_in_reach = res % nres_per_reach
-            if ires_in_reach == 0:
-                xmin = x_rr_prod[:, ireach].min(axis=0)
-                xmax = x_rr_prod[:, ireach].max(axis=0)
-            elif ires_in_reach == 1:
-                xmin = x_rr_route[:, ireach].min(axis=0)
-                xmax = x_rr_route[:, ireach].max(axis=0)
-            elif ires_in_reach == 2:
-                xmin = x_ro_route[:, ireach].min(axis=0)
-                xmax = x_ro_route[:, ireach].max(axis=0)
-
-            xmin = np.floor(xmin / 0.1) * 0.1
-            xmax = max(1., np.ceil(xmax / 0.1) * 0.1)
-
-            modref.set_alphas(res, xmin, xmax)
-            modneutral.set_alphas(res, xmin, xmax)
-            modlow.set_alphas(res, xmin, xmax)
-            modhigh.set_alphas(res, xmin, xmax)
-
-        set_coefs_linear(logger, modref)
-        set_coefs_linear(logger, modneutral)
-        set_coefs_linear(logger, modlow)
-        set_coefs_linear(logger, modhigh)
-
-        # Run Quasoare
+        logger.info("Run Quasoare - grad model", nret=1)
         t0 = time.time()
         modref.run()
-        dt_quas = time.time() - t0
+        dt_quas_ref = time.time() - t0
 
         t0 = time.time()
         modneutral.run()
@@ -688,37 +518,34 @@ def process(config, script_paths, logger, data):
 
         # Print one simulation to make sure it makes sense
         if irepeat == 0:
-            logger.info("Plotting first simul")
-            nval = min(2000, len(pin))
+            logger.info("Plotting first simul", nret=1)
+            nreaches = modref.nreaches
+            nval = min(2000, modref.ntimesteps)
             kk = np.arange(-nval, 0)
-            nsims = nres_per_reach + 2
+            nsims = 4
             df = np.empty((nval, nreaches * nsims))
             cols = []
-            nrp = nres_per_reach
             for ireach in range(nreaches):
                 # Data
-                df[:, ireach * nsims] = pin[kk, ireach]
-                df[:, ireach * nsims + 1] = ein[kk, ireach]
-                # Sim - rr prod
-                df[:, ireach * nsims + 2] = -modref.fluxes[kk, nrp * ireach, 5]
-                # Sim - rr route
-                df[:, ireach * nsims + 3] = -modref.fluxes[kk, nrp * ireach + 1, 5]
-                # Sim - ro route
-                df[:, ireach * nsims + 4] = -modref.fluxes[kk, nrp * ireach + 2, 5]
-                # Sim - sum >> converted to mm/d
-                area_up = data.area * (ireach + 1)
-                factor = 86.4 * MODEL_TIMESTEP / area_up
-                rosim = -factor * modref.fluxes[kk, nrp * ireach + 3, 5]
-                df[:, ireach * nsims + 5] = rosim
-                r = f"_{ireach:03d}"
-                cols.extend([f"P{r}", f"PE{r}", f"RR_PROD{r}",
-                             f"RR_ROUTE{r}", f"RO_ROUTE{r}",
-                             f"AGG{r}"])
+                iow = get_reservoir_id(config, ireach, "openwater")
+                df[:, ireach * nsims] = modref.Qstars[kk, iow, 0]
+                df[:, ireach * nsims + 1] = modref.Qstars[kk, iow, 1]
+
+                irr = get_reservoir_id(config, ireach, "gr4jroute")
+                qrr = -modref.fluxes[kk, irr, 5]
+                df[:, ireach * nsims + 2] = qrr
+
+                irt = get_reservoir_id(config, ireach, "transluent")
+                qagg = -modref.fluxes[kk, irt, 5]
+                df[:, ireach * nsims + 3] = qagg
+
+                r = f"R{ireach:03d}"
+                cols.extend([f"{r}_P", f"{r}_PE", f"{r}_RO_ROUTE",
+                             f"{r}_AGG"])
 
             df = pd.DataFrame(df).round(3)
             df.columns = cols
             df.index.name = "DAY"
-
             fs = fsims / f"simulations_v{version}_TASK{taskid}.csv"
             csv.write_csv(df, fs, "Simulations for repeat 0",
                           script_paths.source_file,
@@ -730,250 +557,155 @@ def process(config, script_paths, logger, data):
                                     figsize=(12, 10), layout="tight")
             for ireach, ax in enumerate(axs.flat):
                 if ireach >= nreaches:
+                    ax.axis("off")
                     continue
 
-                r = f"_{ireach:03d}"
-                df.loc[:, f"RO_ROUTE{r}"].plot(ax=ax, label="RO-Route")
-                df.loc[:, f"AGG{r}"].plot(ax=ax, label="Agg")
+                r = f"R{ireach:03d}"
+                df.loc[:, f"{r}_RO_ROUTE"].plot(ax=ax, label="RO-Route")
+                df.loc[:, f"{r}_AGG"].plot(ax=ax, label="Agg")
 
-                tax = ax.twinx()
-                df.loc[:, f"RR_ROUTE{r}"].plot(ax=tax, color="0.5")
-                ax.plot([], [], color="0.5", label="RR-Route")
-
-                ax.set_yscale("function",
-                              functions=(forward_plot_scale,
-                                         backward_plot_scale))
+                ax.set_yscale("asinh")
                 ax.set_title(f"Reach {ireach}")
                 ax.legend(loc=2)
 
             fig.savefig(fs.parent / f"{fs.stem}.png")
 
         # --------------------------------------------------
-        logger.info("Run numerical difference - grad model")
-        # .. run diff for the capacity of reach reservoir - order 1
+        logger.info("Run numerical difference - order 1", nret=1)
+        numdiff_eps = 10**(config.task.numdiff_log10eps)
+        dfluxes_1 = modref.dfluxes.copy() * np.nan
+
         t0 = time.time()
         modneutral.run()
-        for res in np.arange(nres):
+        for ivar, vinfo in modref.variables_specs.iterrows():
+            res = vinfo.reservoir_id
+
             # Run high model
-            modhigh.gammas[res] = modref.gammas[res] + numdiff_eps
-            modhigh.run()
+            modhigh1.gammas[res] = modref.gammas[res] + numdiff_eps
+            modhigh1.run()
 
             # Compute flux gradient
-            dfluxes_quas_diff1[:, res, :, :] = (modhigh.fluxes - modneutral.fluxes) / numdiff_eps
+            dfluxes_1[:, ivar, :, :] = (modhigh1.fluxes - modneutral.fluxes) / numdiff_eps
 
             # Reset
-            modhigh.gammas[res] = modref.gammas[res]
+            modhigh1.gammas[res] = modref.gammas[res]
 
         dt_quas_diff1 = time.time() - t0
 
         # --------------------------------------------------
-        # .. run diff for the capacity of reach reservoir - order 2
+        logger.info("Run numerical difference - order 2", nret=1)
+        dfluxes_2 = modref.dfluxes.copy() * np.nan
         t0 = time.time()
-        for res in np.arange(nres):
+        for ivar, vinfo in modref.variables_specs.iterrows():
+            res = vinfo.reservoir_id
+
             # Run low model
-            modlow.gammas[res] = modref.gammas[res] - numdiff_eps
-            modlow.run()
+            modlow1.gammas[res] = modref.gammas[res] - numdiff_eps
+            modlow1.run()
+
             # Run high model
-            modhigh.gammas[res] = modref.gammas[res] + numdiff_eps
-            modhigh.run()
+            modhigh1.gammas[res] = modref.gammas[res] + numdiff_eps
+            modhigh1.run()
 
             # Compute flux gradient
-            dfluxes_quas_diff2[:, res, :, :] = (modhigh.fluxes - modlow.fluxes) / 2 / numdiff_eps
+            dfluxes_2[:, ivar, :, :] = (modhigh1.fluxes - modlow1.fluxes) / 2 / numdiff_eps
 
             # Reset
-            modlow.gammas[res] = modref.gammas[res]
-            modhigh.gammas[res] = modref.gammas[res]
+            modlow1.gammas[res] = modref.gammas[res]
+            modhigh1.gammas[res] = modref.gammas[res]
 
         dt_quas_diff2 = time.time() - t0
 
         # --------------------------------------------------
-        # Run numerical difference - bench model
-        # .. run diff for the capacity of reach reservoir - order 1
-        out = x_rr_prod, x_rr_route, x_ro_route, \
-            fx_rr_prod, fx_rr_route, fx_ro_route
-        out_p = x_rr_prod, x_rr_route, x_ro_route, \
-            fx_rr_prod_p, fx_rr_route_p, fx_ro_route_p
-
+        logger.info("Run numerical difference - order 4", nret=1)
+        dfluxes_4 = modref.dfluxes.copy() * np.nan
         t0 = time.time()
-        benchmarks.gradbench_semidist(MODEL_TIMESTEP,
-                                      pin, ein, x0, areas,
-                                      grr_prod,
-                                      grr_route,
-                                      gro_route,
-                                      demrr_route, out)
-        for res in np.arange(nres):
-            # Set params
-            ireach = res // nres_per_reach
-            ires_in_reach = res % nres_per_reach
-            if ires_in_reach == 0:
-                grr_prod_p[ireach] = grr_prod[ireach] + numdiff_eps
-            elif ires_in_reach == 1:
-                grr_route_p[ireach] = grr_route[ireach] + numdiff_eps
-            elif ires_in_reach == 3:
-                gro_route_p[ireach] = gro_route[ireach] + numdiff_eps
+        for ivar, vinfo in modref.variables_specs.iterrows():
+            res = vinfo.reservoir_id
 
-            # Run high model
-            benchmarks.gradbench_semidist(MODEL_TIMESTEP,
-                                          pin, ein, x0, areas,
-                                          grr_prod_p,
-                                          grr_route_p,
-                                          gro_route_p,
-                                          demrr_route, out_p)
-            # Compute flux gradient
-            # .. rr prod
-            fx_p, fx = out_p[3], out[3]
-            kk = np.arange(0, nres, nres_per_reach)
-            dfluxes_bench_diff1[:, res, kk, 5] = -(fx_p - fx) / numdiff_eps
-
-            # .. rr route
-            fx_p, fx = out_p[4], out[4]
-            kk = np.arange(1, nres, nres_per_reach)
-            dfluxes_bench_diff1[:, res, kk, 5] = -(fx_p - fx) / numdiff_eps
-            # .. ro route
-            fx_p, fx = out_p[5], out[5]
-            kk = np.arange(2, nres, nres_per_reach)
-            dfluxes_bench_diff1[:, res, kk, 5] = -(fx_p - fx) / numdiff_eps
-
-            # Reset
-            if ires_in_reach == 0:
-                grr_prod_p[ireach] = grr_prod[ireach]
-            elif ires_in_reach == 1:
-                grr_route_p[ireach] = grr_route[ireach]
-            elif ires_in_reach == 3:
-                gro_route_p[ireach] = gro_route[ireach]
-
-        dt_bench_diff1 = time.time() - t0
-
-        # --------------------------------------------------
-        # Run numerical difference - bench model
-        # .. run diff for the capacity of reach reservoir - order 2
-        out_m = x_rr_prod, x_rr_route, x_ro_route, \
-            fx_rr_prod_m, fx_rr_route_m, fx_ro_route_m
-
-        t0 = time.time()
-        benchmarks.gradbench_semidist(MODEL_TIMESTEP,
-                                      pin, ein, x0, areas,
-                                      grr_prod,
-                                      grr_route,
-                                      gro_route,
-                                      demrr_route, out)
-        for res in np.arange(nres):
-            # Set params
-            ireach = res // nres_per_reach
-            ires_in_reach = res % nres_per_reach
-            if ires_in_reach == 0:
-                grr_prod_p[ireach] = grr_prod[ireach] + numdiff_eps
-                grr_prod_m[ireach] = grr_prod[ireach] - numdiff_eps
-            elif ires_in_reach == 1:
-                grr_route_p[ireach] = grr_route[ireach] + numdiff_eps
-                grr_route_m[ireach] = grr_route[ireach] - numdiff_eps
-            elif ires_in_reach == 3:
-                gro_route_p[ireach] = gro_route[ireach] + numdiff_eps
-                gro_route_m[ireach] = gro_route[ireach] - numdiff_eps
-
-            # Run high model
-            benchmarks.gradbench_semidist(MODEL_TIMESTEP,
-                                          pin, ein, x0, areas,
-                                          grr_prod_p,
-                                          grr_route_p,
-                                          gro_route_p,
-                                          demrr_route, out_p)
             # Run low model
-            benchmarks.gradbench_semidist(MODEL_TIMESTEP,
-                                          pin, ein, x0, areas,
-                                          grr_prod_m,
-                                          grr_route_m,
-                                          gro_route_m,
-                                          demrr_route, out_m)
+            modlow1.gammas[res] = modref.gammas[res] - numdiff_eps
+            modlow1.run()
+            modlow2.gammas[res] = modref.gammas[res] - numdiff_eps * 2
+            modlow2.run()
+
+            # Run high model
+            modhigh1.gammas[res] = modref.gammas[res] + numdiff_eps
+            modhigh1.run()
+            modhigh2.gammas[res] = modref.gammas[res] + numdiff_eps * 2
+            modhigh2.run()
 
             # Compute flux gradient
-            # .. rr prod
-            fx_p, fx_m = out_p[3], out_m[3]
-            kk = np.arange(0, nres, nres_per_reach)
-            dfluxes_bench_diff2[:, res, kk, 5] = -(fx_p - fx_m) / numdiff_eps / 2
-            # .. rr route
-            fx_p, fx_m = out_p[4], out_m[4]
-            kk = np.arange(1, nres, nres_per_reach)
-            dfluxes_bench_diff2[:, res, kk, 5] = -(fx_p - fx_m) / numdiff_eps / 2
-            # .. ro route
-            fx_p, fx_m = out_p[5], out_m[5]
-            kk = np.arange(2, nres, nres_per_reach)
-            dfluxes_bench_diff2[:, res, kk, 5] = -(fx_p - fx_m) / numdiff_eps / 2
+            dfluxes_4[:, ivar, :, :] = (-1. / 12 * modhigh2.fluxes
+                + 2. / 3 * modhigh1.fluxes
+                - 2. / 3 * modlow1.fluxes
+                + 1. / 12 * modlow2.fluxes) / numdiff_eps
 
             # Reset
-            if ires_in_reach == 0:
-                grr_prod_p[ireach] = grr_prod[ireach]
-                grr_prod_m[ireach] = grr_prod[ireach]
-            elif ires_in_reach == 1:
-                grr_route_p[ireach] = grr_route[ireach]
-                grr_route_m[ireach] = grr_route[ireach]
-            elif ires_in_reach == 3:
-                gro_route_p[ireach] = gro_route[ireach]
-                gro_route_m[ireach] = gro_route[ireach]
+            modlow1.gammas[res] = modref.gammas[res]
+            modlow2.gammas[res] = modref.gammas[res]
+            modhigh1.gammas[res] = modref.gammas[res]
+            modhigh2.gammas[res] = modref.gammas[res]
 
-        dt_bench_diff2 = time.time() - t0
+        dt_quas_diff4 = time.time() - t0
 
-        # --------------------------------------------------
-        logger.info("Postprocess data")
-        # Convert the routing fluxes in m3/s to mm/d
-        # + convert grad against capacity to grad against capacity
-        # scaling
-        area, nrp, gams = modref.area, modref.nres_per_reach, modref.gammas
-        fluxes_quas_c, dfluxes_quas_c = convert_fluxes(area, nrp, gams,
-                                                       modref.fluxes,
-                                                       modref.dfluxes)
-        fluxes_bench_c, dfluxes_bench_c = convert_fluxes(area, nrp, gams,
-                                                         fluxes_bench,
-                                                         dfluxes_bench)
-        _, dfluxes_quas_diff1_c = convert_fluxes(area, nrp, gams,
-                                            fluxes_bench,
-                                            dfluxes_quas_diff1)
-
-        _, dfluxes_quas_diff2_c = convert_fluxes(area, nrp, gams,
-                                            fluxes_bench,
-                                            dfluxes_quas_diff2)
-
-        _, dfluxes_bench_diff1_c = convert_fluxes(area, nrp, gams,
-                                            fluxes_bench,
-                                            dfluxes_bench_diff1)
-
-        _, dfluxes_bench_diff2_c = convert_fluxes(area, nrp, gams,
-                                            fluxes_bench,
-                                            dfluxes_bench_diff2)
+        # Rescale fluxes -> Get dfluxes in mm / d
+        nvars = len(modref.variables_reservoir_id)
+        for ivar in range(nvars):
+            res = modref.variables_reservoir_id[ivar]
+            g = modref.gammas[res]
+            modref.dfluxes[:, ivar] *= g
+            dfluxes_1[:, ivar] *= g
+            dfluxes_2[:, ivar] *= g
 
         # Compute perf
-        results.loc[irepeat, "runtime_bench"] = dt_bench
         results.loc[irepeat, "runtime_quasoare_diff1"] = dt_quas_diff1
         results.loc[irepeat, "runtime_quasoare_diff2"] = dt_quas_diff2
-        results.loc[irepeat, "runtime_bench_diff1"] = dt_bench_diff1
-        results.loc[irepeat, "runtime_bench_diff2"] = dt_bench_diff2
-        results.loc[irepeat, "runtime_quasoare"] = dt_quas
-        results.loc[irepeat, "runtime_quasoare_neutral"] = dt_quas_neutral
+        results.loc[irepeat, "runtime_quasoare_diff4"] = dt_quas_diff4
+        results.loc[irepeat, "runtime_quasoare_ref"] = dt_quas_ref
 
-        nan = "keep" if debug else "ignore"
-        emax, log10coefdet = compute_flux_error(fluxes_bench_c, fluxes_quas_c, nan=nan)
-        results.loc[irepeat, "fx_errmax_quasoare"] = emax
-        results.loc[irepeat, "fx_log10coefdet_quasoare"] = log10coefdet
+        fx = modref.fluxes
+        nres = modref.nreservoirs
+        emax_ref = np.zeros((nres, 6))
+        emax_1 = np.zeros((nres, 6))
+        emax_2 = np.zeros((nres, 6))
 
-        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_c, nan=nan)
-        results.loc[irepeat, "dfx_errmax_quasoare"] = emax
-        results.loc[irepeat, "dfx_log10coefdet_quasoare"] = log10coefdet
+        for ivar in range(nvars):
+            ex = comp_dfluxes(fx, dfluxes_4[:, ivar], dfluxes_1[:, ivar])
+            emax_1 = np.maximum(emax_1, ex)
 
-        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff1_c)
-        results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax
-        results.loc[irepeat, "dfx_log10coefdet_quasoare_diff1"] = log10coefdet
+            ex = comp_dfluxes(fx, dfluxes_4[:, ivar], dfluxes_2[:, ivar])
+            emax_2 = np.maximum(emax_2, ex)
 
-        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_quas_diff2_c)
-        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax
-        results.loc[irepeat, "dfx_log10coefdet_quasoare_diff2"] = log10coefdet
+            ex = comp_dfluxes(fx, dfluxes_4[:, ivar], modref.dfluxes[:, ivar])
+            emax_ref = np.maximum(emax_ref, ex)
 
-        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff1_c)
-        results.loc[irepeat, "dfx_errmax_bench_diff1"] = emax
-        results.loc[irepeat, "dfx_log10coefdet_bench_diff1"] = log10coefdet
+        results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax_1.max()
+        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax_2.max()
+        results.loc[irepeat, "dfx_errmax_quasoare_ref"] = emax_ref.max()
 
-        emax, log10coefdet = compute_dflux_error(dfluxes_bench_c, dfluxes_bench_diff2_c)
-        results.loc[irepeat, "dfx_errmax_bench_diff2"] = emax
-        results.loc[irepeat, "dfx_log10coefdet_bench_diff2"] = log10coefdet
+        if irepeat == 0:
+            logger.info("Plot perf for first repeat", nret=1)
+            eps = 1e-10
+
+            plt.close("all")
+            nfluxes, nres = 6, modref.nreservoirs
+            fgs = nfluxes, nres / 2
+            fig, axs = plt.subplots(ncols=2, figsize=fgs, layout="constrained")
+
+            ax = axs[0]
+            ratio1 = np.log(eps + emax_ref) - np.log(eps + emax_1)
+            im = ax.imshow(ratio1, cmap="RdBu", vmin=-1, vmax=1)
+            ax.set_title("QuaSoARe ref / vs diff1")
+
+            ax = axs[1]
+            ratio2 = np.log(eps + emax_ref) - np.log(eps + emax_2)
+            im = ax.imshow(ratio2, cmap="RdBu", vmin=-1, vmax=1)
+            plt.colorbar(im, ax=ax)
+            ax.set_title("QuaSoARe ref / vs diff 2")
+
+            fp =  fperf / f"performance_v{version}_TASK{taskid}.png"
+            fig.savefig(fp)
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
@@ -984,7 +716,8 @@ def process(config, script_paths, logger, data):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Benchmark gradient estimation against analytical solution and numerical difference",
+    parser = argparse.ArgumentParser(description="Benchmark gradient "
+                                                 + "estimation against numerical difference",
                                      formatter_class=
                                      argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-v", "--version",
@@ -1012,6 +745,7 @@ if __name__ == "__main__":
 
     if debug:
         task.nreaches = 3
+        task.gamma_mean = (50, 5, 1)
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task)
