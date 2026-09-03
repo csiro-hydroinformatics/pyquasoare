@@ -680,6 +680,21 @@ def process(config, script_paths, logger, data):
             ex = comp_dfluxes(fx, dfluxes_4[:, ivar], modref.dfluxes[:, ivar])
             emax_ref = np.maximum(emax_ref, ex)
 
+            if config.debug and ex.max() > 1e-1 and config.debug:
+                im = np.where(ex == ex.max())
+                ir, ifx = im[0][0], im[1][0]
+
+                df = modref.dfluxes[:, ivar, ir, ifx]
+                d4 = dfluxes_4[:, ivar, ir, ifx]
+
+                plt.close("all")
+                plt.plot(d4)
+                plt.plot(df)
+                plt.show()
+                # BIG problem!
+                import pdb; pdb.set_trace()
+
+
         results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax_1.max()
         results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax_2.max()
         results.loc[irepeat, "dfx_errmax_quasoare_ref"] = emax_ref.max()
@@ -706,6 +721,8 @@ def process(config, script_paths, logger, data):
 
             fp =  fperf / f"performance_v{version}_TASK{taskid}.png"
             fig.savefig(fp)
+            import pdb; pdb.set_trace()
+
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
