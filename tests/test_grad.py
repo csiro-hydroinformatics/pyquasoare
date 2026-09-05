@@ -1346,5 +1346,106 @@ def test_flux_aggreg(allclose):
             assert allclose(fx, fref)
 
 
+@pytest.mark.parametrize("findiff_log10eps", [-1, -3, -5, -7])
+@pytest.mark.parametrize("gamma", [10, 1000, 100000])
+def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    if debug_mode:
+        hclim = hclim[:50]
+    hclim.iloc[:, 1] = 0
+    ntimesteps = len(hclim)
 
+    x0 = 0.5
+    timestep = 1.
+
+    def configure_and_run(eps=0.):
+        nalphas = 1000
+        mod = gradients.MultiReservoirModel(1, nalphas,
+                                            errors="raise")
+        mod.set_coefs_linear(0, "quadrouting")
+
+        vspecs = [[0, 0]] if eps == 0. else None
+        mod.allocate(ntimesteps,
+                    timestep=timestep,
+                    variables_specs=vspecs)
+        mod.x0 = x0
+        mod.set_Qstars(0, hclim)
+        mod.gammas = gamma + eps
+        mod.run()
+        return mod
+
+    modref = configure_and_run()
+
+    # Finite diff
+    findiff_eps = 10**findiff_log10eps
+    modlow1 = configure_and_run(-findiff_eps)
+    modlow2 = configure_and_run(-2 * findiff_eps)
+    modlow3 = configure_and_run(-3 * findiff_eps)
+    modhigh1 = configure_and_run(findiff_eps)
+    modhigh2 = configure_and_run(2 * findiff_eps)
+    modhigh3 = configure_and_run(3 * findiff_eps)
+
+    dfluxes_1 = (modhigh1.fluxes
+                 - modref.fluxes) / findiff_eps
+
+    dfluxes_2 = (1. / 2 * modhigh1.fluxes
+                 - 1. / 2 * modlow1.fluxes) / findiff_eps
+
+    dfluxes_4 = (-1. / 12 * modhigh2.fluxes
+        + 2. / 3 * modhigh1.fluxes
+        - 2. / 3 * modlow1.fluxes
+        + 1. / 12 * modlow2.fluxes) / findiff_eps
+
+    dfluxes_6 = (1. / 60 * modhigh3.fluxes
+        - 3. / 20 * modhigh2.fluxes
+        + 3. / 4 * modhigh1.fluxes
+        - 3. / 4 * modlow1.fluxes
+        + 3. / 20 * modlow2.fluxes
+        - 1. / 60 * modlow3.fluxes) / findiff_eps
+
+    # Benchmark
+    dgammas = np.ones(1)
+    qin = np.ascontiguousarray(hclim.values[:, 0])
+    _, _, fluxes, dfluxes = benchmarks.gradbench_quadrouting_tangent(timestep,
+                                                                     qin,
+                                                                     x0,
+                                                                     modref.gammas,
+                                                                     dgammas)
+    # Perf
+    ex_ref, em_ref = comp_dfluxes(fluxes, dfluxes, modref.dfluxes[:, 0, [0], 5],
+                           exclude=0)
+
+    ex_1, em_1 = comp_dfluxes(fluxes, dfluxes, dfluxes_1[:, [0], 5],
+                         exclude=0)
+
+    ex_2, em_2 = comp_dfluxes(fluxes, dfluxes, dfluxes_2[:, [0], 5],
+                         exclude=0)
+
+    ex_4, em_4 = comp_dfluxes(fluxes, dfluxes, dfluxes_4[:, [0], 5],
+                         exclude=0)
+
+    ex_6, em_6 = comp_dfluxes(fluxes, dfluxes, dfluxes_6[:, [0], 5],
+                         exclude=0)
+
+    mlrx = math.log(ex_ref.squeeze())
+    mlrm = math.log(em_ref.squeeze())
+
+    perf = pd.DataFrame({
+        "max": {
+            "ref_vs_1": mlrx - math.log(ex_1.squeeze()),
+            "ref_vs_2": mlrx - math.log(ex_2.squeeze()),
+            "ref_vs_4": mlrx - math.log(ex_4.squeeze()),
+            "ref_vs_6": mlrx - math.log(ex_6.squeeze()),
+            "1_vs_6": math.log(ex_1.squeeze()) - math.log(ex_6.squeeze())
+            },
+        "mean": {
+            "ref_vs_1": mlrm - math.log(em_1.squeeze()),
+            "ref_vs_2": mlrm - math.log(em_2.squeeze()),
+            "ref_vs_4": mlrm - math.log(em_4.squeeze()),
+            "ref_vs_6": mlrm - math.log(em_6.squeeze()),
+            "1_vs_6": math.log(em_1.squeeze()) - math.log(em_6.squeeze())
+            }
+        })
+    print("\n"+ str(perf))
 
