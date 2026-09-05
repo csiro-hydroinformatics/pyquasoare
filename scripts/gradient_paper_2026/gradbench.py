@@ -57,7 +57,7 @@ def get_options():
     nreaches = [1, nreaches_ref, 20, 50]
 
     nalphas_ref = 100
-    nalphas = [10, 50, nalphas_ref, 500, 1000]
+    nalphas = [10, nalphas_ref, 1000]
 
     numdiff_log10eps_ref = -7
     numdiff_log10eps = [-3, -5, numdiff_log10eps_ref, -9, -11]
@@ -224,7 +224,7 @@ def configure_model(logger, config, area):
         # Transluent = ibase + 4 + nuh
 
         # RR intercept = ibase
-        mod.set_coefs_linear(ibase, "openwater")
+        mod.set_coefs_linear(ibase, "openwatersmooth")
 
         # RR prod = ibase + 1
         mod.set_coefs_linear(ibase + 1, "gr4jprod")
@@ -412,20 +412,29 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps1=1e-6, eps2=1e-3):
+def flux_denom(fx, eps1=1e-50, eps2=1e-3):
     afx = np.abs(fx)
-    shift = eps1 + eps2 * afx
-    return afx + shift
+    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
+
+    prob = 95
+    thresh = np.percentile(afx, prob, axis=0)[None, :]
+    is_above = np.where(afx > thresh, 1., np.nan)
+
+    return afx + shift, is_above
 
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
-                 exclude=10):
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-50, eps2=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
-    denom = flux_denom(fx_ref, eps1, eps2)
+    denom, is_above = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
-    #emax = np.max(err, axis=0)
-    emax = np.sort(err, axis=0)[-exclude]
-    return emax
+    emax = np.max(err, axis=0)
+    emean = np.mean(err, axis=0)
+
+    err_above = err * is_above
+    emean_above = np.nanmean(err_above, axis=0)
+    emean_above[np.isnan(emean_above)] = 0.
+
+    return emean_above
 
 
 def process(config, script_paths, logger, data):
@@ -443,20 +452,16 @@ def process(config, script_paths, logger, data):
     modneutral = configure_model(logger, config, data.area)
     modlow1 = configure_model(logger, config, data.area)
     modlow2 = configure_model(logger, config, data.area)
-    modlow3 = configure_model(logger, config, data.area)
     modhigh1 = configure_model(logger, config, data.area)
     modhigh2 = configure_model(logger, config, data.area)
-    modhigh3 = configure_model(logger, config, data.area)
 
     hclim = data.hydroclim.values
     allocate_model(logger, modref, hclim)
     allocate_model(logger, modneutral, hclim, False)
     allocate_model(logger, modlow1, hclim, False)
     allocate_model(logger, modlow2, hclim, False)
-    allocate_model(logger, modlow3, hclim, False)
     allocate_model(logger, modhigh1, hclim, False)
     allocate_model(logger, modhigh2, hclim, False)
-    allocate_model(logger, modhigh3, hclim, False)
 
     # Define job
     batch = config.task.batch
@@ -465,7 +470,7 @@ def process(config, script_paths, logger, data):
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise perf results
-    mnames = ["quasoare_ref"] + [f"quasoare_diff{o}" for o in [1, 2, 4]]
+    mnames = ["quasoare_ref"] + [f"quasoare_diff{o}" for o in [1, 2]]
     cc = [f"runtime_{m}" for m in mnames]
     cc = [f"dfx_errmax_{m}" for m in mnames[:-1]]
     results = pd.DataFrame(0., index=np.arange(nrepeat),
@@ -482,10 +487,8 @@ def process(config, script_paths, logger, data):
         modneutral.Qstars = modref.Qstars
         modlow1.Qstars = modref.Qstars
         modlow2.Qstars = modref.Qstars
-        modlow3.Qstars = modref.Qstars
         modhigh1.Qstars = modref.Qstars
         modhigh2.Qstars = modref.Qstars
-        modhigh3.Qstars = modref.Qstars
 
         # Set parameters
         set_parameters(logger, config, modref)
@@ -501,17 +504,11 @@ def process(config, script_paths, logger, data):
         modlow2.gammas = modref.gammas.copy()
         modlow2.flux_scalings = modref.flux_scalings
 
-        modlow3.gammas = modref.gammas.copy()
-        modlow3.flux_scalings = modref.flux_scalings
-
         modhigh1.gammas = modref.gammas.copy()
         modhigh1.flux_scalings = modref.flux_scalings
 
         modhigh2.gammas = modref.gammas.copy()
         modhigh2.flux_scalings = modref.flux_scalings
-
-        modhigh3.gammas = modref.gammas.copy()
-        modhigh3.flux_scalings = modref.flux_scalings
 
         logger.info("Run Quasoare - grad model", nret=1)
         t0 = time.time()
@@ -629,86 +626,6 @@ def process(config, script_paths, logger, data):
 
         dt_quas_diff2 = time.time() - t0
 
-        # --------------------------------------------------
-        logger.info("Run numerical difference - order 4", nret=1)
-        dfluxes_4 = modref.dfluxes.copy() * np.nan
-        t0 = time.time()
-        for ivar, vinfo in modref.variables_specs.iterrows():
-            res = vinfo.reservoir_id
-
-            # Run low model
-            modlow1.gammas[res] = modref.gammas[res] - numdiff_eps
-            modlow1.run()
-
-            modlow2.gammas[res] = modref.gammas[res] - numdiff_eps * 2
-            modlow2.run()
-
-            # Run high model
-            modhigh1.gammas[res] = modref.gammas[res] + numdiff_eps
-            modhigh1.run()
-
-            modhigh2.gammas[res] = modref.gammas[res] + numdiff_eps * 2
-            modhigh2.run()
-
-            # Compute flux gradient
-            dfluxes_4[:, ivar] = (-1. / 12 * modhigh2.fluxes
-                + 2. / 3 * modhigh1.fluxes
-                - 2. / 3 * modlow1.fluxes
-                + 1. / 12 * modlow2.fluxes) / numdiff_eps
-
-            # Reset
-            modlow1.gammas[res] = modref.gammas[res]
-            modlow2.gammas[res] = modref.gammas[res]
-            modhigh1.gammas[res] = modref.gammas[res]
-            modhigh2.gammas[res] = modref.gammas[res]
-
-        dt_quas_diff4 = time.time() - t0
-
-        # --------------------------------------------------
-        logger.info("Run numerical difference - order 6", nret=1)
-        dfluxes_6 = modref.dfluxes.copy() * np.nan
-        t0 = time.time()
-        for ivar, vinfo in modref.variables_specs.iterrows():
-            res = vinfo.reservoir_id
-
-            # Run low model
-            modlow1.gammas[res] = modref.gammas[res] - numdiff_eps
-            modlow1.run()
-
-            modlow2.gammas[res] = modref.gammas[res] - numdiff_eps * 2
-            modlow2.run()
-
-            modlow3.gammas[res] = modref.gammas[res] - numdiff_eps * 3
-            modlow3.run()
-
-            # Run high model
-            modhigh1.gammas[res] = modref.gammas[res] + numdiff_eps
-            modhigh1.run()
-
-            modhigh2.gammas[res] = modref.gammas[res] + numdiff_eps * 2
-            modhigh2.run()
-
-            modhigh3.gammas[res] = modref.gammas[res] + numdiff_eps * 3
-            modhigh3.run()
-
-            # Compute flux gradient
-            dfluxes_6[:, ivar] = (1. / 60 * modhigh3.fluxes
-                - 3. / 20 * modhigh2.fluxes
-                + 3. / 4 * modhigh1.fluxes
-                - 3. / 4 * modlow1.fluxes
-                + 3. / 20 * modlow2.fluxes
-                - 1. / 60 * modlow3.fluxes) / numdiff_eps
-
-            # Reset
-            modlow1.gammas[res] = modref.gammas[res]
-            modlow2.gammas[res] = modref.gammas[res]
-            modlow3.gammas[res] = modref.gammas[res]
-            modhigh1.gammas[res] = modref.gammas[res]
-            modhigh2.gammas[res] = modref.gammas[res]
-            modhigh3.gammas[res] = modref.gammas[res]
-
-        dt_quas_diff6 = time.time() - t0
-
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
         for ivar in range(nvars):
@@ -717,37 +634,25 @@ def process(config, script_paths, logger, data):
             modref.dfluxes[:, ivar] *= g
             dfluxes_1[:, ivar] *= g
             dfluxes_2[:, ivar] *= g
-            dfluxes_4[:, ivar] *= g
-            dfluxes_6[:, ivar] *= g
 
         # Compute perf
         results.loc[irepeat, "runtime_quasoare_diff1"] = dt_quas_diff1
         results.loc[irepeat, "runtime_quasoare_diff2"] = dt_quas_diff2
-        results.loc[irepeat, "runtime_quasoare_diff4"] = dt_quas_diff4
         results.loc[irepeat, "runtime_quasoare_ref"] = dt_quas_ref
 
         fx = modref.fluxes
         nres = modref.nreservoirs
         emax_ref = np.zeros((nres, 6))
         emax_1 = np.zeros((nres, 6))
-        emax_2 = np.zeros((nres, 6))
-        emax_4 = np.zeros((nres, 6))
 
         for ivar in range(nvars):
-            ex1 = comp_dfluxes(fx, dfluxes_6[:, ivar], dfluxes_1[:, ivar])
-            emax_1 = np.maximum(emax_1, ex1)
-
-            ex2 = comp_dfluxes(fx, dfluxes_6[:, ivar], dfluxes_2[:, ivar])
-            emax_2 = np.maximum(emax_2, ex2)
-
-            ex4 = comp_dfluxes(fx, dfluxes_6[:, ivar], dfluxes_4[:, ivar])
-            emax_4 = np.maximum(emax_4, ex4)
-
-            exr = comp_dfluxes(fx, dfluxes_6[:, ivar], modref.dfluxes[:, ivar])
+            exr = comp_dfluxes(fx, dfluxes_2[:, ivar], modref.dfluxes[:, ivar])
             emax_ref = np.maximum(emax_ref, exr)
 
+            ex1 = comp_dfluxes(fx, dfluxes_2[:, ivar], dfluxes_1[:, ivar])
+            emax_1 = np.maximum(emax_1, ex1)
+
         results.loc[irepeat, "dfx_errmax_quasoare_diff1"] = emax_1.max()
-        results.loc[irepeat, "dfx_errmax_quasoare_diff2"] = emax_2.max()
         results.loc[irepeat, "dfx_errmax_quasoare_ref"] = emax_ref.max()
 
         if irepeat == 0:
@@ -755,32 +660,22 @@ def process(config, script_paths, logger, data):
 
             plt.close("all")
             nfluxes, nres = 6, modref.nreservoirs
-            fgs = 2 * nfluxes, nres / 2
-            fig, axs = plt.subplots(ncols=3, figsize=fgs, layout="constrained")
+            fgs = nfluxes, nres / 2
+            fig, axs = plt.subplots(ncols=1, figsize=fgs, layout="constrained")
+            axs = [axs]
 
-            vmin, vmax = -1, 1
+            vmin, vmax = -0.5, 0.5
             eps = 1e-10
-            cmap = colormaps.get_cmap("RdBu_r")
+
+            cmap = colormaps.get_cmap("PiYG_r")
             cmap.set_bad(color="0.5")
 
             ax = axs[0]
             ratio1 = np.log(eps + emax_ref) - np.log(eps + emax_1)
-            ratio1[emax_ref == 0] = np.nan
             im = ax.imshow(ratio1, cmap=cmap, vmin=vmin, vmax=vmax)
             ax.set_title("QuaSoARe ref / vs diff1")
 
-            ax = axs[1]
-            ratio2 = np.log(eps + emax_ref) - np.log(eps + emax_2)
-            ratio2[emax_ref == 0] = np.nan
-            im = ax.imshow(ratio2, cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_title("QuaSoARe ref / vs diff 2")
-
-            ax = axs[2]
-            ratio4 = np.log(eps + emax_ref) - np.log(eps + emax_4)
-            ratio4[emax_ref == 0] = np.nan
-            im = ax.imshow(ratio4, cmap=cmap, vmin=vmin, vmax=vmax)
             plt.colorbar(im, ax=ax)
-            ax.set_title("QuaSoARe ref / vs diff 4")
 
             fp =  fperf / f"performance_v{version}_TASK{taskid}_R.png"
             fig.savefig(fp)
@@ -822,10 +717,10 @@ if __name__ == "__main__":
     task = opm.get_task(taskid)
 
     if debug:
-        opm.context["nuh"] = 0
-        task.nreaches = 1
-        task.numdiff_log10eps = -7
-        task.gamma_mean = (500, 50, 100)
+        opm.context["nuh"] = 11
+        task.nreaches = 3
+        task.numdiff_log10eps = -6
+        task.gamma_mean = (1000, 500, 1000)
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task)
