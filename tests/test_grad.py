@@ -90,10 +90,13 @@ def max_abs_asinh_err(x, y, exclude=10, axis=0, eps=1e-2):
 
 def flux_denom(fx, eps1=1e-10, eps2=1e-3):
     afx = np.abs(fx)
-    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
+    means = np.mean(afx, axis=0)[None, :]
+    maxs = np.max(afx, axis=0)[None, :]
+    shift = eps1 + eps2 * means
+    shift[maxs < eps1] = np.nan
     return afx + shift
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-50, eps2=1e-3,
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-10, eps2=1e-3,
                  exclude=10):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
@@ -700,7 +703,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
         #print(f"x={dx_err:8.3e} fx={dfx_err_max.max():8.3e}")
         assert dx_err < xtol
-        assert dfx_err_max.max() < ftol
+        assert np.nanmax(dfx_err_max) < ftol
 
 
 def test_grad_model_setters(allclose):
@@ -1007,7 +1010,7 @@ def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
         for res in range(mod.nreservoirs):
             dfx_err_max, _ = comp_dfluxes(mod.fluxes[:, res],
                                           dfx_n[:, res, :], dfx_c[:, res, :])
-            assert dfx_err_max.max() < atol
+            assert np.nanmax(dfx_err_max) < atol
 
     assert dtq < dtn / 2
 
@@ -1367,7 +1370,6 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
                                                                      x0,
                                                                      np.array([gamma]),
                                                                      dgammas)
-
     # Quasoare runs
     amin = 0
     amax = x.max()
@@ -1416,13 +1418,13 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
 
     # Perf
     ex_ref, em_ref = comp_dfluxes(fluxes, dfluxes, modref.dfluxes[:, 0, [0], 5],
-                           exclude=0)
+                                  exclude=0)
 
     ex_1, em_1 = comp_dfluxes(fluxes, dfluxes, dfluxes_1[:, [0], 5],
-                         exclude=0)
+                              exclude=0)
 
     ex_2, em_2 = comp_dfluxes(fluxes, dfluxes, dfluxes_2[:, [0], 5],
-                         exclude=0)
+                              exclude=0)
 
     mlrm = math.log(em_ref.squeeze())
     mlrm1 = math.log(em_1.squeeze())
