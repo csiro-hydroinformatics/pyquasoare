@@ -481,9 +481,9 @@ def process(config, script_paths, logger, data):
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise perf results
-    mnames = [f"quasoare_diff{o}" for o in DIFF_ORDERS]
-    cc = [f"runtime_{m}" for m in ["quasoare_ref"] + mnames]
-    cc = [f"dfx_errmax{p:02d}_{m}" for m in mnames
+    mnames = [f"diff{o}" for o in DIFF_ORDERS]
+    cc = [f"runtime_{m}" for m in ["ref"] + mnames]
+    cc = [f"dfx_log10errmax{p:02d}_{m}" for m in mnames
           for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
@@ -517,7 +517,7 @@ def process(config, script_paths, logger, data):
         modref.run()
         dt_quas_ref = time.time() - t0
 
-        results.loc[irepeat, f"runtime_quasoare_ref"] = dt_quas_ref
+        results.loc[irepeat, f"runtime_ref"] = dt_quas_ref
 
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
@@ -635,12 +635,13 @@ def process(config, script_paths, logger, data):
             dt_quas_diff = time.time() - t0
 
             # Store perf
-            results.loc[irepeat, f"runtime_quasoare_diff{order}"] = dt_quas_diff
+            results.loc[irepeat, f"runtime_diff{order}"] = dt_quas_diff
 
             ex = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
             for prob in REPORT_PROBS:
-                cn = f"dfx_errmax{prob:02d}_quasoare_diff{order}"
-                results.loc[irepeat, cn] = ex[prob]
+                cn = f"dfx_log10errmax{prob:02d}_diff{order}"
+                le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
+                results.loc[irepeat, cn] = le
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
