@@ -42,6 +42,9 @@ np.random.seed(5446)
 
 MODEL_TIMESTEP = 1.
 
+REPORT_PROBS = [0, 50, 90]
+
+DIFF_ORDERS = [1, 2, 3]
 
 def get_options():
     timestep = "daily"
@@ -59,11 +62,11 @@ def get_options():
     nalphas_ref = 100
     nalphas = [10, nalphas_ref, 1000]
 
-    numdiff_log10eps_ref = -7
-    numdiff_log10eps = [-3, -5, numdiff_log10eps_ref, -9, -11]
+    numdiff_log10eps_ref = -5
+    numdiff_log10eps = [-3, numdiff_log10eps_ref, -7]
 
     nrepeat = 50
-    nbatch = 2
+    nbatch = 3
     batches = np.arange(nbatch)
 
     gamma_means = [
@@ -412,24 +415,26 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps1=1e-50, eps2=1e-3):
+def flux_denom(fx, eps1=1e-10, eps2=1e-3):
     afx = np.abs(fx)
-    shift = eps1 + eps2 * np.mean(afx, axis=0)[None, :]
-    return shift
+    means = np.mean(afx, axis=0)[None, :]
+    maxs = np.max(afx, axis=0)[None, :]
+    denom = eps1 + eps2 * means
+    denom[maxs < eps1] = np.nan
+    return denom
 
 def flux_isabove(afx, prob):
     thresh = np.percentile(afx, prob, axis=0)[None, :]
     return np.where(afx > thresh, 1., np.nan)
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-50, eps2=1e-3):
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-10, eps2=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
 
-    probs = [0, 50, 95, 99, 99.9]
-    emean = pd.Series(np.nan, index=probs)
+    emean = pd.Series(np.nan, index=REPORT_PROBS)
     afx = np.abs(fx_ref)
-    for prob in probs:
+    for prob in REPORT_PROBS:
         is_above = flux_isabove(afx, prob)[:, None, :, :]
         err_above = err * is_above
 
@@ -459,7 +464,7 @@ def process(config, script_paths, logger, data):
     modneutral = configure_model(logger, config, data.area)
 
     modeps = {delta: configure_model(logger, config, data.area)
-              for delta in [1, 2, 3, 4]}
+              for delta in [1, 2, 3, 4, 5]}
 
     hclim = data.hydroclim.values
 
@@ -476,12 +481,10 @@ def process(config, script_paths, logger, data):
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise perf results
-    orders = [1, 2, 3]
-    mnames = [f"quasoare_diff{o}" for o in orders]
+    mnames = [f"quasoare_diff{o}" for o in DIFF_ORDERS]
     cc = [f"runtime_{m}" for m in ["quasoare_ref"] + mnames]
-    report_probs = [0, 50, 95, 99]
     cc = [f"dfx_errmax{p:02d}_{m}" for m in mnames
-          for p in report_probs]
+          for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
     # repeat experiment
@@ -580,7 +583,7 @@ def process(config, script_paths, logger, data):
         numdiff_eps = 10**(config.task.numdiff_log10eps)
         logger.info(f"Numdiff eps = {numdiff_eps:0.3e}", nret=1)
 
-        for order in orders:
+        for order in DIFF_ORDERS:
             logger.info(f"Run numerical difference - order {order}", nret=1)
 
             dfluxes = np.empty((modref.ntimesteps, nvars,
@@ -635,7 +638,7 @@ def process(config, script_paths, logger, data):
             results.loc[irepeat, f"runtime_quasoare_diff{order}"] = dt_quas_diff
 
             ex = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
-            for prob in report_probs:
+            for prob in REPORT_PROBS:
                 cn = f"dfx_errmax{prob:02d}_quasoare_diff{order}"
                 results.loc[irepeat, cn] = ex[prob]
 
@@ -645,6 +648,7 @@ def process(config, script_paths, logger, data):
                   script_paths.source_file,
                   write_index=True,
                   lineterminator="\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark gradient "
