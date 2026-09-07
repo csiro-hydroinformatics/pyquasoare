@@ -57,16 +57,16 @@ def get_options():
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref, 20, 50]
+    nreaches = [1, nreaches_ref, 50]
 
     nalphas_ref = 100
     nalphas = [10, nalphas_ref, 1000]
 
-    numdiff_log10eps_ref = -5
-    numdiff_log10eps = [-3, numdiff_log10eps_ref, -7]
+    findiff_log10eps_ref = -5
+    findiff_log10eps = [-4, findiff_log10eps_ref, -6]
 
-    nrepeat = 50
-    nbatch = 3
+    nrepeat = 10
+    nbatch = 1
     batches = np.arange(nbatch)
 
     gamma_means = [
@@ -93,23 +93,22 @@ def get_options():
                                stationid=stationids,
                                nreaches=nreaches,
                                nalphas=nalphas,
-                               numdiff_log10eps=numdiff_log10eps,
+                               findiff_log10eps=findiff_log10eps,
                                gamma_mean=gamma_means)
-    tasks = []
-    count = 0
-    for taskid in range(opm.ntasks):
-        task = opm.get_task(taskid)
+    #tasks = []
+    #count = 0
+    #for taskid in range(opm.ntasks):
+    #    task = opm.get_task(taskid)
 
-        # Ensure that at least 2 reference options are met
-        nre = task.nreaches
-        nal = task.nalphas
-        eps = task.numdiff_log10eps
-        match = int(nre == nreaches_ref) \
-                + int(nal == nalphas_ref) \
-                + int(eps == numdiff_log10eps_ref)
-        if match >= 2:
-            tasks.append(task.options)
-    opm.tasks = tasks
+    #    # Ensure that at least 2 reference options are met
+    #    nre = task.nreaches
+    #    nal = task.nalphas
+    #    eps = task.findiff_log10eps
+    #    match = int(nal == nalphas_ref) \
+    #            + int(eps == findiff_log10eps_ref)
+    #    if match >= 1:
+    #        tasks.append(task.options)
+    #opm.tasks = tasks
     return opm
 
 
@@ -415,7 +414,7 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps1=1e-10, eps2=1e-3):
+def flux_denom(fx, eps1=1e-6, eps2=1e-3):
     afx = np.abs(fx)
     means = np.mean(afx, axis=0)[None, :]
     maxs = np.max(afx, axis=0)[None, :]
@@ -427,7 +426,7 @@ def flux_isabove(afx, prob):
     thresh = np.percentile(afx, prob, axis=0)[None, :]
     return np.where(afx > thresh, 1., np.nan)
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-10, eps2=1e-3):
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
@@ -474,16 +473,18 @@ def process(config, script_paths, logger, data):
     for e, mod in modeps.items():
         allocate_model(logger, mod, hclim, False)
 
+    nruntimeref = modref.ntimesteps / 365.25 * modref.nreservoirs
+
     # Define job
     batch = config.task.batch
     nbatch = config.options.context["nbatch"]
-    nrepeat = 2 if config.debug else config.options.context["nrepeat"]
+    nrepeat = 1 if config.debug else config.options.context["nrepeat"]
     ibatches = np.array_split(np.arange(nrepeat), nbatch)[batch]
 
     # initialise perf results
     mnames = [f"diff{o}" for o in DIFF_ORDERS]
-    cc = [f"runtime_{m}" for m in ["ref"] + mnames]
-    cc = [f"dfx_log10errmax{p:02d}_{m}" for m in mnames
+    cc = [f"log10runtime_{m}[sec]" for m in ["ref"] + mnames]
+    cc = [f"dfx_log10errmax{p:02d}_{m}[-]" for m in mnames
           for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
@@ -517,7 +518,8 @@ def process(config, script_paths, logger, data):
         modref.run()
         dt_quas_ref = time.time() - t0
 
-        results.loc[irepeat, f"runtime_ref"] = dt_quas_ref
+        dt = np.log10(dt_quas_ref / nruntimeref)
+        results.loc[irepeat, f"log10runtime_ref[sec]"] = dt
 
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
@@ -526,7 +528,9 @@ def process(config, script_paths, logger, data):
             modref.dfluxes[:, ivar] *= modref.gammas[res]
 
         # Print one simulation to make sure it makes sense
-        if irepeat == 0:
+        if irepeat == 0 and modref.nreaches == 5 \
+                and config.task.nalphas == 100 \
+                and config.task.findiff_log10eps == -5:
             logger.info("Plotting first simul", nret=1)
             nreaches = modref.nreaches
             nval = min(2000, modref.ntimesteps)
@@ -580,8 +584,8 @@ def process(config, script_paths, logger, data):
             fig.savefig(fs.parent / f"{fs.stem}.png")
 
         # --------------------------------------------------
-        numdiff_eps = 10**(config.task.numdiff_log10eps)
-        logger.info(f"Numdiff eps = {numdiff_eps:0.3e}", nret=1)
+        findiff_eps = 10**(config.task.findiff_log10eps)
+        logger.info(f"Numdiff eps = {findiff_eps:0.3e}", nret=1)
 
         for order in DIFF_ORDERS:
             logger.info(f"Run numerical difference - order {order}", nret=1)
@@ -598,26 +602,26 @@ def process(config, script_paths, logger, data):
                 # Run models
                 for ieps in np.arange(1, 1 + order):
                     mod = modeps[ieps]
-                    mod.gammas[res] = modref.gammas[res] * (1 + ieps * numdiff_eps)
+                    mod.gammas[res] = modref.gammas[res] * (1 + ieps * findiff_eps)
                     mod.run()
 
                 # Compute flux gradient
                 if order == 1:
                     dfluxes[:, ivar] = (
                         modeps[1].fluxes
-                        - modneutral.fluxes) / numdiff_eps
+                        - modneutral.fluxes) / findiff_eps
                 elif order == 2:
                     dfluxes[:, ivar] = (
                         - 1./ 2 * modeps[2].fluxes
                         + 2. * modeps[1].fluxes
-                        - 3. / 2 * modneutral.fluxes) / numdiff_eps
+                        - 3. / 2 * modneutral.fluxes) / findiff_eps
 
                 elif order == 3:
                     dfluxes[:, ivar] = (
                         1./ 3 * modeps[3].fluxes
                         - 3./ 2 * modeps[2].fluxes
                         + 3. * modeps[1].fluxes
-                        - 11. / 6 * modneutral.fluxes) / numdiff_eps
+                        - 11. / 6 * modneutral.fluxes) / findiff_eps
 
                 elif order == 4:
                     dfluxes[:, ivar] = (
@@ -625,7 +629,7 @@ def process(config, script_paths, logger, data):
                         + 4./ 3 * modeps[3].fluxes
                         - 3. * modeps[2].fluxes
                         + 4. * modeps[1].fluxes
-                        - 25. / 12 * modneutral.fluxes) / numdiff_eps
+                        - 25. / 12 * modneutral.fluxes) / findiff_eps
 
                 # Reset
                 for ieps in np.arange(1, 1 + order):
@@ -635,11 +639,12 @@ def process(config, script_paths, logger, data):
             dt_quas_diff = time.time() - t0
 
             # Store perf
-            results.loc[irepeat, f"runtime_diff{order}"] = dt_quas_diff
+            dt = np.log10(dt_quas_diff / nruntimeref)
+            results.loc[irepeat, f"log10runtime_diff{order}[sec]"] = dt
 
             ex = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
             for prob in REPORT_PROBS:
-                cn = f"dfx_log10errmax{prob:02d}_diff{order}"
+                cn = f"dfx_log10errmax{prob:02d}_diff{order}[-]"
                 le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
                 results.loc[irepeat, cn] = le
 
@@ -682,7 +687,7 @@ if __name__ == "__main__":
     if debug:
         opm.context["nuh"] = 11
         task.nreaches = 3
-        task.numdiff_log10eps = -3
+        task.findiff_log10eps = -3
         task.gamma_mean = (1000, 500, 1000)
 
     config = Config(version, taskid, overwrite,

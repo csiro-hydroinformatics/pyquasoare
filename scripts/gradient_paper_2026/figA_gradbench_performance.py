@@ -69,51 +69,56 @@ def get_data(config, script_paths, logger):
 
 def process(config, script_paths, logger, data):
 
-    logger.info(f"Start plotting", nret=1)
-
     # Get data
     perf = data.perf
 
-    refs = {
-            "nreaches": 5,
-            "gamma_mean": "500_50_1000",
-            "nalphas": 100
-            }
+    idx = perf.TASK_OPT_gamma_mean == "500_50_500"
+    idx &= perf.TASK_OPT_nalphas == 100
+    idx &= perf.TASK_OPT_stationid == 203014
+    perf = perf.loc[idx]
 
-    numdiff_log10eps = -5
-    perf = perf.loc[perf.TASK_OPT_numdiff_log10eps == numdiff_log10eps]
+    epss = perf.TASK_OPT_numdiff_log10eps.unique()
+    for eps in epss:
+        logger.info(f"Plotting eps = {eps}", nret=1)
 
-    # Create figure
-    for metric in ["errmax", "coefdet"]:
+        # Create figure
         plt.close("all")
-        mosaic = [[f"fx/{vn}", f"dfx/{vn}"]
-                  for vn in ["nreaches", "nalphas", "gamma_mean"]]
+        nrs = [1, 5, 50] if eps == -5 else [5]
+        metrics = ["runtime", "errmax00", "errmax90"]
+        if eps != -5:
+            metrics = metrics[1:]
+        mosaic = [[f"{nr}/{vn}" for nr in nrs]
+                  for vn in metrics]
         fncols, fnrows = len(mosaic[0]), len(mosaic)
         awidth, aheight = config.awidth, config.aheight
         figsize = (awidth*fncols, aheight*fnrows)
         fig = plt.figure(constrained_layout=True,
                          figsize=figsize)
 
-        gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
-        axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
+        #gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
+        #axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
+        axs = fig.subplot_mosaic(mosaic)
+
+        nstations = len(perf.TASK_OPT_stationid.unique())
+        nrepeat = len(perf.REPEAT.unique())
 
         for iax, (aname, ax) in enumerate(axs.items()):
-            logger.info(f"Plot {metric}/{aname}")
-            toplot, varn = aname.split("/")
+            nreaches, metric = aname.split("/")
+            nreaches = int(nreaches)
+            logger.info(f"Plot reaches={nreaches}/{metric}", ntab=1)
 
-            idx = np.ones(len(perf)).astype(bool)
-            for vn, value in refs.items():
-                if vn == varn:
-                    continue
-                idx &= perf.loc[:, f"TASK_OPT_{vn}"] == value
+            idx = perf.TASK_OPT_numdiff_log10eps == eps
+            idx &= perf.TASK_OPT_nreaches == nreaches
+            pat = f"{metric}"
+            cc = [cn for cn in perf.columns if re.search(pat, cn)]
+            df = perf.loc[idx, cc]
+            logger.info(f"len(df) = {len(df)}", ntab=1)
 
-            df = perf.loc[idx]
-            opts = df.filter(regex="TASK_OPT", axis=1).drop_duplicates()
+            if len(df) != nrepeat * nstations:
+                logger.info("no data. continue", ntab=1)
+                ax.axis("off")
+                continue
 
-            df = pd.pivot_table(df,
-                                index=("TASK_OPT_stationid", "REPEAT"),
-                                columns=f"TASK_OPT_{varn}",
-                                values=f"{toplot}_{metric}_quasoare")
             try:
                 vl = violinplot.Violin(df)
             except:
@@ -121,14 +126,22 @@ def process(config, script_paths, logger, data):
             vl.draw(ax=ax)
 
             # Axis
-            title = f"({letters[iax]}) {aname}"
+            title = f"({letters[iax]}) {nreaches} reaches - {metric}"
             ax.set(title=title,
                    xlabel="",
                    ylabel=metric)
 
+            if re.search("log10", cc[0]):
+                ax.set_ylim((-5.5, 1.5))
+                tk = np.arange(-5, 1)
+                labs = ["1" if k == 0 else f"$10^{{{k}}}$" for k in tk]
+                ax.set_yticks(tk, labels=labs)
+
+            ax.grid(axis="y")
+
         # Save file
         fp = script_paths.fimg / \
-                f"figA_gradbench_{metric}_v{config.version}.{config.imgext}"
+                f"figA_gradbench_v{config.version}_log10eps{eps}.{config.imgext}"
         fig.savefig(fp, dpi=config.fdpi, transparent=config.ftransparent)
         #putils.blackwhite(fp)
 
