@@ -8,12 +8,11 @@
 ##
 ## ------------------------------
 
-
 import sys
-import os
 import re
 import json
 import math
+from itertools import product as prod
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -72,21 +71,25 @@ def process(config, script_paths, logger, data):
     # Get data
     perf = data.perf
 
-    idx = perf.TASK_OPT_gamma_mean == "500_50_500"
-    idx &= perf.TASK_OPT_nalphas == 100
-    idx &= perf.TASK_OPT_stationid == 203014
-    perf = perf.loc[idx]
+    gms = perf.TASK_OPT_gamma_mean.unique()
+    epss = perf.TASK_OPT_findiff_log10eps.unique()
+    nas = perf.TASK_OPT_nalphas.unique()
 
-    epss = perf.TASK_OPT_numdiff_log10eps.unique()
-    for eps in epss:
-        logger.info(f"Plotting eps = {eps}", nret=1)
+    gm_ref = "500_50_500"
+    eps_ref = -5
+    na_ref = 100
+
+    for na, gm, eps in prod(nas, gms, epss):
+        match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
+        if match < 2:
+            continue
+
+        logger.info(f"Plotting na={na} gm={gm} eps={eps}", nret=1)
 
         # Create figure
         plt.close("all")
-        nrs = [1, 5, 50] if eps == -5 else [5]
+        nrs = [1, 5, 50]
         metrics = ["runtime", "errmax00", "errmax90"]
-        if eps != -5:
-            metrics = metrics[1:]
         mosaic = [[f"{nr}/{vn}" for nr in nrs]
                   for vn in metrics]
         fncols, fnrows = len(mosaic[0]), len(mosaic)
@@ -107,7 +110,9 @@ def process(config, script_paths, logger, data):
             nreaches = int(nreaches)
             logger.info(f"Plot reaches={nreaches}/{metric}", ntab=1)
 
-            idx = perf.TASK_OPT_numdiff_log10eps == eps
+            idx = perf.TASK_OPT_findiff_log10eps == eps
+            idx &= perf.TASK_OPT_nalphas == na
+            idx &= perf.TASK_OPT_gamma_mean == gm
             idx &= perf.TASK_OPT_nreaches == nreaches
             pat = f"{metric}"
             cc = [cn for cn in perf.columns if re.search(pat, cn)]
@@ -140,8 +145,9 @@ def process(config, script_paths, logger, data):
             ax.grid(axis="y")
 
         # Save file
+        cfg = f"N{na}_E{eps}_G{gm}"
         fp = script_paths.fimg / \
-                f"figA_gradbench_v{config.version}_log10eps{eps}.{config.imgext}"
+                f"figA_gradbench_v{config.version}_{cfg}.{config.imgext}"
         fig.savefig(fp, dpi=config.fdpi, transparent=config.ftransparent)
         #putils.blackwhite(fp)
 

@@ -60,12 +60,12 @@ def get_options():
     nreaches = [1, nreaches_ref, 50]
 
     nalphas_ref = 100
-    nalphas = [10, nalphas_ref, 1000]
+    nalphas = [10, nalphas_ref, 500]
 
     findiff_log10eps_ref = -5
     findiff_log10eps = [-4, findiff_log10eps_ref, -6]
 
-    nrepeat = 10
+    nrepeat = 20
     nbatch = 1
     batches = np.arange(nbatch)
 
@@ -414,7 +414,7 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps1=1e-6, eps2=1e-3):
+def flux_denom(fx, eps1=1e-4, eps2=1e-3):
     afx = np.abs(fx)
     means = np.mean(afx, axis=0)[None, :]
     maxs = np.max(afx, axis=0)[None, :]
@@ -426,7 +426,7 @@ def flux_isabove(afx, prob):
     thresh = np.percentile(afx, prob, axis=0)[None, :]
     return np.where(afx > thresh, 1., np.nan)
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3):
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
