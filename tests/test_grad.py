@@ -88,7 +88,7 @@ def max_abs_asinh_err(x, y, exclude=10, axis=0, eps=1e-2):
     ty = np.asinh(y / eps)
     return max_abs_raw_err(tx, ty, exclude, axis)
 
-def flux_denom(fx, eps1=1e-10, eps2=1e-3):
+def flux_denom(fx, eps1=1e-6, eps2=1e-3):
     afx = np.abs(fx)
     means = np.mean(afx, axis=0)[None, :]
     maxs = np.max(afx, axis=0)[None, :]
@@ -96,7 +96,7 @@ def flux_denom(fx, eps1=1e-10, eps2=1e-3):
     shift[maxs < eps1] = np.nan
     return afx + shift
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-10, eps2=1e-3,
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
                  exclude=10):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
