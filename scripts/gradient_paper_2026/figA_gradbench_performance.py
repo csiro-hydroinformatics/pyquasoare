@@ -137,8 +137,8 @@ def process(config, script_paths, logger, data):
                    ylabel=metric)
 
             if re.search("log10", cc[0]):
-                ax.set_ylim((-5.5, 1.5))
-                tk = np.arange(-5, 1)
+                ax.set_ylim((-6.5, 0.5))
+                tk = np.arange(-6, 2, 2)
                 labs = ["1" if k == 0 else f"$10^{{{k}}}$" for k in tk]
                 ax.set_yticks(tk, labels=labs)
 
