@@ -59,8 +59,8 @@ def get_options():
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 50]
 
-    nalphas_ref = 100
-    nalphas = [10, nalphas_ref, 500]
+    nalphas_ref = 50
+    nalphas = [10, nalphas_ref, 200]
 
     findiff_log10eps_ref = -5
     findiff_log10eps = [-4, findiff_log10eps_ref, -6]
@@ -87,6 +87,9 @@ def get_options():
                                demand_std=demand_std,
                                nrepeat=nrepeat,
                                nuh=nuh,
+                               nalphas_ref=nalphas_ref,
+                               findiff_log10eps_ref=findiff_log10eps_ref,
+                               nreaches_ref=nreaches_ref,
                                nbatch=nbatch)
 
     opm.from_cartesian_product(batch=batches,
@@ -463,7 +466,7 @@ def process(config, script_paths, logger, data):
     modneutral = configure_model(logger, config, data.area)
 
     modeps = {delta: configure_model(logger, config, data.area)
-              for delta in [1, 2, 3, 4, 5]}
+              for delta in [1, 2, 3]}
 
     hclim = data.hydroclim.values
 
@@ -483,10 +486,15 @@ def process(config, script_paths, logger, data):
 
     # initialise perf results
     mnames = [f"diff{o}" for o in DIFF_ORDERS]
-    cc = [f"log10runtime_{m}[sec]" for m in ["ref"] + mnames]
-    cc = [f"dfx_log10errmax{p:02d}_{m}[-]" for m in mnames
+    cc = [f"log10runtime_{m}[sec]" for m in ["ref", "neutral"] + mnames]
+    cc += [f"log10runtimedeltaneutral_{m}[sec]" for m in ["ref"] + mnames]
+    cc += [f"dfx_log10errmax{p:02d}_{m}[-]" for m in mnames
           for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
+
+    results.loc[:, "ntimesteps"] = modref.ntimesteps
+    results.loc[:, "nreservoirs"] = modref.nreservoirs
+    results.loc[:, "nvariables"] = len(modref.variables_reservoir_id)
 
     # repeat experiment
     logger.info("")
@@ -514,12 +522,23 @@ def process(config, script_paths, logger, data):
 
         # Run ref model
         logger.info("Run Quasoare - grad model", nret=1)
+
+        t0 = time.time()
+        modneutral.run()
+        dt_quas_neutral = time.time() - t0
+
+        dt = np.log10(dt_quas_neutral / nruntimeref)
+        results.loc[irepeat, f"log10runtime_neutral[sec]"] = dt
+
         t0 = time.time()
         modref.run()
         dt_quas_ref = time.time() - t0
 
         dt = np.log10(dt_quas_ref / nruntimeref)
-        results.loc[irepeat, f"log10runtime_ref[sec]"] = dt
+        results.loc[irepeat, "log10runtime_ref[sec]"] = dt
+
+        delta = np.log10(dt_quas_ref) - np.log10(dt_quas_neutral)
+        results.loc[irepeat, "log10runtimedeltaneutral_ref[sec]"] = delta
 
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
@@ -641,6 +660,9 @@ def process(config, script_paths, logger, data):
             # Store perf
             dt = np.log10(dt_quas_diff / nruntimeref)
             results.loc[irepeat, f"log10runtime_diff{order}[sec]"] = dt
+
+            delta = np.log10(dt_quas_diff) - np.log10(dt_quas_neutral)
+            results.loc[irepeat, f"log10runtimedeltaneutral_diff{order}[sec]"] = delta
 
             ex = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
             for prob in REPORT_PROBS:
