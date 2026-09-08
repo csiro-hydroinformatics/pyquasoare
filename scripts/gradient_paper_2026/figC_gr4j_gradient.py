@@ -48,12 +48,11 @@ def smooth_nodes(x, npts=5, prc=10):
     return np.linspace(x0, x1, npts)
 
 def smooth_X(x, nodes):
-    X = np.empty((len(x), 2 * len(nodes) + 1))
+    X = np.empty((len(x), len(nodes) + 1))
     X[:, 0] = 1.
     for i, n in enumerate(nodes):
         dx = x - n
-        X[:, 2 * i + 1] = np.abs(dx)
-        X[:, 2 * i + 2] = np.abs(dx) * dx
+        X[:, i + 1] = np.abs(dx) * dx
     return X
 
 def smooth_reg(x, y):
@@ -100,6 +99,8 @@ def get_script_paths(config):
     script_paths = ScriptPaths(source_file, source_file.stem,
                                froot, fimg)
     fimg.mkdir(exist_ok=True, parents=True)
+    for f in fimg.glob("*.png"):
+        f.unlink()
 
     return script_paths
 
@@ -226,7 +227,7 @@ def process(config, script_paths, logger, data):
     X1 = 500.
     X2 = -0.1
     X3 = 50.
-    X4 = 1.0
+    X4 = 1.
     set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4)
 
     gr.params.values = [X1, X2, X3, X4]
@@ -237,6 +238,7 @@ def process(config, script_paths, logger, data):
 
     # Timeseries data
     qobs = data.hydroclim.Q
+
     time = qobs.index
     qsim = pd.Series(-mod.fluxes[:, -1, 5], index=time)
 
@@ -273,43 +275,45 @@ def process(config, script_paths, logger, data):
     logger.info(f"\n{perf_df}")
 
 
-    logger.info("Plot vs GR4J")
-    mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
-    ncols, nrows = len(mosaic[0]), len(mosaic)
-    figsize = (config.awidth * ncols, config.aheight * nrows)
-    plt.close("all")
-    fig = plt.figure(figsize=figsize, layout="constrained")
-    axs = fig.subplot_mosaic(mosaic, sharex=True)
-    for aname, ax in axs.items():
-        if aname == "UH":
-            v1 = grsim.loc[start:end, "Q1"] + grsim.loc[start:end, "Q9"]
-        else:
-            v1 = grsim.loc[start:end, aname]
+    # --------------------------------------------------
+    #logger.info("Plot vs GR4J")
+    #mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
+    #ncols, nrows = len(mosaic[0]), len(mosaic)
+    #figsize = (config.awidth * ncols, config.aheight * nrows)
+    #plt.close("all")
+    #fig = plt.figure(figsize=figsize, layout="constrained")
+    #axs = fig.subplot_mosaic(mosaic, sharex=True)
+    #for aname, ax in axs.items():
+    #    if aname == "UH":
+    #        v1 = grsim.loc[start:end, "Q1"] + grsim.loc[start:end, "Q9"]
+    #    else:
+    #        v1 = grsim.loc[start:end, aname]
 
-        if aname == "S":
-            v2 = mod.x[:, 1] * X1
-        elif aname == "PR":
-            v2 = -mod.fluxes[:, 1, 5]
-        elif aname == "AE":
-            v2 = -mod.fluxes[:, 0, 1] - mod.fluxes[:, 1, 1]
-        elif aname == "R":
-            v2 = mod.x[:, -1] * X3
-        elif aname == "QR":
-            v2 = -mod.fluxes[:, -1, 2]
-        elif aname == "Q":
-            v2 = -mod.fluxes[:, -1, 5]
-        elif aname == "UH":
-            v2 = -mod.fluxes[:, -2, 5]
+    #    if aname == "S":
+    #        v2 = mod.x[:, 1] * X1
+    #    elif aname == "PR":
+    #        v2 = -mod.fluxes[:, 1, 5]
+    #    elif aname == "AE":
+    #        v2 = -mod.fluxes[:, 0, 1] - mod.fluxes[:, 1, 1]
+    #    elif aname == "R":
+    #        v2 = mod.x[:, -1] * X3
+    #    elif aname == "QR":
+    #        v2 = -mod.fluxes[:, -1, 2]
+    #    elif aname == "Q":
+    #        v2 = -mod.fluxes[:, -1, 5]
+    #    elif aname == "UH":
+    #        v2 = -mod.fluxes[:, -2, 5]
 
-        v2 = pd.Series(v2, index=grsim.index).loc[start:end]
+    #    v2 = pd.Series(v2, index=grsim.index).loc[start:end]
 
-        v1.plot(ax=ax, label="GR4J")
-        v2.plot(ax=ax, label="Quas")
-        ax.set(title=aname)
+    #    v1.plot(ax=ax, label="GR4J")
+    #    v2.plot(ax=ax, label="Quas")
+    #    ax.set(title=aname)
 
-    fp = script_paths.fimg / "gr4j_comparison.png"
-    fig.savefig(fp)
+    #fp = script_paths.fimg / "gr4j_comparison.png"
+    #fig.savefig(fp)
 
+    # --------------------------------------------------
     logger.info("Plot grad ts")
     plt.close("all")
 
@@ -327,7 +331,7 @@ def process(config, script_paths, logger, data):
 
     ax = axs["flux"]
     qobs[start:end].plot(ax=ax, label="Observed $q_o$", color="k", ls="--")
-    qsim[start:end].plot(ax=ax, label="$Q_3$", lw=2)
+    qsim[start:end].plot(ax=ax, label="Simulated $Q_3$", lw=2)
 
     eps = qobs.mean() * 1e-2
     sqeps = math.sqrt(eps)
@@ -337,7 +341,7 @@ def process(config, script_paths, logger, data):
     assert np.allclose(inv(fwd(u)), u)
 
     ax.set_yscale("function", functions=(fwd, inv))
-    title = "(a) Outflow of the routing reservoir $Q_3$"
+    title = "(a) Streamflow timeseries"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
     ax.set(ylabel="Streamflow [mm.d$^{-1}$]")
@@ -348,25 +352,26 @@ def process(config, script_paths, logger, data):
     x = pd.DataFrame(mod.x, index=time)
 
     for iplot, (vn, dq) in enumerate(grads.items()):
+        logger.info(f"Plot {iplot}", ntab=1)
         # Ts plot
         ax = axs[f"{vn}/ratio"]
 
-        ratio = (res / -dq)[start:end]
-        ratio.plot(ax=ax)
+        ratio = (res / -dq)
+        ratio[start:end].plot(ax=ax)
 
         ax.set_yscale("asinh")
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
 
         vtxt = re.sub("\\$", "", vn)
-        title = f"({letters[iplot + 1]})"\
-                + f"{vn} gradient ratio $\\frac{{Q_3 - q_o}}{{ {{{vtxt}}}\\ dQ_3/d{{{vtxt}}}}}$"
+        title = f"({letters[2 * iplot + 1]}) "\
+                + f"{vn} parameter error $\\frac{{Q_3 - q_o}}{{ {{{vtxt}}}\\ dQ_3/d{{{vtxt}}}}}$"
         t = ax.set_title(title, va="top", ha="left",
-                         x=0.02, y=0.94, fontsize="x-large")
+                         x=0.02, y=0.935, fontsize="x-large")
         t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
 
-        ylim = -1e2, 1e2
+        ylim = -2e2, 2e2
         ax.set(ylim=ylim,
-               ylabel="Ratio [-]")
+               ylabel="Parameter error [-]")
 
         # .. scatter plot
         ax = axs[f"{vn}/scatter"]
@@ -378,16 +383,21 @@ def process(config, script_paths, logger, data):
             ires = x.shape[1] - 1
             store_name = "Routing store level"
 
-        store = x.loc[start:end, ires]
+        store = x.iloc[:, ires]
         ax.plot(store, ratio, ".", alpha=0.1)
 
         xx, yy = smooth_reg(store, ratio)
         ax.plot(xx, yy, "--", color="k", lw=2)
 
-        title = ""
+        s, e = store.index[[0, -1]]
+        txt = f"Data from {s.year} to {e.year}"
+        ax.text(0.98, 0.02, txt, va="bottom", ha="right",
+                transform=ax.transAxes)
+
+        title = f"({letters[2 * iplot + 2]})"
         ax.set_title(title, va="top", ha="left",
                      x=0.02, y=0.94)
-        ax.set_yscale("asinh")
+        ax.set_yscale("asinh", linear_threshold=1e-3)
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
         ax.set(ylim=ylim,
                xlabel=store_name,
@@ -409,7 +419,7 @@ if __name__ == "__main__":
                         type=str, default="203014")
     parser.add_argument("-n", "--nuh",
                         help="Number of UH reservoirs",
-                        type=int, default=2)
+                        type=int, default=5)
     parser.add_argument("-z", "--zoom",
                         help="Time zoom level",
                         type=int, default=1)
@@ -422,8 +432,8 @@ if __name__ == "__main__":
     nuh = args.nuh
     zoom = args.zoom
     nsubsteps = 1
-    start = "1990"
-    end = "1990"
+    start = "1980"
+    end = "2022"
 
     stationid = args.stationid
     awidth = 7
