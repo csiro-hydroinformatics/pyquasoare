@@ -28,7 +28,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import ticker as mticker
-from matplotlib.patches import Rectangle
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
@@ -48,6 +47,20 @@ from figC_gr4j_gradient import get_data, \
 
 # Select backend
 #mpl.use("Agg")
+
+N_TM = 2.
+
+def tm_runoff(p, e, n=N_TM):
+    arid = p / e
+    return 1 - 1./(1 + arid**n)**(1./n)
+
+def tm_q(p, e, n=N_TM):
+    return p * tm_runoff(p, e, n)
+
+def tm_eP(p, e, n=N_TM):
+    arid = p / e
+    r = tm_runoff(p, e, n)
+    return (1 - 1. / (1 + arid**n)**(1. + 1. / n)) / r
 
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
@@ -73,10 +86,27 @@ def get_logger(config, script_paths):
     return logger
 
 
+def format_y(ax, y0, y1):
+    ax.set(ylabel="Elasticity $\\epsilon_P$ [-]",
+           ylim=(y0, y1))
+    #ax.grid(axis="y")
+    #ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
+
+
+def format_x(ax, start, end):
+    ybase = 5
+    ax.xaxis.set_major_locator(mdates.YearLocator(base=ybase))
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    s = pd.to_datetime(start + "-01-01")
+    e = pd.to_datetime(end + "-12-31")
+    ax.set_xlim((s, e))
+
+
 def process(config, script_paths, logger, data):
     logger.info("Run model")
     # Prepare model
     mod = configure_model(logger, config, data)
+
 
     # Good parameters
     X0 = 1.
@@ -93,69 +123,59 @@ def process(config, script_paths, logger, data):
     time = data.hydroclim.index
     qsim = pd.Series(mod.fluxes[:, -1, 5], index=time)
 
+    p_interan = data.hydroclim.P.mean() * 365.25
+    e_interan = data.hydroclim.PET.mean() * 365.25
+
+    p_an = data.hydroclim.P.resample("YS").sum()
+    e_an = data.hydroclim.PET.resample("YS").sum()
+
     # Gradients
     nuh = config.nuh
-    grads = pd.DataFrame(mod.dfluxes[:, :2, -1, 5], index=time)
-    grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$"]
+    grads = pd.Series(mod.dfluxes[:, 0, -1, 5], index=time)
 
     # .. inversing sign because qsim is neg
-    qm = -qsim.mean()
-    elast = -grads / qm
+    q_an = -qsim.resample("YS").sum()
+    runoff_an = q_an / p_an
+    q_interan = -qsim.mean()
 
+    elast = -grads / q_interan
     elast_mthly = elast.resample("MS").mean()
-    elast_ann = elast.resample("YS").mean()
-    elast_interann = elast.mean()
+    elast_an = elast.resample("YS").mean()
+    elast_interan = elast.mean()
 
-    # Adim plot data
-    adim = {}
-    pm = data.hydroclim.P.mean()
-    em = data.hydroclim.PET.mean()
-    n_tm = 2.
+    ## .. check
+    #eps = 1e-6
+    #modp = configure_model(logger, config, data)
+    #modp.Qstars[:, 0, 0] *= 1 + eps
+    #set_parameters(modp, config.nsubsteps, X0, X1, X2, X3, X4)
+    #modp.run()
 
-    etaPs = np.unique([1.] + np.linspace(0.5, 2., 20).tolist())
-    for etaP in etaPs:
-        set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4,
-                       eta_P=etaP)
-        mod.run()
-        # data for the outflow from the last store
-        qm = -mod.fluxes[:, -1, 5].mean()
-        elast_P = -mod.dfluxes[:, 0, -1, 5].mean() / qm
-        elast_E = -mod.dfluxes[:, 1, -1, 5].mean() / qm
+    #modm = configure_model(logger, config, data)
+    #modm.Qstars[:, 0, 0] *= 1 - eps
 
-        pmp = pm * etaP
-        ratio = pmp / em
-        runoff_tm = 1 - 1./(1 + ratio**n_tm)**(1. / n_tm)
-        qtm = runoff_tm * pmp
-        elast_P_tm = 1 - 1. / (1 + ratio**n_tm)**(1 + 1./ n_tm)
-        elast_P_tm *= pmp / qtm
+    #set_parameters(modm, config.nsubsteps, X0, X1, X2, X3, X4)
+    #modm.run()
 
-        elast_E_tm = - 1. / (1 + ratio**(-n_tm))**(1 + 1./ n_tm)
-        elast_E_tm *= em / qtm
-
-        adim[etaP] = {
-                "aridity": pm / em * etaP,
-                "runoff": qm / pm / etaP,
-                "elast_P": elast_P,
-                "elast_E": elast_E,
-                "runoff_tm": runoff_tm,
-                "elast_P_tm": elast_P_tm,
-                "elast_E_tm": elast_E_tm,
-        }
-    adim = pd.DataFrame(adim).T
+    #dfx = (modp.fluxes[:, -1, 5] - modm.fluxes[:, -1, 5]) / 2 / eps
+    #qm = -mod.fluxes[:, -1, 5].mean()
+    #elastn = pd.Series(-dfx / qm, index=time)
+    #elastn_an = elastn.resample("YS").mean()
 
     # Turc-Mezentsev -> elasticity
-    p = data.hydroclim.P.resample("YS").sum()
-    e = data.hydroclim.PET.resample("YS").sum()
-    qtm = 1 - 1./(1 + (p / e)**n_tm)**(1. / n_tm)
-    elast_ann_tm = 1 - 1. / (1 + (p / e)**n_tm)**(1. + 1. / n_tm)
-    elast_ann_tm *= 1 / qtm
+    runoff_an_tm = tm_runoff(p_an, e_an)
+    q_an_tm = tm_q(p_an, e_an)
+    elast_an_tm = tm_eP(p_an, e_an)
+
+    runoff_interan_tm = tm_runoff(p_interan, e_interan)
+    q_interan_tm = tm_q(p_interan, e_interan)
+    elast_interan_tm = tm_eP(p_interan, e_interan)
 
     # Plot
     logger.info("Plot elast")
     plt.close("all")
 
     nrows, ncols = 2, 2
-    mosaic = [["monthly", "."], ["annual", "interan"]]
+    mosaic = [["monthly", "scatter"], ["annual", "interan"]]
     ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig = plt.figure(figsize=figsize,
@@ -163,71 +183,59 @@ def process(config, script_paths, logger, data):
     kw = dict(width_ratios=[2, 1])
     axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 
+    # Scatter data
+    ax = axs["scatter"]
+    arid = p_an / e_an
+    ax.plot(arid, q_an / p_an, "+", label="Q G")
+    ax.plot(arid, q_an_tm / p_an, "+", label="Q T")
+    ax.legend()
+
+    tax = ax.twinx()
+    tax.plot(arid, elast_an, "o", mfc="none")
+    tax.plot(arid, elast_an_tm, "o", mfc="none")
+
     # ... monthly data
     ax = axs["monthly"]
 
-    elast_mthly.iloc[:, 0].plot(ax=ax, label="GR4J QuaSoARe")
+    t = elast.index
+    v = elast
+    ax.plot(t, v, color="0.5", lw=0.5, alpha=0.5)
+
+    t = elast_mthly.index
+    v = elast_mthly
+    ax.plot(t, v, label="GR4J QuaSoARe")
 
     title = "(a) Monthly streamflow elasticity to rainfall"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
-    _, y1 = ax.get_ylim()
-    fwd = lambda x: np.sqrt(np.abs(x)) * np.sign(x)
-    inv = lambda y: np.sign(y) * y**2
 
-    def format_y(ax):
-        ax.set(ylabel="Elasticity $\epsilon_P$ [-]",
-               ylim=(-0.1, y1))
-        #ax.set_yscale("function", functions=(fwd, inv))
-        ax.set_yscale("log")
-        ax.set_yticks([0.1, 1., 2., 5., 10.])
-        ax.grid(axis="y")
-
-    format_y(ax)
+    format_x(ax, config.start, config.end)
+    ax.set_yscale("log")
+    format_y(ax, 1e-2, 1e2)
 
     # ... annual data
     ax = axs["annual"]
 
-    elast_ann.iloc[:, 0].plot(ax=ax, label="GR4J QuaSoARe")
-    elast_ann_tm.plot(ax=ax, label="Turc-Mezentsev")
+    t = elast_an.index
+    v = elast_an
+    ax.step(t, v, where="post", label="GR4J QuaSoARe")
+
+    t = elast_an_tm.index
+    v = elast_an_tm
+    ax.step(t, v, where="post", label="Turc-Mezentsev")
 
     title = "(b) Annual streamflow elasticity to rainfall"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
-    format_y(ax)
+    format_x(ax, config.start, config.end)
+    format_y(ax, -0.2, 5)
     ax.legend(loc=3, ncol=2)
-
-    axi = ax.inset_axes((0.78, 0.6, 0.2, 0.38))
-    axi.plot(elast_ann_tm, elast_ann.iloc[:, 0], "o")
-
-    # .. adimensional plot
-    #ax = axs["adim"]
-    #putils.waterbalplot(ax, ncoeff=n_tm)
-
-    #ax.plot(adim.aridity, adim.runoff, "-", label="GR4J-QuaSoARe")
-    #col1 = ax.get_lines()[-1].get_color()
-    #ax.plot(adim.aridity[1.], adim.runoff[1.], "o", color=col1)
-
-    #ax.plot(adim.aridity, adim.runoff_tm, "-", label="TM")
-    #col2 = ax.get_lines()[-1].get_color()
-    #ax.plot(adim.aridity[1.], adim.runoff_tm[1.], "o", color=col2)
-
-    #tax = ax.twinx()
-    #tax.plot(adim.aridity, adim.elast_P, "--", color=col1)
-    #tax.plot(adim.aridity[1.], adim.elast_P[1.], "o", color=col1)
-
-    #tax.plot(adim.aridity, adim.elast_P_tm, "--", color=col2)
-    #tax.plot(adim.aridity[1.], adim.elast_P_tm[1.], "o", color=col2)
-
-    #title = "(c) Adimensional elasticity plot"
-    #ax.set_title(title, va="top", ha="left",
-    #             x=0.02, y=0.94)
 
     # ... inter-annual data
     ax = axs["interan"]
     se = pd.Series({
-        "GR4J\nQuaSoARe": adim.loc[1., "elast_P"],
-        "Turc\nMezentsev": adim.loc[1., "elast_P_tm"]
+        "GR4J\nQuaSoARe": elast_interan,
+        "Turc\nMezentsev": elast_interan_tm
         })
 
     col1 = "tab:blue"
@@ -238,7 +246,7 @@ def process(config, script_paths, logger, data):
     title = "(d) Inter-annual elasticity"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
-    format_y(ax)
+    format_y(ax, -0.2, 5)
     ax.set(ylabel="")
 
     fp = script_paths.fimg / "gr4j_elasticity.png"
@@ -267,8 +275,8 @@ if __name__ == "__main__":
     nuh = args.nuh
     zoom = args.zoom
     nsubsteps = 1
-    start = "1980"
-    end = "2022"
+    start = "1998"
+    end = "2001"
 
     stationid = args.stationid
     awidth = 5
