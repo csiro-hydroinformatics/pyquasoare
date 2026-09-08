@@ -48,6 +48,9 @@ def get_script_paths(config):
                                froot, fdata, fimg)
     fimg.mkdir(exist_ok=True, parents=True)
 
+    for f in fimg.glob("*.png"):
+        f.unlink()
+
     return script_paths
 
 
@@ -77,7 +80,7 @@ def process(config, script_paths, logger, data):
 
     gm_ref = "500_50_500"
     eps_ref = -5
-    na_ref = 100
+    na_ref = 50
 
     for na, gm, eps in prod(nas, gms, epss):
         match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
@@ -89,34 +92,80 @@ def process(config, script_paths, logger, data):
         # Create figure
         plt.close("all")
         nrs = [1, 5, 50]
-        metrics = ["runtime", "errmax00", "errmax90"]
-        mosaic = [[f"{nr}/{vn}" for nr in nrs]
-                  for vn in metrics]
+        metrics = ["runtimedelta", "errmax00", "errmax90"]
+        mosaic = [["."] + [f"{nr}/title" for nr in nrs]] \
+            + [[f"title/{vn}"] + [f"{nr}/{vn}" for nr in nrs]
+               for vn in metrics]
+
         fncols, fnrows = len(mosaic[0]), len(mosaic)
         awidth, aheight = config.awidth, config.aheight
         figsize = (awidth*fncols, aheight*fnrows)
         fig = plt.figure(constrained_layout=True,
                          figsize=figsize)
 
-        #gw = dict(height_ratios=[1]*fnrows, width_ratios=[1]*fncols)
-        #axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
-        axs = fig.subplot_mosaic(mosaic)
+        gw = dict(height_ratios=[1] + [6]*(fnrows - 1),
+                  width_ratios=[1] + [6] *(fncols - 1))
+        axs = fig.subplot_mosaic(mosaic, gridspec_kw=gw)
 
         nstations = len(perf.TASK_OPT_stationid.unique())
         nrepeat = len(perf.REPEAT.unique())
+        iplot = 0
+
+        idx0 = perf.TASK_OPT_findiff_log10eps == eps
+        idx0 &= perf.TASK_OPT_nalphas == na
+        idx0 &= perf.TASK_OPT_gamma_mean == gm
 
         for iax, (aname, ax) in enumerate(axs.items()):
+            if re.search("title", aname):
+                ax.axis("off")
+                t1, t2 = aname.split("/")
+                if t2 == "title":
+                    title = f"{t1} reach" if t1 == "1" else f"{t1} reaches"
+
+                    idx = idx0 & (perf.TASK_OPT_nreaches == int(t1))
+                    nr = (perf.loc[idx, "nreservoirs"].unique()).squeeze()
+                    nv = (perf.loc[idx, "nvariables"].unique()).squeeze()
+                    ny = (perf.loc[idx, "ntimesteps"].unique() / 365.25).squeeze()
+                    subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
+                        + f"  {ny:0.0f} Years"
+                    ax.text(0.5, 0.1, subtitle,
+                            va="center", ha="center",
+                            fontsize="large")
+                    rot = 0.
+                else:
+                    if re.search("delta", t2):
+                        title = "Runtime ratio [-]"
+                    elif re.search("max90", t2):
+                        title = "Relative error\nabove 90th prc [-]"
+                    else:
+                        title = "Relative error [-]"
+                    rot = 90.
+
+                ax.text(0.5, 0.5, title,
+                        va="center", ha="center",
+                        fontweight="bold",
+                        fontsize="x-large",
+                        rotation=rot)
+
+                continue
+
             nreaches, metric = aname.split("/")
             nreaches = int(nreaches)
+            idx = idx0 & (perf.TASK_OPT_nreaches == nreaches)
             logger.info(f"Plot reaches={nreaches}/{metric}", ntab=1)
 
-            idx = perf.TASK_OPT_findiff_log10eps == eps
-            idx &= perf.TASK_OPT_nalphas == na
-            idx &= perf.TASK_OPT_gamma_mean == gm
-            idx &= perf.TASK_OPT_nreaches == nreaches
             pat = f"{metric}"
             cc = [cn for cn in perf.columns if re.search(pat, cn)]
+            is_log = bool(re.search("log10", cc[0]))
             df = perf.loc[idx, cc]
+
+            if re.search("runtimedelta", metric):
+                quas_dt = perf.loc[idx, "log10runtime_neutral[sec]"].mean()
+                txt = f"QuaSoARe sim runtime:\n"\
+                    + f"{10**quas_dt:0.1e} sec/yr/reservoir"
+                ax.text(0.98, 0.02, txt, va="bottom", ha="right",
+                        transform=ax.transAxes, fontstyle="italic")
+
             logger.info(f"len(df) = {len(df)}", ntab=1)
 
             if len(df) != nrepeat * nstations:
@@ -124,28 +173,56 @@ def process(config, script_paths, logger, data):
                 ax.axis("off")
                 continue
 
+            cc = []
+            for cn in df.columns:
+                if re.search("_ref", cn):
+                    cc.append("QuaSoARe\nGradient")
+                else:
+                    o = re.search("(?<=diff)\\d", cn).group()
+                    cc.append(f"Fin.diff.\norder {o}")
+            df.columns = cc
+
             try:
                 vl = violinplot.Violin(df)
             except:
                 continue
             vl.draw(ax=ax)
 
-            # Axis
-            title = f"({letters[iax]}) {nreaches} reaches - {metric}"
-            ax.set(title=title,
-                   xlabel="",
-                   ylabel=metric)
+            if is_log:
+                # Relabel violins to show log values
+                for nm, elem in vl.elements.items():
+                    txt = elem["median-text"]
+                    y = 10**txt._y
+                    txt.set_text(f"{y:0.1e}")
 
-            if re.search("log10", cc[0]):
-                ax.set_ylim((-6.5, 0.5))
-                tk = np.arange(-6, 2, 2)
+            # Axis
+            title = f"({letters[iplot]})"
+            ax.set_title(title, x=0.02, y=0.95,
+                         va="top", ha="left",
+                         fontsize="x-large")
+
+            ax.set(xlabel="",
+                   ylabel="")
+
+            if is_log:
+                if re.search("runtimedelta", metric):
+                    ax.set_ylim((-0.5, 3.5))
+                    tk = np.arange(0, 4)
+                else:
+                    ax.set_ylim((-6.5, 0.5))
+                    tk = np.arange(-6, 2, 2)
+
                 labs = ["1" if k == 0 else f"$10^{{{k}}}$" for k in tk]
                 ax.set_yticks(tk, labels=labs)
 
             ax.grid(axis="y")
 
+            iplot += 1
+
         # Save file
         cfg = f"N{na}_E{eps}_G{gm}"
+        if match == 3:
+            cfg += "_REF"
         fp = script_paths.fimg / \
                 f"figA_gradbench_v{config.version}_{cfg}.{config.imgext}"
         fig.savefig(fp, dpi=config.fdpi, transparent=config.ftransparent)
@@ -163,8 +240,8 @@ if __name__ == "__main__":
 
     # Config
     version = args.version
-    awidth = 6
-    aheight = 5
+    awidth = 3
+    aheight = 3
     fdpi = 300
     imgext = "png"
     ftransparent = False
