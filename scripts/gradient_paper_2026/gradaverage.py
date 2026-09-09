@@ -32,6 +32,10 @@ from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
 
+import importlib
+import gradbench
+importlib.reload(gradbench)
+
 from gradbench import get_data, get_reservoir_id, \
     configure_model, allocate_model, log_model, set_qstars, \
     set_parameters, comp_dfluxes, data_reader, \
@@ -54,14 +58,14 @@ def get_options():
     duration_repeat = 1
 
     nuh = 5
-    nsubsteps = [1, 24]
+    nsubsteps = [1, 48]
 
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 50]
 
-    nalphas_ref = 50
+    nalphas_ref = 10
     nalphas = [nalphas_ref]
 
     nrepeat = 20
@@ -224,16 +228,24 @@ def process(config, script_paths, logger, data):
             ex = comp_dfluxes(fx, fx[:, None, :], mod.fluxes[:-1, None, :])
 
             import matplotlib.pyplot as plt
-            #t0 = np.linspace(0, mod.ntimesteps, nsubmax * mod.ntimesteps)
-            #plt.plot(t0, modsmax.fluxes[:, -1, 5])
-            t1 = np.linspace(0, mod.ntimesteps, mod.ntimesteps)
-            res = get_reservoir_id(config, 0, "uh0")
-            fig, ax = plt.subplots()
-            ax.plot(t1[:-1], -fx[:, res, 5])
-            ax.plot(t1, -mod.fluxes[:, res, 5])
-            tax = ax.twinx()
-            tax.plot(t1[:-1], np.abs(fx[:, res, 5]-mod.fluxes[:-1, res, 5]),
-                     color="0.1", lw=0.8, alpha=0.1)
+            fig, axs = plt.subplots(nrows=2, ncols=2, sharex=True)
+            n = 200
+            t0 = np.linspace(0, mod.ntimesteps, nagg * mod.ntimesteps)
+            t1 = np.linspace(0, mod.ntimesteps, mod.ntimesteps) + 1.
+            res1 = get_reservoir_id(config, 0, "gr4jprod")
+            res2 = get_reservoir_id(config, 0, "uh0")
+            for ires, res in enumerate([res1, res2]):
+                ax = axs[1, ires]
+                ax.plot(t0[:n*nagg], -modsmax.fluxes[:n*nagg, res, 5], "+-")
+                ax.plot(t1[:n], -fx[:n, res, 5], "o-")
+                ax.plot(t1[:n], -mod.fluxes[:n, res, 5], "o-")
+                tax = ax.twinx()
+                tax.plot(t1[:n], np.abs(fx[:n, res, 5]-mod.fluxes[:n, res, 5]),
+                         color="0.1", lw=0.8, alpha=0.1)
+
+                ax = axs[0, ires]
+                ax.plot(t0[:n*nagg], modsmax.x[:n*nagg, res], "+-")
+                ax.plot(t1[:n], mod.x[:n, res], "o-")
             plt.show()
             import pdb; pdb.set_trace()
 
