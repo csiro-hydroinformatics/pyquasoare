@@ -215,6 +215,13 @@ def set_parameters(mod, nsubsteps, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     mod.flux_scalings[0, 0] = eta_P
     mod.flux_scalings[0, 1] = eta_E
 
+def get_parameters():
+    X0 = 1.
+    X1 = 500.
+    X2 = -0.1
+    X3 = 50.
+    X4 = 1.
+    return X0, X1, X2, X3, X4
 
 def process(config, script_paths, logger, data):
     logger.info("Run model")
@@ -223,11 +230,7 @@ def process(config, script_paths, logger, data):
     gr = configure_gr4j(logger, config, data)
 
     # Good parameters
-    X0 = 1.
-    X1 = 500.
-    X2 = -0.1
-    X3 = 50.
-    X4 = 1.
+    X0, X1, X2, X3, X4 = get_parameters()
     set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4)
 
     gr.params.values = [X1, X2, X3, X4]
@@ -262,7 +265,7 @@ def process(config, script_paths, logger, data):
     if args.zoom == 1:
         start, end = "1990", "2022"
     elif args.zoom == 2:
-        start, end = "2021-10", "2022"
+        start, end = "2020", "2022"
     elif args.zoom == 3:
         start, end = "2022-02-01", "2022-04-15"
     elif args.zoom == 4:
@@ -273,45 +276,6 @@ def process(config, script_paths, logger, data):
     qo, qs = qobs[iok][start:end], qsim[iok][start:end]
     perf_df = perf(qo, qs)
     logger.info(f"\n{perf_df}")
-
-
-    # --------------------------------------------------
-    #logger.info("Plot vs GR4J")
-    #mosaic = [["S", "PR", "AE"], ["R", "UH", "Q"]]
-    #ncols, nrows = len(mosaic[0]), len(mosaic)
-    #figsize = (config.awidth * ncols, config.aheight * nrows)
-    #plt.close("all")
-    #fig = plt.figure(figsize=figsize, layout="constrained")
-    #axs = fig.subplot_mosaic(mosaic, sharex=True)
-    #for aname, ax in axs.items():
-    #    if aname == "UH":
-    #        v1 = grsim.loc[start:end, "Q1"] + grsim.loc[start:end, "Q9"]
-    #    else:
-    #        v1 = grsim.loc[start:end, aname]
-
-    #    if aname == "S":
-    #        v2 = mod.x[:, 1] * X1
-    #    elif aname == "PR":
-    #        v2 = -mod.fluxes[:, 1, 5]
-    #    elif aname == "AE":
-    #        v2 = -mod.fluxes[:, 0, 1] - mod.fluxes[:, 1, 1]
-    #    elif aname == "R":
-    #        v2 = mod.x[:, -1] * X3
-    #    elif aname == "QR":
-    #        v2 = -mod.fluxes[:, -1, 2]
-    #    elif aname == "Q":
-    #        v2 = -mod.fluxes[:, -1, 5]
-    #    elif aname == "UH":
-    #        v2 = -mod.fluxes[:, -2, 5]
-
-    #    v2 = pd.Series(v2, index=grsim.index).loc[start:end]
-
-    #    v1.plot(ax=ax, label="GR4J")
-    #    v2.plot(ax=ax, label="Quas")
-    #    ax.set(title=aname)
-
-    #fp = script_paths.fimg / "gr4j_comparison.png"
-    #fig.savefig(fp)
 
     # --------------------------------------------------
     logger.info("Plot grad ts")
@@ -366,12 +330,14 @@ def process(config, script_paths, logger, data):
         title = f"({letters[2 * iplot + 1]}) "\
                 + f"{vn} parameter error $\\frac{{Q_3 - q_o}}{{ {{{vtxt}}}\\ dQ_3/d{{{vtxt}}}}}$"
         t = ax.set_title(title, va="top", ha="left",
-                         x=0.02, y=0.935, fontsize="x-large")
+                         x=0.02, y=0.92)
         t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
 
-        ylim = -2e2, 2e2
+        ylim = -100, 100
         ax.set(ylim=ylim,
+               yticks=[-10, -1, 0, 1, 10],
                ylabel="Parameter error [-]")
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
 
         # .. scatter plot
         ax = axs[f"{vn}/scatter"]
@@ -399,7 +365,9 @@ def process(config, script_paths, logger, data):
                      x=0.02, y=0.94)
         ax.set_yscale("asinh", linear_threshold=1e-3)
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
         ax.set(ylim=ylim,
+               yticks=[-10, -1, 0, 1, 10],
                xlabel=store_name,
                yticklabels=[])
 
@@ -422,7 +390,7 @@ if __name__ == "__main__":
                         type=int, default=5)
     parser.add_argument("-z", "--zoom",
                         help="Time zoom level",
-                        type=int, default=1)
+                        type=int, default=2)
     args = parser.parse_args()
 
     # Config
@@ -436,8 +404,8 @@ if __name__ == "__main__":
     end = "2022"
 
     stationid = args.stationid
-    awidth = 7
-    aheight = 3
+    awidth = 4.5
+    aheight = 2.5
     fdpi = 300
     imgext = "png"
     ftransparent = False

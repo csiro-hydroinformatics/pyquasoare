@@ -42,7 +42,7 @@ import importlib
 importlib.reload(figC_gr4j_gradient)
 
 from figC_gr4j_gradient import get_data, configure_model
-from figC_gr4j_gradient import set_parameters
+from figC_gr4j_gradient import set_parameters, get_parameters
 
 # Select backend
 #mpl.use("Agg")
@@ -79,11 +79,7 @@ def process(config, script_paths, logger, data):
     logger.info("Run model")
 
     # params
-    X0 = 1.
-    X1 = 500.
-    X2 = -0.1
-    X3 = 50.
-    X4 = 1e-3
+    X0, X1, X2, X3, X4 = get_parameters()
 
     # Prepare model
     fluxes = {}
@@ -91,14 +87,15 @@ def process(config, script_paths, logger, data):
     stores = {}
     mods = {}
     ntimesteps = data.hydroclim.shape[0]
-    nsubs = [1, 192]
+    #nsubs = [1, 24, 24 * 6, 24 * 60]
+    nsubs = [1, 6, 12]
 
     for nsub in nsubs:
         config = config._replace(nsubsteps=nsub)
         mod = configure_model(logger, config, data)
         set_parameters(mod, nsub, X0, X1, X2, X3, X4)
         mod.run()
-        logger.info(f"nval = {mod.ntimesteps}", ntab=1)
+        logger.info(f"nts = {mod.ntimesteps}", ntab=1)
         logger.info(f"ts = 1/{1./mod.timestep:0.0f}", ntab=1)
         logger.info(f"fs3[3] = {mod.flux_scalings[3, 2]:0.2f}", ntab=1)
         mods[nsub] = mod
@@ -167,7 +164,7 @@ if __name__ == "__main__":
                         action="store_true", default=False)
     parser.add_argument("-n", "--nuh",
                         help="Number of UH reservoirs",
-                        type=int, default=2)
+                        type=int, default=5)
     parser.add_argument("-z", "--zoom",
                         help="Time zoom level",
                         type=int, default=1)
@@ -181,8 +178,8 @@ if __name__ == "__main__":
     nuh = args.nuh
     zoom = args.zoom
     nsubsteps = 1
-    start = "2022-01-01"
-    end = "2022-05-01"
+    start = "2010"
+    end = "2023"
 
     stationid = args.stationid
     awidth = 7

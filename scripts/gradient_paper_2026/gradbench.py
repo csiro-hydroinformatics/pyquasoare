@@ -76,8 +76,12 @@ def get_options():
         ]
 
     gamma_std = 0.2
+
     demand_mean = -0.5
     demand_std = 0.2
+
+    x4_mean = 1.
+    x4_std = 0.2
 
     opm = hyruns.OptionManager(duration_base=duration_base,
                                duration_repeat=duration_repeat,
@@ -85,6 +89,8 @@ def get_options():
                                timestep=timestep,
                                demand_mean=demand_mean,
                                demand_std=demand_std,
+                               x4_mean=x4_mean,
+                               x4_std=x4_std,
                                nrepeat=nrepeat,
                                nuh=nuh,
                                nalphas_ref=nalphas_ref,
@@ -198,7 +204,7 @@ def get_reservoir_id(config, ireach, rtype):
     elif rtype == "gr4jprod":
         return ibase + 1
     elif re.search("uh", rtype):
-        iuh = int(re.sub("uh", rtype))
+        iuh = int(re.sub("uh", "", rtype))
         if iuh > nuh - 1:
             raise ValueError(f"Can't have iuh > {nuh - 1}")
         return ibase + 2 + iuh
@@ -212,8 +218,9 @@ def get_reservoir_id(config, ireach, rtype):
         raise ValueError(f"Can't recognise rtype {rtype}")
 
 
-def configure_model(logger, config, area):
+def configure_model(config, logger, area):
     logger.info(f"Create and configure model")
+    nsubsteps = config.nsubsteps
     nuh = config.options.context["nuh"]
     nreaches = config.task.nreaches
     nres_per_reach = 5 + nuh
@@ -263,16 +270,21 @@ def configure_model(logger, config, area):
 
         itrans_up = itrans
 
+    # Correct for substeps in Q3 fluxes
+    mod.flux_scalings[:, 2] = 1. / nsubsteps
+
     mod.nreaches = nreaches
     mod.nres_per_reach = nres_per_reach
     mod.nuh = nuh
+    mod.nsubsteps = nsubsteps
     logger.info(".. done")
 
     return mod
 
 
-def allocate_model(logger, mod, hydroclim, grad=True):
-    nval = len(hydroclim)
+def allocate_model(config, logger, mod, hydroclim, grad=True):
+    nsubsteps = config.nsubsteps
+    ntimesteps = len(hydroclim) * nsubsteps
     nreaches = mod.nreaches
     nres = mod.nreservoirs
     nres_per_reach = mod.nres_per_reach
@@ -289,16 +301,16 @@ def allocate_model(logger, mod, hydroclim, grad=True):
     else:
         vspecs = None
 
-    mod.allocate(nval, timestep=MODEL_TIMESTEP,
+    mod.allocate(ntimesteps, timestep=MODEL_TIMESTEP / nsubsteps,
                  variables_specs=vspecs)
 
-def log_model(logger, mod):
+def log_model(config, logger, mod):
     nreaches = mod.nreaches
     logger.info("****************************************", nret=1)
     logger.info(f"Model description")
     logger.info(f"nreaches   : {mod.nreaches}", ntab=1)
     logger.info(f"nuh        : {mod.nuh}", ntab=1)
-    logger.info(f"ntimesteps : {mod.ntimesteps} / {mod.ntimesteps / 365:0.0f}y", ntab=1)
+    logger.info(f"ntimesteps : {mod.ntimesteps} / {mod.ntimesteps / mod.nsubsteps / 365:0.0f}y", ntab=1)
     logger.info(f"nvars      : {len(mod.variables_reservoir_id)}", ntab=1)
     logger.info(f"timestep   : {mod.timestep}", ntab=1)
 
@@ -318,17 +330,22 @@ def log_model(logger, mod):
         iro = get_reservoir_id(config, ireach, "quadrouting")
         logger.info(f"Gamma RO route = {gammas[iro]:0.1f}", ntab=1)
 
+        iru = get_reservoir_id(config, ireach, f"uh0")
+        x4 = 1.25 * mod.nuh / mod.coefs_linear[iru, 2, 0, 0]
+        logger.info(f"uh x4 = {x4:0.1f}", ntab=1)
 
-def set_qstars(logger, mod, hydroclim):
-    mod.Pmean = hydroclim[:, 0].mean()
+
+def set_qstars(config, logger, mod, hydroclim):
+    nsubsteps = config.nsubsteps
 
     # Set 0 flow inputs for first reach
     nval = len(hydroclim)
-    Qstars0 = np.zeros((nval, 2))
+    ntimesteps = nval * nsubsteps
+    Qstars0 = np.zeros((ntimesteps, 2))
     iro = get_reservoir_id(config, 0, "quadrouting")
     mod.set_Qstars(iro, Qstars0)
 
-    Qstars1 = np.nan * np.zeros((nval, 2))
+    Qstars1 = np.nan * np.zeros((ntimesteps, 2))
     Qstars1[:, 1] = 1.
 
     # Transform inputs
@@ -346,12 +363,12 @@ def set_qstars(logger, mod, hydroclim):
         # .. rainfall
         nu = np.random.normal(scale=rhoP, size=nval)
         errP = armodels.armodel_sim(alphaP, nu)
-        Qstars0[:, 0] = backwardP(tP + errP)
+        Qstars0[:, 0] = np.repeat(backwardP(tP + errP), nsubsteps)
 
         # .. PET (negative -> demand!)
         nu = np.random.normal(scale=rhoE, size=nval)
         errE = 1 + armodels.armodel_sim(alphaE, nu)
-        Qstars0[:, 1] = -backwardE(tE + errE)
+        Qstars0[:, 1] = np.repeat(-backwardE(tE + errE), nsubsteps)
 
         ipr = get_reservoir_id(config, ireach, "openwater")
         mod.set_Qstars(ipr, Qstars0)
@@ -361,7 +378,7 @@ def set_qstars(logger, mod, hydroclim):
         mod.set_Qstars(irr, Qstars1)
 
 
-def set_parameters(logger, config, mod):
+def set_parameters(config, logger, mod):
     # Model charac
     nreaches = mod.nreaches
     nrp = mod.nres_per_reach
@@ -374,7 +391,11 @@ def set_parameters(logger, config, mod):
     demand_mean = config.options.context["demand_mean"]
     demand_std = config.options.context["demand_std"]
 
+    x4_mean = config.options.context["x4_mean"]
+    x4_std = config.options.context["x4_std"]
+
     gammas = 1e-2 * np.ones(nres)
+    nuh = config.options.context["nuh"]
     for ireach in range(nreaches):
         # RR prod reservoir
         ipr = get_reservoir_id(config, ireach, "gr4jprod")
@@ -391,6 +412,13 @@ def set_parameters(logger, config, mod):
         iro = get_reservoir_id(config, ireach, "quadrouting")
         gammas[iro] = random_scalings(gamma_std) * gamma_mean[2]
 
+        # UH
+        x4 = random_scalings(x4_std) * x4_mean
+        for iuh in range(nuh):
+            iru = get_reservoir_id(config, ireach, f"uh{iuh}")
+            mod.coefs_linear[iru, 2, :, 0] = 1.25 * nuh / x4
+
+    # Store reservoir capacities
     mod.gammas = gammas
 
 
@@ -460,23 +488,24 @@ def process(config, script_paths, logger, data):
     fsims.mkdir(exist_ok=True)
 
     # Setup up model
-    modref = configure_model(logger, config, data.area)
+    modref = configure_model(config, logger, data.area)
 
     # .. difference models
-    modneutral = configure_model(logger, config, data.area)
+    modneutral = configure_model(config, logger, data.area)
 
-    modeps = {delta: configure_model(logger, config, data.area)
+    modeps = {delta: configure_model(config, logger, data.area)
               for delta in [1, 2, 3]}
 
     hclim = data.hydroclim.values
 
-    allocate_model(logger, modref, hclim)
-    allocate_model(logger, modneutral, hclim, False)
+    allocate_model(config, logger, modref, hclim)
+    allocate_model(config, logger, modneutral, hclim, False)
 
     for e, mod in modeps.items():
-        allocate_model(logger, mod, hclim, False)
+        allocate_model(config, logger, mod, hclim, False)
 
-    nruntimeref = modref.ntimesteps / 365.25 * modref.nreservoirs
+    nsubsteps = config.nsubsteps
+    nruntimeref = modref.ntimesteps * nsubsteps / 365.25 * modref.nreservoirs
 
     # Define job
     batch = config.task.batch
@@ -503,15 +532,15 @@ def process(config, script_paths, logger, data):
                     nret=2)
 
         # Set random model inputs
-        set_qstars(logger, modref, hclim)
+        set_qstars(config, logger, modref, hclim)
         modneutral.Qstars = modref.Qstars
         for e, mod in modeps.items():
             mod.Qstars = modref.Qstars
 
         # Set parameters
-        set_parameters(logger, config, modref)
+        set_parameters(config, logger, modref)
         if irepeat == 0:
-            log_model(logger, modref)
+            log_model(config, logger, modref)
 
         modneutral.gammas = modref.gammas.copy()
         modneutral.flux_scalings = modref.flux_scalings.copy()
@@ -519,6 +548,7 @@ def process(config, script_paths, logger, data):
         for e, mod in modeps.items():
             mod.gammas = modref.gammas.copy()
             mod.flux_scalings = modref.flux_scalings.copy()
+            mod._coefs_linear = modref._coefs_linear.copy()
 
         # Run ref model
         logger.info("Run Quasoare - grad model", nret=1)
@@ -547,14 +577,14 @@ def process(config, script_paths, logger, data):
             modref.dfluxes[:, ivar] *= modref.gammas[res]
 
         # Print one simulation to make sure it makes sense
-        if irepeat == 0 and modref.nreaches == 5 \
+        if irepeat == 0 and ((modref.nreaches == 5 \
                 and config.task.nalphas == 100 \
-                and config.task.findiff_log10eps == -5:
+                and config.task.findiff_log10eps == -5) or config.debug):
             logger.info("Plotting first simul", nret=1)
             nreaches = modref.nreaches
             nval = min(2000, modref.ntimesteps)
             kk = np.arange(-nval, 0)
-            nsims = 4
+            nsims = 5
             df = np.empty((nval, nreaches * nsims))
             cols = []
             for ireach in range(nreaches):
@@ -563,16 +593,22 @@ def process(config, script_paths, logger, data):
                 df[:, ireach * nsims] = modref.Qstars[kk, iow, 0]
                 df[:, ireach * nsims + 1] = modref.Qstars[kk, iow, 1]
 
+                irp = get_reservoir_id(config, ireach, "gr4jprod")
+                qrp = -modref.fluxes[kk, irp, 5]
+                df[:, ireach * nsims + 2] = qrp
+
                 irr = get_reservoir_id(config, ireach, "gr4jroute")
                 qrr = -modref.fluxes[kk, irr, 5]
-                df[:, ireach * nsims + 2] = qrr
+                df[:, ireach * nsims + 3] = qrr
 
                 irt = get_reservoir_id(config, ireach, "transluent")
                 qagg = -modref.fluxes[kk, irt, 5]
-                df[:, ireach * nsims + 3] = qagg
+                df[:, ireach * nsims + 4] = qagg
 
                 r = f"R{ireach:03d}"
-                cols.extend([f"{r}_P", f"{r}_PE", f"{r}_RO_ROUTE",
+                cols.extend([f"{r}_P", f"{r}_PE",
+                             f"{r}_RR_PROD",
+                             f"{r}_RO_ROUTE",
                              f"{r}_AGG"])
 
             df = pd.DataFrame(df).round(3)
@@ -593,6 +629,7 @@ def process(config, script_paths, logger, data):
                     continue
 
                 r = f"R{ireach:03d}"
+                df.loc[:, f"{r}_RR_PROD"].plot(ax=ax, label="RR-Prod")
                 df.loc[:, f"{r}_RO_ROUTE"].plot(ax=ax, label="RO-Route")
                 df.loc[:, f"{r}_AGG"].plot(ax=ax, label="Agg")
 
@@ -699,10 +736,12 @@ if __name__ == "__main__":
     overwrite = args.overwrite
     debug = args.debug
     taskid = 0 if debug else args.taskid
+    nsubsteps = 1
 
     Config = namedtuple("Config",
                         ["version", "taskid", "overwrite",
-                         "debug", "options", "task"])
+                         "debug", "options", "task",
+                         "nsubsteps"])
     opm = get_options()
     task = opm.get_task(taskid)
 
@@ -713,7 +752,7 @@ if __name__ == "__main__":
         task.gamma_mean = (1000, 500, 1000)
 
     config = Config(version, taskid, overwrite,
-                    debug, opm, task)
+                    debug, opm, task, nsubsteps)
 
     # Baseline
     script_paths = get_script_paths(config)
