@@ -1311,9 +1311,9 @@ def test_flux_scalings(allclose):
 def test_flux_aggreg(allclose):
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
-    hclim = hclim.loc["2022-01":"2022-12"]
+    hclim = hclim.loc["2019":"2022"]
     hclim.iloc[:, 1] *= -1
-    ntimesteps = len(hclim)
+    nval = len(hclim)
 
     def aggregate(x, ntimesteps, nagg):
         agg = x.cumsum(axis=0)
@@ -1321,28 +1321,36 @@ def test_flux_aggreg(allclose):
         idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
         return agg[idx] / nagg
 
+    nuh = 5
     nalphas = 100
-    nsubs = [1, 10, 100]
+    nsubs = [1, 5, 20]
     mods = {}
     times = hclim.index
     for nsub in nsubs:
-        mod = gradients.MultiReservoirModel(1, nalphas,
+        mod = gradients.MultiReservoirModel(1 + nuh, nalphas,
                                              errors="raise")
         mod.set_coefs_linear(0, "gr4jprod")
-        mod.allocate(ntimesteps=ntimesteps * nsub, timestep=1./nsub)
+        for iuh in range(nuh):
+            mod.set_coefs_linear(1 + iuh, "linrouting")
+        ntimesteps = nval * nsub
+        mod.allocate(ntimesteps=ntimesteps, timestep=1./nsub)
         inputs = np.repeat(hclim, nsub, axis=0)
 
         mod.set_Qstars(0, inputs)
-        mod.gammas = [400.]
+        mod.gammas = [400.] + [1.] * nuh
         mod.x0 = 0.5
+
+        x4 = 1.2
+        for iuh in range(nuh):
+            mod.coefs_linear[1 + iuh, 2, :, 0] = 1.25 * nuh / x4
 
         # !!!!!!!
         # .. account for timestep change in Qstar3
         # !!!!!!!
-        mod.flux_scalings[0, 2] = 1. / nsub
+        mod.flux_scalings[:, 2] = 1. / nsub
 
         mod.run()
-        fx = aggregate(mod.fluxes, ntimesteps, nsub)
+        fx = aggregate(mod.fluxes, nval, nsub)
         if nsub == 1:
             fref = fx
         else:
