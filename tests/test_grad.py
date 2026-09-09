@@ -1334,9 +1334,10 @@ def test_flux_aggreg(allclose):
             mod.set_coefs_linear(1 + iuh, "linrouting")
         ntimesteps = nval * nsub
         mod.allocate(ntimesteps=ntimesteps, timestep=1./nsub)
-        inputs = np.repeat(hclim, nsub, axis=0)
 
+        inputs = np.repeat(hclim, nsub, axis=0)
         mod.set_Qstars(0, inputs)
+
         mod.gammas = [400.] + [1.] * nuh
         mod.x0 = 0.5
 

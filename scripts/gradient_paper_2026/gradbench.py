@@ -310,9 +310,11 @@ def log_model(config, logger, mod):
     logger.info(f"Model description")
     logger.info(f"nreaches   : {mod.nreaches}", ntab=1)
     logger.info(f"nuh        : {mod.nuh}", ntab=1)
-    logger.info(f"ntimesteps : {mod.ntimesteps} / {mod.ntimesteps / mod.nsubsteps / 365:0.0f}y", ntab=1)
+    logger.info(f"nsubsteps  : {mod.nsubsteps}", ntab=1)
+    ny = mod.ntimesteps / mod.nsubsteps / 365
+    logger.info(f"ntimesteps : {mod.ntimesteps} / {ny:0.0f}y", ntab=1)
     logger.info(f"nvars      : {len(mod.variables_reservoir_id)}", ntab=1)
-    logger.info(f"timestep   : {mod.timestep}", ntab=1)
+    logger.info(f"timestep   : {mod.timestep:0.3f}", ntab=1)
 
     gammas = mod.gammas
     fxs = mod.flux_scalings
@@ -394,7 +396,7 @@ def set_parameters(config, logger, mod):
     x4_mean = config.options.context["x4_mean"]
     x4_std = config.options.context["x4_std"]
 
-    gammas = 1e-2 * np.ones(nres)
+    gammas = np.ones(nres)
     nuh = config.options.context["nuh"]
     for ireach in range(nreaches):
         # RR prod reservoir
