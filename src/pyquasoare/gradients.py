@@ -78,6 +78,13 @@ FLUX_FUNCTIONS = {
         ]
 }
 
+# -- utility function --
+def aggregate(x, ntimesteps, nagg):
+    agg = x.cumsum(axis=0)
+    agg[nagg:] = agg[nagg:] - agg[:-nagg]
+    idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
+    return agg[idx] / nagg
+
 
 def get_alphas(nalphas, amin=0, amax=1.,
                nreservoirs=1,
@@ -109,6 +116,8 @@ def lin_coefficient_matrix(funs, alphas):
                                            approx_opt=0)
     return np.ascontiguousarray(coefs[:, :, 1:])
 
+
+# -- code modelling functions --
 
 def grad_reservoir(alphas, gamma,
                    Qstars,
@@ -331,7 +340,7 @@ def grad_model(alphas, gammas,
 
     return x, fluxes, dfluxes
 
-
+# -- Classes to handle networks --
 class NetworkLink():
     def __init__(self,
                  upstream_reservoir_id,
@@ -517,9 +526,11 @@ class Network():
                       -conversion_factor)
 
 
+# -- Model class --
 class MultiReservoirModel():
     def __init__(self, nreservoirs,
                  nalphas=10,
+                 nsubsteps=1,
                  errors="ignore",
                  enforce_potential_inflow_pos=True):
         self._enforce_potential_inflow_pos = enforce_potential_inflow_pos
@@ -529,8 +540,10 @@ class MultiReservoirModel():
 
         self._flux_scalings = np.ones((nreservoirs,
                                        NFLUXES_INPUTS))
-
-        self.nalphas = nalphas
+        self._flux_scalings_substeps = np.ones((nreservoirs,
+                                                NFLUXES_INPUTS))
+        self._nsubsteps = nsubsteps
+        self._nalphas = nalphas
         self._alphas = get_alphas(nalphas,
                                   nreservoirs=nreservoirs)
 
@@ -545,9 +558,12 @@ class MultiReservoirModel():
         self.dx = None
         self.fluxes = None
         self.dfluxes = None
+        self.fluxes_agg = None
+        self.dfluxes_agg = None
         self.niter = None
         self.timestep = None
         self.ntimesteps = None
+        self.ntimesteps_agg = None
 
     def check_reservoir_id(self, reservoir_id):
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
@@ -558,6 +574,14 @@ class MultiReservoirModel():
         if self.Qstars is None:
             errmsg = "Qstars is not allocated. Run 'allocate'."
             raise ValueError(errmsg)
+
+    @property
+    def nalphas(self):
+        return self._nalphas
+
+    @property
+    def nsubsteps(self):
+        return self._nsubsteps
 
     @property
     def errors(self):
@@ -709,17 +733,22 @@ class MultiReservoirModel():
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
             raise ValueError(errmsg)
 
-        if Qstars.shape != (self.ntimesteps, NFLUXES_POTENTIAL):
+        if Qstars.shape != (self.ntimesteps_agg, NFLUXES_POTENTIAL):
             errmsg = "Expected Qstars.shape to be"\
-                     + f" ({self.ntimesteps}, {NFLUXES_POTENTIAL}),"\
+                     + f" ({self.ntimesteps_agg}, {NFLUXES_POTENTIAL}),"\
                      + f" got {Qstars.shape}."
             raise ValueError(errmsg)
 
-        self.Qstars[:, reservoir_id, :] = Qstars
+        self.Qstars[:, reservoir_id, :] = np.repeat(Qstars,
+                                                    self.nsubsteps,
+                                                    axis=0)
 
-    def allocate(self, ntimesteps, variables_specs=None, timestep=1.):
-        self.timestep = timestep
-        self.ntimesteps = int(ntimesteps)
+    def allocate(self, ntimesteps_agg, variables_specs=None,
+                 timestep_agg=1.):
+        self.timestep = float(timestep_agg) / self.nsubsteps
+        self.ntimesteps_agg = int(ntimesteps_agg)
+        ntimesteps = self.ntimesteps_agg * self.nsubsteps
+        self.ntimesteps = ntimesteps
 
         nres = self.nreservoirs
         nfxi = NFLUXES_INPUTS
@@ -748,6 +777,8 @@ class MultiReservoirModel():
         self.dx = np.zeros((ntimesteps, nres, nvariables))
         self.fluxes = np.zeros((ntimesteps, nres, nfxo))
         self.dfluxes = np.zeros((ntimesteps, nvariables, nres, nfxo))
+        self.fluxes_agg = np.zeros((ntimesteps_agg, nres, nfxo))
+        self.dfluxes_agg = np.zeros((ntimesteps_agg, nvariables, nres, nfxo))
         self.niter = np.zeros((ntimesteps, nres), dtype=np.int32)
 
     def clone(self):
@@ -787,6 +818,12 @@ class MultiReservoirModel():
         # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
 
+        # Correct flux scaling to account for substes
+        fxs = self._flux_scalings_substeps
+        fxs[:] = self.flux_scalings[:]
+        fxs[:, 2] = 1. / self.nsubsteps
+
+        # Run model
         grad_model(alphas=self.alphas,
                    gammas=self.gammas,
                    input_mapping=inpm,
@@ -797,7 +834,7 @@ class MultiReservoirModel():
                    Qstars=self.Qstars,
                    coefs_linear=self.coefs_linear,
                    timestep=self.timestep,
-                   flux_scalings=self.flux_scalings,
+                   flux_scalings=fxs,
                    x=self.x,
                    dx=self.dx,
                    fluxes=self.fluxes,
@@ -806,4 +843,17 @@ class MultiReservoirModel():
                    dQstars_ext=self.dQstars_ext,
                    errors=self.errors,
                    enforce_potential_inflow_pos=self._enforce_potential_inflow_pos)
+
+    def aggregate(self):
+        if self.fluxes is None or self.dfluxes is None:
+            errmsg = "fluxes and dfluxes are none. Please allocate."
+            raise ValueError(errmsg)
+
+        self.fluxes_agg[:-1] = aggregate(self.fluxes,
+                                         self.ntimesteps_agg,
+                                         self.nsubsteps)
+
+        self.dfluxes_agg[:-1] = aggregate(self.dfluxes,
+                                          self.ntimesteps_agg,
+                                          self.nsubsteps)
 

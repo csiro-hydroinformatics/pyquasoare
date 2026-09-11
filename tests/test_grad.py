@@ -106,6 +106,13 @@ def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
 
 
 # utility functions
+def aggregate(x, ntimesteps, nagg):
+    agg = x.cumsum(axis=0)
+    agg[nagg:] = agg[nagg:] - agg[:-nagg]
+    idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
+    return agg[idx] / nagg
+
+
 def get_data(siteid, reservoir, timestep, gamma, demand,
              istart=None, iend=None):
     df = data_reader.get_data(siteid, "daily", None)
@@ -435,7 +442,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
 
 
 def test_grad_reservoir_nan(debug_mode):
-    timestep = 1.
+    timestep_agg = 1.
     siteid = "203004"
     df = data_reader.get_data(siteid, "daily")
     #df = df.iloc[:1]
@@ -444,7 +451,7 @@ def test_grad_reservoir_nan(debug_mode):
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.gammas = [5., 400.]
-    mod.allocate(len(df), timestep=timestep)
+    mod.allocate(len(df), timestep_agg=timestep_agg)
 
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
@@ -737,9 +744,9 @@ def test_grad_model_clone(allclose):
     mod.gammas = [5., 400.]
 
     siteid = "203014"
-    timestep = 1.
+    timestep_agg = 1.
     df = data_reader.get_data(siteid, "daily")
-    mod.allocate(len(df), timestep=timestep)
+    mod.allocate(len(df), timestep_agg=timestep_agg)
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
@@ -776,9 +783,9 @@ def test_grad_model_clone(allclose):
     assert ntested == 7
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("timestep_agg", TIMESTEPS)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
-def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
+def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
     mod = gradients.MultiReservoirModel(6, errors="raise")
 
     # Model is the sum of 3 contributions summed via a transluent reservoir:
@@ -814,7 +821,7 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
     timestep /= nrep
 
     # Set potential fluxes for the interception reservoir
-    mod.allocate(len(df), timestep=timestep)
+    mod.allocate(len(df), timestep_agg=timestep_agg)
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
     Qst0 = np.ascontiguousarray(Qst0)
@@ -872,10 +879,10 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("timestep_agg", TIMESTEPS)
 @pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS[:2])
-def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
+def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
                             allclose, debug_mode):
     noriginal = int(365.25 * 100)
     nrepeat = 2
@@ -896,7 +903,8 @@ def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
 
     nv = gradients.VARTYPE_NUMBER
     vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
-    mod.allocate(len(df), variables_specs=vspecs, timestep=timestep)
+    mod.allocate(len(df), variables_specs=vspecs,
+                 timestep_agg=timestep_agg)
 
     Qst0 = df
     Qst0[:, 1] *= -1
@@ -926,12 +934,12 @@ def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
 
         # Numerical differences
         modp = mod.clone()
-        modp.allocate(len(df), timestep=timestep)
+        modp.allocate(len(df), timestep_agg=timestep_agg)
         modp.set_Qstars(0, Qst0)
         modp.set_Qstars(2, Qst2)
 
         modm = mod.clone()
-        modm.allocate(len(df), timestep=timestep)
+        modm.allocate(len(df), timestep_agg=timestep_agg)
         modm.set_Qstars(0, Qst0)
         modm.set_Qstars(2, Qst2)
 
@@ -1017,8 +1025,8 @@ def test_grad_model_tangent(siteid, timestep, demand, flux_scalings,
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("gamma_size", [10., 0.1])
-@pytest.mark.parametrize("timestep", [1., 0.1])
-def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
+@pytest.mark.parametrize("timestep_agg", [1., 0.1])
+def test_grad_model_vs_gradbench_quadrouting(siteid, timestep_agg, gamma_size,
                                              debug_mode, allclose):
     pytest.skip("Can't make it work for certain values")
     if siteid in ["203060", "203900"]:
@@ -1068,7 +1076,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
 
     nval = len(df)
     vspecs = [[0, 0]]
-    mod.allocate(nval, timestep=timestep,
+    mod.allocate(nval, timestep_agg=timestep_agg,
                  variables_specs=vspecs)
     Qst0 = np.zeros((nval, 2))
     Qst0[:, 0] = qin
@@ -1083,11 +1091,11 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
 
     # numerical diff on quasoare
     modm = mod.clone()
-    modm.allocate(nval, timestep=timestep)
+    modm.allocate(nval, timestep_agg=timestep_agg)
     modm.set_Qstars(0, Qst0)
 
     modp = mod.clone()
-    modp.allocate(nval, timestep=timestep)
+    modp.allocate(nval, timestep_agg=timestep_agg)
     modp.set_Qstars(0, Qst0)
 
     eps = gamma * 1e-6
@@ -1307,55 +1315,129 @@ def test_flux_scalings(allclose):
     # Fluxes are identical
     assert allclose(modb.fluxes, modc.fluxes)
 
-
-def test_flux_aggreg(allclose):
+@pytest.mark.parametrize("reservoir", ["gr4jprod", "quadrouting"])
+@pytest.mark.parametrize("nsub", [1, 2, 6, 100])
+def test_flux_aggreg(reservoir, nsub, allclose):
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
-    hclim = hclim.loc["2019":"2022"]
     hclim.iloc[:, 1] *= -1
-    nval = len(hclim)
+    hclim = hclim.loc["2022"]
+    ntimesteps_agg = len(hclim)
 
-    def aggregate(x, ntimesteps, nagg):
-        agg = x.cumsum(axis=0)
-        agg[nagg:] = agg[nagg:] - agg[:-nagg]
-        idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
-        return agg[idx] / nagg
+    nalphas = 100
+    mod = gradients.MultiReservoirModel(1, nalphas,
+                                        nsubsteps=nsub,
+                                        errors="raise")
+    mod.set_coefs_linear(0, reservoir)
+    mod.allocate(ntimesteps_agg=ntimesteps_agg,
+                 variables_specs=[[0, 0], [0, 1]])
+    mod.set_Qstars(0, hclim)
+    mod.gammas = [500.]
+    mod.x0 = 0.5
+    mod.run()
+    mod.aggregate()
+
+    t0 = hclim.index
+    assert mod.ntimesteps_agg == len(t0)
+
+    dt = pd.Timedelta(days=1./nsub)
+    t1 = pd.date_range(t0[0], t0[-1] + dt * (nsub - 1), freq=dt)
+    assert mod.ntimesteps == len(t1)
+
+    for i in range(ntimesteps_agg):
+        idx0 = t0 == t0[i]
+        fx0 = mod.fluxes_agg[idx0]
+
+        idx1 = (t1 >= t0[i]) & (t1 < t0[i] + pd.Timedelta(days=1))
+        fx1 = mod.fluxes[idx1]
+        assert allclose(fx1.mean(axis=0), fx0)
+
+        dfx0 = mod.dfluxes_agg[idx0]
+        dfx1 = mod.dfluxes[idx1]
+        assert allclose(dfx1.mean(axis=0), dfx0)
+
+
+def test_flux_aggreg_gr4jprod(allclose):
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim = hclim.loc["1990":"2023"]
+    hclim.iloc[:, 1] *= -1
+    ntimesteps_agg = len(hclim)
 
     nuh = 5
     nalphas = 100
-    nsubs = [1, 5, 20]
+    nsubs = [1, 2, 10, 20]
     mods = {}
     times = hclim.index
     for nsub in nsubs:
-        mod = gradients.MultiReservoirModel(1 + nuh, nalphas,
-                                             errors="raise")
+        mod = gradients.MultiReservoirModel(1, nalphas,
+                                            nsubsteps=nsub,
+                                            errors="raise")
         mod.set_coefs_linear(0, "gr4jprod")
-        for iuh in range(nuh):
-            mod.set_coefs_linear(1 + iuh, "linrouting")
-        ntimesteps = nval * nsub
-        mod.allocate(ntimesteps=ntimesteps, timestep=1./nsub)
+        mod.allocate(ntimesteps_agg=ntimesteps_agg)
 
         inputs = np.repeat(hclim, nsub, axis=0)
         mod.set_Qstars(0, inputs)
 
-        mod.gammas = [400.] + [1.] * nuh
+        mod.gammas = [400.]
         mod.x0 = 0.5
 
-        x4 = 1.2
-        for iuh in range(nuh):
-            mod.coefs_linear[1 + iuh, 2, :, 0] = 1.25 * nuh / x4
+        mod.run()
+        mod.aggregate()
+        if nsub == 1:
+            fref = mod.fluxes_agg.copy()
+        else:
+            assert allclose(mod.fluxes_agg, fref)
 
-        # !!!!!!!
-        # .. account for timestep change in Qstar3
-        # !!!!!!!
-        mod.flux_scalings[:, 2] = 1. / nsub
+
+@pytest.mark.parametrize("nuh", [81])
+def test_flux_aggreg_uh(nuh, allclose):
+    pytest.skip("WIP")
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim = hclim.loc["2022-02-10":"2022-05-01"]
+    hclim.iloc[:, 1] *= 0
+    ntimesteps_agg = len(hclim)
+
+    nalphas = 100
+    nsubs = [1, 2, 4, 6, 24, 192]
+    mods = {}
+    times = hclim.index
+    mods = {}
+    fx = {}
+    for nsub in nsubs:
+        mod = gradients.MultiReservoirModel(nuh, nalphas,
+                                            nsubsteps=nsub,
+                                            errors="raise")
+        for iuh in range(nuh):
+            mod.set_coefs_linear(iuh, "linrouting")
+            if iuh > 0:
+                mod.add_link_outflow(iuh - 1, iuh)
+        mod.allocate(ntimesteps_agg=ntimesteps_agg)
+        mod.set_Qstars(0, hclim)
+
+        mod.gammas = [1.] * nuh
+        mod.x0 = 0.5
+
+        x4 = 10.
+        for iuh in range(nuh):
+            mod.coefs_linear[iuh, 2, :, 0] = 1.25 * nuh / x4
 
         mod.run()
-        fx = aggregate(mod.fluxes, nval, nsub)
-        if nsub == 1:
-            fref = fx
-        else:
-            assert allclose(fx, fref)
+        mod.aggregate()
+        fx[nsub] = -mod.fluxes_agg[:, :, 5]
+
+    fig, axs = plt.subplots(ncols=2, nrows=2)
+    for iax, ax in enumerate(axs.flat):
+        res = 20 * iax
+        df = pd.DataFrame({k: v[:, res] for k, v in fx.items()}, index=times)
+        df.plot(ax=ax)
+        ax.set(title=f"Res {res}")
+        ax.grid(axis="y")
+    plt.show()
+    import pdb; pdb.set_trace()
+
+
 
 
 @pytest.mark.parametrize("findiff_log10eps", [-4])
@@ -1369,7 +1451,7 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
     ntimesteps = len(hclim)
 
     x0 = 0.5
-    timestep = 1.
+    timestep_agg = 1.
 
     # Benchmark
     dgammas = np.ones(1)
@@ -1390,7 +1472,7 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
 
         vspecs = [[0, 0]] if eps == 0. else None
         mod.allocate(ntimesteps,
-                     timestep=timestep,
+                     timestep_agg=timestep_agg,
                      variables_specs=vspecs)
         mod.x0 = x0
 
