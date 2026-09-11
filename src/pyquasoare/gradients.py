@@ -542,7 +542,8 @@ class MultiReservoirModel():
                                        NFLUXES_INPUTS))
         self._flux_scalings_substeps = np.ones((nreservoirs,
                                                 NFLUXES_INPUTS))
-        self._nsubsteps = nsubsteps
+        self._nsubsteps = int(nsubsteps)
+        nalphas = int(nalphas)
         self._nalphas = nalphas
         self._alphas = get_alphas(nalphas,
                                   nreservoirs=nreservoirs)
@@ -562,6 +563,7 @@ class MultiReservoirModel():
         self.dfluxes_agg = None
         self.niter = None
         self.timestep = None
+        self.timestep_agg = None
         self.ntimesteps = None
         self.ntimesteps_agg = None
 
@@ -745,9 +747,12 @@ class MultiReservoirModel():
 
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
-        self.timestep = float(timestep_agg) / self.nsubsteps
-        self.ntimesteps_agg = int(ntimesteps_agg)
-        ntimesteps = self.ntimesteps_agg * self.nsubsteps
+        timestep_agg = float(timestep_agg)
+        self.timestep_agg = timestep_agg
+        self.timestep = timestep_agg / self.nsubsteps
+        ntimesteps_agg = int(ntimesteps_agg)
+        self.ntimesteps_agg = ntimesteps_agg
+        ntimesteps = ntimesteps_agg * self.nsubsteps
         self.ntimesteps = ntimesteps
 
         nres = self.nreservoirs
@@ -784,6 +789,7 @@ class MultiReservoirModel():
     def clone(self):
         mcl = MultiReservoirModel(self.nreservoirs,
                                   self.nalphas,
+                                  self.nsubsteps,
                                   self.errors)
         mcl._network = self.network.clone()
 
@@ -802,7 +808,9 @@ class MultiReservoirModel():
             "dfluxes",
             "niter",
             "timestep",
-            "ntimesteps"
+            "timestep_agg",
+            "ntimesteps",
+            "ntimesteps_agg"
             ]
         for attrn in attrns:
             value = getattr(self, attrn)
@@ -818,7 +826,7 @@ class MultiReservoirModel():
         # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
 
-        # Correct flux scaling to account for substes
+        # Correct flux scaling to account for substeps
         fxs = self._flux_scalings_substeps
         fxs[:] = self.flux_scalings[:]
         fxs[:, 2] = 1. / self.nsubsteps
