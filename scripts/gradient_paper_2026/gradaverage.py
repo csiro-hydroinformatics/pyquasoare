@@ -26,20 +26,25 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
+from matplotlib import dates as mdates
 
 from hydrodiy.io import csv, iutils, hyruns
 from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
 
+from utils import get_parameters
+
 import importlib
-import gradbench
-importlib.reload(gradbench)
+import utils
+importlib.reload(utils)
 
 from gradbench import get_data, get_reservoir_id, \
     configure_model, allocate_model, log_model, set_qstars, \
     set_parameters, comp_dfluxes, data_reader, \
-    REPORT_PROBS, MODEL_TIMESTEP
+    MODEL_TIMESTEP
+
+from utils import comp_dfluxes, REPORT_PROBS
 
 np.random.seed(5446)
 
@@ -58,29 +63,31 @@ def get_options():
     duration_repeat = 1
 
     nuh = 5
-    nsubsteps = [1, 48]
+    nsubsteps = [1, 12]
 
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 50]
 
-    nalphas_ref = 10
+    nalphas_ref = 100
     nalphas = [nalphas_ref]
 
     nrepeat = 20
     nbatch = 1
     batches = np.arange(nbatch)
 
+    X0, X1, X2, X3, X4 = get_parameters()
     gamma_means = [
-        (500, 50, 500),
-        (5000, 500, 5000),
-        (20, 2, 20)
+        (X1, X3, X1),
+        (X1 * 10, X3 * 10, X1 * 10),
+        (X1 / 10, X3 / 10, X1 / 10)
         ]
-
     gamma_std = 0.2
+
     demand_mean = -0.5
     demand_std = 0.2
+
     x4_mean = 1.0
     x4_std = 0.2
 
@@ -152,7 +159,12 @@ def process(config, script_paths, logger, data):
 
     # Setup up model
     mods = {}
-    hclim = data.hydroclim.values
+    hclim = data.hydroclim
+    #hclim = hclim.loc["2022"].values
+    #istart, iend = 0, len(hclim) - 1
+    istart, iend = 0, 70
+    time = hclim.index[istart:iend]
+    hclim = hclim.values[istart:iend]
 
     nsubsteps = config.options.context["nsubsteps"]
     nsubsteps.sort()
@@ -195,6 +207,7 @@ def process(config, script_paths, logger, data):
             if nsub == 1:
                 config = config._replace(nsubsteps=1)
                 set_qstars(config, logger, mod, hclim)
+                #set_qstars(config, logger, mod, hclim, False)
                 set_parameters(config, logger, mod)
             else:
                 mod1 = mods[1]
@@ -222,33 +235,65 @@ def process(config, script_paths, logger, data):
             if nsub == nsubmax:
                 continue
 
+            if nsub != 1:
+                continue
+
             nagg = nsubmax // nsub
             assert nagg * nsub == nsubmax
             fx = aggregate(modsmax.fluxes, mod.ntimesteps, nagg)
             ex = comp_dfluxes(fx, fx[:, None, :], mod.fluxes[:-1, None, :])
 
-            import matplotlib.pyplot as plt
-            fig, axs = plt.subplots(nrows=2, ncols=2, sharex=True)
-            n = 200
-            t0 = np.linspace(0, mod.ntimesteps, nagg * mod.ntimesteps)
-            t1 = np.linspace(0, mod.ntimesteps, mod.ntimesteps) + 1.
-            res1 = get_reservoir_id(config, 0, "gr4jprod")
-            res2 = get_reservoir_id(config, 0, "uh0")
-            for ires, res in enumerate([res1, res2]):
-                ax = axs[1, ires]
-                ax.plot(t0[:n*nagg], -modsmax.fluxes[:n*nagg, res, 5], "+-")
-                ax.plot(t1[:n], -fx[:n, res, 5], "o-")
-                ax.plot(t1[:n], -mod.fluxes[:n, res, 5], "o-")
-                tax = ax.twinx()
-                tax.plot(t1[:n], np.abs(fx[:n, res, 5]-mod.fluxes[:n, res, 5]),
-                         color="0.1", lw=0.8, alpha=0.1)
+            #import matplotlib.pyplot as plt
+            #plt.close("all")
+            #fig, axs = plt.subplots(nrows=3, ncols=5, sharex=True,
+            #                        layout="constrained",
+            #                        figsize=(15, 7))
 
-                ax = axs[0, ires]
-                ax.plot(t0[:n*nagg], modsmax.x[:n*nagg, res], "+-")
-                ax.plot(t1[:n], mod.x[:n, res], "o-")
-            plt.show()
-            import pdb; pdb.set_trace()
+            #n = modsmax.nsubsteps
+            #delta = np.array([pd.Timedelta(days=i/n) for i in range(1, n+1)])
+            #delta = np.tile(delta,(len(time)))
+            #t0 = np.repeat(time, n) + delta
 
+            #n = mod.nsubsteps
+            #delta = np.array([pd.Timedelta(days=i/n) for i in range(1, n+1)])
+            #delta = np.tile(delta,(len(time)))
+            #t1 = np.repeat(time, n) + delta
+
+            #res0 = get_reservoir_id(config, 0, "openwater")
+            #res1 = get_reservoir_id(config, 0, "gr4jprod")
+            #res2 = get_reservoir_id(config, 0, "uh0")
+            #res3 = get_reservoir_id(config, 0, "uh1")
+            #res4 = get_reservoir_id(config, 0, "gr4jroute")
+
+            ##pstart = mdates.date2num(pd.to_datetime("2019-01-01"))
+            ##pend = mdates.date2num(pd.to_datetime("2022-12-31"))
+            #pstart = mdates.date2num(time[0])
+            #pend = mdates.date2num(time[-1])
+
+            #for ires, res in enumerate([res0, res1, res2, res3, res4]):
+            #    ax = axs[0, ires]
+            #    ax.plot(t0, modsmax.Qstars[:, res, :], "+-")
+            #    ax.plot(t1, mod.Qstars[:, res, :], "o-")
+
+            #    ax = axs[2, ires]
+            #    ax.plot(t0, -modsmax.fluxes[:, res, 5], "+-")
+            #    ax.plot(t1[:-1], -fx[:, res, 5], "o-")
+            #    ax.plot(t1, -mod.fluxes[:, res, 5], "o-")
+            #    tax = ax.twinx()
+            #    tax.plot(t1[:-1], np.abs(fx[:, res, 5]-mod.fluxes[:-1, res, 5]),
+            #             color="0.1", lw=0.8, alpha=0.1)
+
+            #    ax.set(title=f"Res {res} - fluxes",
+            #           xlim=(pstart, pend))
+
+            #    ax = axs[1, ires]
+            #    ax.plot(t0, modsmax.x[:, res], "+-")
+            #    ax.plot(t1, mod.x[:, res], "o-")
+            #    ax.set(title=f"Res {res} - stores",
+            #           xlim=(pstart, pend))
+
+            #plt.show()
+            #import pdb; pdb.set_trace()
 
             for prob in REPORT_PROBS:
                 cn = f"fx_log10errmax{prob:02d}_nsubsteps{nsub:03d}[-]"

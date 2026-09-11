@@ -32,6 +32,11 @@ from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
 
+from utils import get_parameters, forwardP, backwardP
+from utils import forwardE, backwardE, random_scalings
+from utils import flux_denom, flux_isabove, comp_dfluxes
+from utils import REPORT_PROBS
+
 import importlib.util
 FTESTS = Path(__file__).parent.parent.parent / "tests"
 spec = importlib.util.spec_from_file_location("data_reader", FTESTS / "data_reader.py")
@@ -41,8 +46,6 @@ spec.loader.exec_module(data_reader)
 np.random.seed(5446)
 
 MODEL_TIMESTEP = 1.
-
-REPORT_PROBS = [0, 50, 90]
 
 DIFF_ORDERS = [1, 2, 3]
 
@@ -69,10 +72,11 @@ def get_options():
     nbatch = 1
     batches = np.arange(nbatch)
 
+    X0, X1, X2, X3, X4 = get_parameters()
     gamma_means = [
-        (500, 50, 500),
-        (5000, 500, 5000),
-        (20, 2, 20)
+        (X1, X3, X1),
+        (X1 * 10, X3 * 10, X1 * 10),
+        (X1 / 10, X3 / 10, X1 / 10)
         ]
 
     gamma_std = 0.2
@@ -337,7 +341,7 @@ def log_model(config, logger, mod):
         logger.info(f"uh x4 = {x4:0.1f}", ntab=1)
 
 
-def set_qstars(config, logger, mod, hydroclim):
+def set_qstars(config, logger, mod, hydroclim, perturb=True):
     nsubsteps = config.nsubsteps
 
     # Set 0 flow inputs for first reach
@@ -361,16 +365,20 @@ def set_qstars(config, logger, mod, hydroclim):
 
     # Set inputs
     for ireach in range(mod.nreaches):
-        # Reach climate + noise
-        # .. rainfall
-        nu = np.random.normal(scale=rhoP, size=nval)
-        errP = armodels.armodel_sim(alphaP, nu)
-        Qstars0[:, 0] = np.repeat(backwardP(tP + errP), nsubsteps)
+        if not perturb:
+            Qstars0[:, 0] = np.repeat(backwardP(tP), nsubsteps)
+            Qstars0[:, 1] = np.repeat(-backwardE(tE), nsubsteps)
+        else:
+            # Reach climate + noise
+            # .. rainfall
+            nu = np.random.normal(scale=rhoP, size=nval)
+            errP = armodels.armodel_sim(alphaP, nu)
+            Qstars0[:, 0] = np.repeat(backwardP(tP + errP), nsubsteps)
 
-        # .. PET (negative -> demand!)
-        nu = np.random.normal(scale=rhoE, size=nval)
-        errE = 1 + armodels.armodel_sim(alphaE, nu)
-        Qstars0[:, 1] = np.repeat(-backwardE(tE + errE), nsubsteps)
+            # .. PET (negative -> demand!)
+            nu = np.random.normal(scale=rhoE, size=nval)
+            errE = 1 + armodels.armodel_sim(alphaE, nu)
+            Qstars0[:, 1] = np.repeat(-backwardE(tE + errE), nsubsteps)
 
         ipr = get_reservoir_id(config, ireach, "openwater")
         mod.set_Qstars(ipr, Qstars0)
@@ -423,62 +431,6 @@ def set_parameters(config, logger, mod):
     # Store reservoir capacities
     mod.gammas = gammas
 
-
-def forwardP(x):
-    return np.log(x + 1)
-
-
-def backwardP(y):
-    return np.maximum(np.exp(y) - 1, 0.)
-
-
-def forwardE(x):
-    return x
-
-
-def backwardE(y):
-    return np.maximum(y, 0.)
-
-
-def random_scalings(sigma, nval=1, s0=1e-2):
-    if nval == 1:
-        return max(s0, 1 + np.random.normal(scale=sigma))
-    else:
-        return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
-
-
-def flux_denom(fx, eps1=1e-4, eps2=1e-3):
-    afx = np.abs(fx)
-    means = np.mean(afx, axis=0)[None, :]
-    maxs = np.max(afx, axis=0)[None, :]
-    denom = eps1 + eps2 * means
-    denom[maxs < eps1] = np.nan
-    return denom
-
-def flux_isabove(afx, prob):
-    thresh = np.percentile(afx, prob, axis=0)[None, :]
-    return np.where(afx > thresh, 1., np.nan)
-
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3):
-    num = np.abs(dfx_ref - dfx_alt)
-    denom = flux_denom(fx_ref, eps1, eps2)
-    err = num / denom
-
-    emean = pd.Series(np.nan, index=REPORT_PROBS)
-    afx = np.abs(fx_ref)
-    for prob in REPORT_PROBS:
-        is_above = flux_isabove(afx, prob)[:, None, :, :]
-        err_above = err * is_above
-
-        with warnings.catch_warnings():
-            # removes nan mean warning
-            warnings.simplefilter("ignore")
-            em = np.nanmean(err_above, axis=0)
-
-        em[np.isnan(em)] = 0.
-        emean[prob] = em.max()
-
-    return emean
 
 
 def process(config, script_paths, logger, data):

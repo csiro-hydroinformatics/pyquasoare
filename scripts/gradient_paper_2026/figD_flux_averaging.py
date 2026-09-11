@@ -37,12 +37,8 @@ from pyquasoare import gradients
 import c_pyquasoare_grad
 from gradbench import data_reader
 
-import figC_gr4j_gradient
-import importlib
-importlib.reload(figC_gr4j_gradient)
-
-from figC_gr4j_gradient import get_data, configure_model
-from figC_gr4j_gradient import set_parameters, get_parameters
+from figC_gr4j_gradient import get_data, configure_model, set_parameters
+from utils import get_parameters
 
 # Select backend
 #mpl.use("Agg")

@@ -32,7 +32,6 @@ from matplotlib.patches import Rectangle
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
-from hydrodiy.stat import metrics
 
 from pygme.models.gr4j import GR4J
 
@@ -40,54 +39,7 @@ from pyquasoare import gradients
 import c_pyquasoare_grad
 from gradbench import data_reader
 
-# Select backend
-#mpl.use("Agg")
-
-def smooth_nodes(x, npts=5, prc=10):
-    x0, x1 = np.nanpercentile(x, [prc, 100 - prc])
-    return np.linspace(x0, x1, npts)
-
-def smooth_X(x, nodes):
-    X = np.empty((len(x), len(nodes) + 1))
-    X[:, 0] = 1.
-    for i, n in enumerate(nodes):
-        dx = x - n
-        X[:, i + 1] = np.abs(dx) * dx
-    return X
-
-def smooth_reg(x, y):
-    nodes = smooth_nodes(x)
-    iok = ~np.isnan(x) & ~np.isnan(y)
-    X = smooth_X(x[iok], nodes)
-
-    # Quantile reg objfun
-    def ofun(theta):
-        yhat = X @ theta
-        return np.abs(yhat - y[iok]).sum()
-
-    theta0 = np.zeros(X.shape[1])
-    theta0[0] = np.nanmean(y) - np.nanmean(x)
-    opt = minimize(ofun, theta0)
-    theta = opt.x
-
-    xx = np.linspace(x[iok].min(), x[iok].max(), 500)
-    XX = smooth_X(xx, nodes)
-    yy = XX @ theta
-    return xx, yy
-
-def perf(qo, qs):
-    eps = np.abs(qo.mean()) * 1e-2
-    trans = {
-        "raw": lambda x: x,
-        "sqrt": lambda x: (np.sqrt(eps + np.abs(x)) - math.sqrt(eps)) * np.sign(x),
-        "log": lambda x: (np.log(eps + np.abs(x)) - math.log(eps)) * np.sign(x),
-        }
-    perf = pd.DataFrame(index=trans.keys(), columns=["BIAS", "NSE"])
-    for tn, t in trans.items():
-        tqo, tqs = t(qo), t(qs)
-        perf.loc[tn, "NSE"] = metrics.nse(tqo, tqs)
-        perf.loc[tn, "BIAS"] = metrics.bias(tqo, tqs)
-    return perf
+from utils import smooth_nodes, smooth_X, smooth_reg, perf, get_parameters
 
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
@@ -214,14 +166,6 @@ def set_parameters(mod, nsubsteps, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     mod.flux_scalings[nres - 1, 1] = X2
     mod.flux_scalings[0, 0] = eta_P
     mod.flux_scalings[0, 1] = eta_E
-
-def get_parameters():
-    X0 = 1.
-    X1 = 500.
-    X2 = -0.1
-    X3 = 50.
-    X4 = 1.
-    return X0, X1, X2, X3, X4
 
 def process(config, script_paths, logger, data):
     logger.info("Run model")
