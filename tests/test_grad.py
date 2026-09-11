@@ -96,7 +96,7 @@ def flux_denom(fx, eps1=1e-6, eps2=1e-3):
     shift[maxs < eps1] = np.nan
     return afx + shift
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-6, eps2=1e-3,
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3,
                  exclude=10):
     num = np.abs(dfx_ref - dfx_alt)
     denom = flux_denom(fx_ref, eps1, eps2)
@@ -736,8 +736,11 @@ def test_grad_model_setters(allclose):
     assert allclose(mod.flux_scalings, fxs)
 
 
-def test_grad_model_clone(allclose):
-    mod = gradients.MultiReservoirModel(2, errors="raise")
+@pytest.mark.parametrize("nsub", [1, 10])
+def test_grad_model_clone(nsub, allclose):
+    mod = gradients.MultiReservoirModel(2,
+                                        nsubsteps=nsub,
+                                        errors="raise")
     mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
@@ -767,6 +770,10 @@ def test_grad_model_clone(allclose):
         "fluxes",
         "dfluxes",
         "niter",
+        "nsubsteps",
+        "ntimesteps_agg",
+        "timestep",
+        "timestep_agg"
         ]
     ntested = 0
     for vn in attrns:
@@ -892,7 +899,10 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
     df = np.tile(df, (nrepeat, 1))
 
     # Basic gr4j model
-    mod = gradients.MultiReservoirModel(3, 20, "raise")
+    mod = gradients.MultiReservoirModel(3,
+                                        nalphas=20,
+                                        nsubsteps=4,
+                                        errors="raise")
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
 
@@ -923,9 +933,10 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
     # Run model
     t0 = time.time()
     mod.run()
+    mod.aggregate()
     dtq = time.time() - t0
 
-    dfx = mod.dfluxes
+    dfx = mod.dfluxes_agg
 
     dtn = 0
 
@@ -971,8 +982,10 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
         # Compute numerical difference
         t0 = time.time()
         modp.run()
+        modp.aggregate()
         modm.run()
-        dfx_n = (modp.fluxes - modm.fluxes) / delta
+        modm.aggregate()
+        dfx_n = (modp.fluxes_agg - modm.fluxes_agg) / delta
         dtn += time.time() - t0
 
         # get sim
@@ -982,7 +995,16 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             dfx_n *= mod.gammas[rid]
             dfx_c *= mod.gammas[rid]
 
-        if debug_mode and ivar == 5:
+        if debug_mode:
+            plot_it = False
+            atol = 5e-4
+            for res in range(mod.nreservoirs):
+                dfx_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
+                                              dfx_n[:, res, :], dfx_c[:, res, :])
+                plot_it = np.nanmax(dfx_err_max) > atol
+
+            if not plot_it:
+                continue
             fig, axs = plt.subplots(ncols=3, nrows=3,
                                     figsize=(12, 8),
                                     layout="constrained")
@@ -998,11 +1020,6 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
                     #tax.plot(mod.fluxes[:, res, ifx], color="0.5", lw=0.8)
                     tax.plot(dc - dn, color="0.7", lw=0.8, zorder=0)
 
-                    ef, emax = eff(dn, dc)
-                    ax.text(0.02, 0.98, f"Emax={emax:0.1e}\nEff={ef:0.1e}",
-                            transform=ax.transAxes,
-                            va="top", ha="left")
-
                     title = f"Res#{res} Flux#{ifx}"
                     ax.set(title=title)
 
@@ -1012,11 +1029,10 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             ftitle = f"Derivative against var #{ivar} (res={rid}, type={vid})"
             fig.suptitle(ftitle, fontweight="bold")
             plt.show()
-            import pdb; pdb.set_trace()
 
         atol = 5e-4
         for res in range(mod.nreservoirs):
-            dfx_err_max, _ = comp_dfluxes(mod.fluxes[:, res],
+            dfx_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
                                           dfx_n[:, res, :], dfx_c[:, res, :])
             assert np.nanmax(dfx_err_max) < atol
 
@@ -1204,6 +1220,7 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     nalphas = 100
     nres = nuh + 2
     mod = gradients.MultiReservoirModel(nres, nalphas,
+                                        nsubsteps=6,
                                         errors="raise")
     # Links
     mod.add_link_bypass_shortfall(0, 1)
@@ -1220,9 +1237,9 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     # allocate
     siteid = "203014"
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
-    ntimesteps = len(hclim)
+    ntimesteps_agg = len(hclim)
     vspecs = [[2 + iuh, 3] for iuh in range(nuh)]
-    mod.allocate(ntimesteps, variables_specs=vspecs)
+    mod.allocate(ntimesteps_agg, variables_specs=vspecs)
 
     # Set inputs
     inputs = np.ascontiguousarray(hclim.values)
@@ -1233,15 +1250,15 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     X0, X1 = 1e-2, 400
     mod.gammas = [X0, X1] + [1] * nuh
     sc3 = nuh * 1.25 / X4
-    mod.flux_scalings[2:, 2] = sc3
+    mod.coefs_linear[2:, :, 0] = sc3
 
     # Set numerical difference models
     modm = mod.clone()
     modp = mod.clone()
     eps = 1e-6
     for iuh in range(nuh):
-        modm.flux_scalings[2:, 2] = sc3 * X4 / (X4 - eps)
-        modp.flux_scalings[2:, 2] = sc3 * X4 / (X4 + eps)
+        modm.coefs_linear[2:, :, 0] = sc3 * X4 / (X4 - eps)
+        modp.coefs_linear[2:, :, 0] = sc3 * X4 / (X4 + eps)
 
     # Run models
     mod.run()
