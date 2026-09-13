@@ -234,8 +234,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
         if(isnan(M) || isnan(S))
             return QUASOARE_NAN_COEFF;
 
-        //M = fabs(M) < QUASOARE_EPS ? 0. : M;
-        //S = fabs(S) < QUASOARE_EPS ? 0. : S;
+        M = fabs(M) < QUASOARE_EPS ? 0. : M;
+        S = fabs(S) < QUASOARE_EPS ? 0. : S;
 
         /* Get derivative at beginning of time step */
         funval = M + S * x_start;
