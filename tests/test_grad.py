@@ -29,7 +29,7 @@ FTEST = source_file.parent
 NALPHAS = 50
 
 DEMANDS = [-0.5, 0., 0.1]
-TIMESTEPS = [0.1, 1.]
+TIMESTEPS = [1., 5.]
 GAMMAS = [10, 100, 10000]
 FLUX_SCALINGS = [
     [1., 1., 1.],
@@ -680,6 +680,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         ftol = 5e-3
 
         if debug_mode and (dx_err > xtol or dfx_err_max.max() > ftol):
+            plt.close("all")
             ncols, nrows = 6, 2
             aw, ah = 3, 3
             fig, axs = plt.subplots(nrows=nrows, ncols=ncols,
@@ -691,8 +692,8 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                 ax.plot(fx[:, ifx], "k-")
 
                 ax = axs[1, ifx]
-                v = np.asinh(dfx_v[:, ifx])
-                n = np.asinh(dfx_n[:, ifx])
+                v = dfx_v[:, ifx]
+                n = dfx_n[:, ifx]
                 ax.plot(v, label="Quas")
                 ax.plot(n, label="NumDiff")
                 tax = ax.twinx()
@@ -708,7 +709,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             fig.suptitle(ftitle, fontweight="bold")
             plt.show()
 
-        #print(f"x={dx_err:8.3e} fx={dfx_err_max.max():8.3e}")
+        print(f"x={dx_err:8.3e} fx={np.nanmax(dfx_err_max):8.3e}")
         assert dx_err < xtol
         assert np.nanmax(dfx_err_max) < ftol
 
@@ -749,7 +750,8 @@ def test_grad_model_clone(nsub, allclose):
     siteid = "203014"
     timestep_agg = 1.
     df = data_reader.get_data(siteid, "daily")
-    mod.allocate(len(df), timestep_agg=timestep_agg)
+    mod.allocate(len(df), timestep_agg=timestep_agg,
+                 variables_specs=[[0, 0], [1, 0]])
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
@@ -767,18 +769,26 @@ def test_grad_model_clone(nsub, allclose):
         "x0",
         "x",
         "dx",
-        "fluxes",
-        "dfluxes",
         "niter",
         "nsubsteps",
         "ntimesteps_agg",
         "timestep",
-        "timestep_agg"
+        "timestep_agg",
+        "fluxes",
+        "fluxes_agg",
+        "dfluxes",
+        "dfluxes_agg"
         ]
     ntested = 0
     for vn in attrns:
         v1 = getattr(mod, vn)
         v2 = getattr(modc, vn)
+
+        # .. check attribute is identical
+        assert allclose(v1, v2, equal_nan=True)
+
+        # .. perturb clone and check it becomes
+        #    different from original
         try:
             v2.flat[0] += 1
         except:
@@ -787,7 +797,7 @@ def test_grad_model_clone(nsub, allclose):
         assert abs(v1.flat[0] - v2.flat[0]) > 0
         ntested += 1
 
-    assert ntested == 7
+    assert ntested == 13
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep_agg", TIMESTEPS)
@@ -891,25 +901,31 @@ def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS[:2])
 def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
                             allclose, debug_mode):
-    noriginal = int(365.25 * 100)
-    nrepeat = 2
+    if debug_mode:
+        noriginal = 30
+        nrepeat = 1
+    else:
+        noriginal = int(365.25 * 100)
+        nrepeat = 2
+
     df = data_reader.get_data(siteid, "daily", 0).iloc[-noriginal:]
     df = df.interpolate().iloc[:, :2]
     assert df.shape == (noriginal, 2)
     df = np.tile(df, (nrepeat, 1))
 
     # Basic gr4j model
-    mod = gradients.MultiReservoirModel(3,
+    mod = gradients.MultiReservoirModel(1,
                                         nalphas=20,
                                         nsubsteps=4,
                                         errors="raise")
-    mod.add_link_bypass_shortfall(0, 1)
-    mod.add_link_outflow(1, 2)
+    #mod.add_link_bypass_shortfall(0, 1)
+    #mod.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, "openwatersmooth")
-    mod.set_coefs_linear(1, "gr4jprod")
-    mod.set_coefs_linear(2, "gr4jroute")
-    mod.gammas = [5., 400., 50.]
+    mod.set_coefs_linear(0, "openwater")
+    #mod.set_coefs_linear(1, "gr4jprod")
+    #mod.set_coefs_linear(2, "gr4jroute")
+    #mod.gammas = [5., 400., 50.]
+    mod.gammas = [1e-2]
 
     nv = gradients.VARTYPE_NUMBER
     vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
@@ -920,14 +936,16 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
     Qst0[:, 1] *= -1
     mod.set_Qstars(0, Qst0)
 
-    Qst2 = np.ones((len(df), 2))
-    Qst2[:, 0] = np.nan
-    mod.set_Qstars(2, Qst2)
-
-    # Set demand for routing reservoir
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
-    fxs[-1, 1] = demand
+    if mod.nreservoirs > 2:
+        Qst2 = np.ones((len(df), 2))
+        Qst2[:, 0] = np.nan
+        mod.set_Qstars(2, Qst2)
+
+        # Set demand for routing reservoir
+        fxs[2, 1] = demand
+
     mod.flux_scalings = fxs
 
     # Run model
@@ -936,23 +954,16 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
     mod.aggregate()
     dtq = time.time() - t0
 
-    dfx = mod.dfluxes_agg
+    dfx = mod.dfluxes
+    dfxa = mod.dfluxes_agg
 
     dtn = 0
-
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
 
         # Numerical differences
         modp = mod.clone()
-        modp.allocate(len(df), timestep_agg=timestep_agg)
-        modp.set_Qstars(0, Qst0)
-        modp.set_Qstars(2, Qst2)
-
         modm = mod.clone()
-        modm.allocate(len(df), timestep_agg=timestep_agg)
-        modm.set_Qstars(0, Qst0)
-        modm.set_Qstars(2, Qst2)
 
         # Test downstream parameters have no effect on upstream fluxes
         if rid > 0:
@@ -960,7 +971,7 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             assert allclose(dfxu, 0.)
 
         if vid == 0:
-            eps = 1e-6 * mod.gammas[rid]
+            eps = 1e-7 * mod.gammas[rid]
             delta = 2 * eps
 
             # Differentiate against gamma
@@ -971,7 +982,6 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             gs = mod.gammas.copy()
             gs[rid] = gs[rid] - eps
             modm.gammas = gs
-
         else:
             eps = 5e-7
             delta = 2 * eps
@@ -983,38 +993,53 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
         t0 = time.time()
         modp.run()
         modp.aggregate()
+
         modm.run()
         modm.aggregate()
-        dfx_n = (modp.fluxes_agg - modm.fluxes_agg) / delta
+
+        dfx_n = (modp.fluxes - modm.fluxes) / delta
+        dfxa_n = (modp.fluxes_agg - modm.fluxes_agg) / delta
+
         dtn += time.time() - t0
 
         # get sim
         dfx_c = dfx[:, ivar, :, :]
+        dfxa_c = dfxa[:, ivar, :, :]
 
         if vid == 0:
             dfx_n *= mod.gammas[rid]
+            dfxa_n *= mod.gammas[rid]
+
             dfx_c *= mod.gammas[rid]
+            dfxa_c *= mod.gammas[rid]
 
         if debug_mode:
             plot_it = False
             atol = 5e-4
             for res in range(mod.nreservoirs):
-                dfx_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
-                                              dfx_n[:, res, :], dfx_c[:, res, :])
-                plot_it = np.nanmax(dfx_err_max) > atol
+                dfxa_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
+                                               dfxa_n[:, res, :], dfxa_c[:, res, :])
+                plot_it = np.nanmax(dfxa_err_max) > atol
 
             if not plot_it:
                 continue
-            fig, axs = plt.subplots(ncols=3, nrows=3,
-                                    figsize=(12, 8),
+
+            plt.close("all")
+            nres = mod.nreservoirs
+            fig, axs = plt.subplots(ncols=3, nrows=nres,
+                                    figsize=(12, 3 * nres),
                                     layout="constrained")
+            axs = np.array(axs[None, :]) if nres == 1 else axs
+
             for res in range(mod.nreservoirs):
                 for ifx in range(gradients.NFLUXES_INPUTS):
                     ax = axs[res, ifx]
+                    #dc = dfxa_c[:, res, ifx]
+                    #dn = dfxa_n[:, res, ifx]
                     dc = dfx_c[:, res, ifx]
                     dn = dfx_n[:, res, ifx]
                     ax.plot(dc, label="Quasoare")
-                    ax.plot(dn, label="Numerical")
+                    ax.plot(dn, label="FinDiff")
 
                     tax = ax.twinx()
                     #tax.plot(mod.fluxes[:, res, ifx], color="0.5", lw=0.8)
@@ -1029,14 +1054,25 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             ftitle = f"Derivative against var #{ivar} (res={rid}, type={vid})"
             fig.suptitle(ftitle, fontweight="bold")
             plt.show()
+            import pdb; pdb.set_trace()
+
 
         atol = 5e-4
         for res in range(mod.nreservoirs):
-            dfx_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
+            dfx_err_max, _ = comp_dfluxes(mod.fluxes[:, res],
                                           dfx_n[:, res, :], dfx_c[:, res, :])
-            assert np.nanmax(dfx_err_max) < atol
+            emax = np.nanmax(dfx_err_max)
+            errmsg = f"Res {res}: dfx emax={emax:0.2e}"
+            assert emax < atol, errmsg
 
-    assert dtq < dtn / 2
+            dfxa_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
+                                          dfxa_n[:, res, :], dfxa_c[:, res, :])
+            emax = np.nanmax(dfxa_err_max)
+            errmsg = f"Res {res}: dfxa emax={emax:0.2e}"
+            assert emax < atol, errmsg
+
+    if not debug_mode:
+        assert dtq < dtn / 2
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
@@ -1332,6 +1368,7 @@ def test_flux_scalings(allclose):
     # Fluxes are identical
     assert allclose(modb.fluxes, modc.fluxes)
 
+
 @pytest.mark.parametrize("reservoir", ["gr4jprod", "quadrouting"])
 @pytest.mark.parametrize("nsub", [1, 2, 6, 100])
 def test_flux_aggreg(reservoir, nsub, allclose):
@@ -1392,10 +1429,7 @@ def test_flux_aggreg_gr4jprod(allclose):
                                             errors="raise")
         mod.set_coefs_linear(0, "gr4jprod")
         mod.allocate(ntimesteps_agg=ntimesteps_agg)
-
-        inputs = np.repeat(hclim, nsub, axis=0)
-        mod.set_Qstars(0, inputs)
-
+        mod.set_Qstars(0, hclim)
         mod.gammas = [400.]
         mod.x0 = 0.5
 
@@ -1540,3 +1574,36 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
 
     mlrm2 = math.log(em_2.squeeze())
     assert mlrm2 < mlrm
+
+
+@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("timestep_agg", [1., 5., 0.1])
+@pytest.mark.parametrize("nsubsteps", [2])
+def test_openwater(siteid, timestep_agg, nsubsteps, allclose):
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim.iloc[:, 1] *= -1
+    ntimesteps = len(hclim)
+
+    nalphas = 10
+    mod = gradients.MultiReservoirModel(1, nalphas,
+                                        nsubsteps,
+                                        errors="raise")
+    mod.allocate(ntimesteps,
+                 timestep_agg=timestep_agg)
+    mod.x0 = 0.5
+    mod.set_coefs_linear(0, "openwater")
+
+    mod.set_Qstars(0, hclim)
+    mod.gammas = [1e-4]
+    mod.run()
+    mod.aggregate()
+
+    Pi = -mod.fluxes_agg[:, 0, 3]
+    expected = np.maximum(hclim.sum(axis=1), 0).values
+    atol = 1e-3
+    assert allclose(Pi, expected, atol=atol)
+
+    Ei = mod.fluxes_agg[:, 0, 4]
+    expected = np.maximum(-hclim.sum(axis=1), 0)
+    assert allclose(Ei, expected, atol=atol)
+

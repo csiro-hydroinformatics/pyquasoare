@@ -69,12 +69,7 @@ FLUX_FUNCTIONS = {
     "openwater": [
         lambda x: np.where(x < 1., 1., 0.),
         lambda x: np.where(x > 0., 1., 0.),
-        lambda x: np.where(x < 1., 0., (x - 1) * 1e10)
-        ],
-    "openwatersmooth": [
-        lambda x: thresh_smooth(1 - x, 1e-2),
-        lambda x: thresh_smooth(x, 1e-2),
-        lambda x: np.where(x < 1., 0., (x - 1) * 1e10)
+        lambda x: np.where(x < 1., 0., (x - 1)**2 * 1e3)
         ]
 }
 
@@ -561,6 +556,7 @@ class MultiReservoirModel():
         self.dfluxes = None
         self.fluxes_agg = None
         self.dfluxes_agg = None
+        self.idx_agg = None
         self.niter = None
         self.timestep = None
         self.timestep_agg = None
@@ -810,7 +806,11 @@ class MultiReservoirModel():
             "timestep",
             "timestep_agg",
             "ntimesteps",
-            "ntimesteps_agg"
+            "ntimesteps_agg",
+            "fluxes",
+            "dfluxes",
+            "fluxes_agg",
+            "dfluxes_agg"
             ]
         for attrn in attrns:
             value = getattr(self, attrn)
@@ -827,6 +827,10 @@ class MultiReservoirModel():
         inpm, inpmw = self.get_input_mapping()
 
         # Correct flux scaling to account for substeps
+        # We need this because timestep is Δ/nsubsteps
+        # Then we need a correction on the drainage flux
+        # to keep the reservoir equation as:
+        # dx/dt = Qst1/Γ f1(x) + Qst2/Γ f2(x) -1/Δ f3(x)
         fxs = self._flux_scalings_substeps
         fxs[:] = self.flux_scalings[:]
         fxs[:, 2] = 1. / self.nsubsteps
@@ -857,11 +861,18 @@ class MultiReservoirModel():
             errmsg = "fluxes and dfluxes are none. Please allocate."
             raise ValueError(errmsg)
 
-        self.fluxes_agg[:-1] = aggregate(self.fluxes,
-                                         self.ntimesteps_agg,
-                                         self.nsubsteps)
+        # Could be improved...
+        nsub = self.nsubsteps
+        if nsub > 1:
+            self.fluxes_agg[:-1] = aggregate(self.fluxes,
+                                             self.ntimesteps_agg,
+                                             nsub)
+            self.fluxes_agg[-1] = self.fluxes[-nsub:].mean(axis=0)
 
-        self.dfluxes_agg[:-1] = aggregate(self.dfluxes,
-                                          self.ntimesteps_agg,
-                                          self.nsubsteps)
-
+            self.dfluxes_agg[:-1] = aggregate(self.dfluxes,
+                                              self.ntimesteps_agg,
+                                              nsub)
+            self.dfluxes_agg[-1] = self.dfluxes[-nsub:].mean(axis=0)
+        else:
+            self.fluxes_agg = self.fluxes
+            self.dfluxes_agg = self.dfluxes
