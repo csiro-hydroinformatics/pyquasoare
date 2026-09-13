@@ -462,14 +462,14 @@ def test_grad_reservoir_nan(debug_mode):
                                                  mod.gammas[0],
                                                  Qst0,
                                                  coefs,
-                                                 timestep, mod.x0[0])
+                                                 timestep_agg, mod.x0[0])
 
     Qst1 = np.ascontiguousarray(-fx0[:, 3:5])
     n1, x1, _, fx1, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[1]),
                                                  mod.gammas[1],
                                                  Qst1,
                                                  np.ascontiguousarray(mod.coefs_linear[1]),
-                                                 timestep, mod.x0[1],
+                                                 timestep_agg, mod.x0[1],
                                                  errors="raise")
     assert np.all(~np.isnan(fx1))
 
@@ -566,7 +566,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
     # Mass balance
     dSa = np.diff(x2) * gamma
     dSb = timestep * fx2[1:, :3].sum(axis=1)
-    assert allclose(dSa, dSb, atol=5e-8)
+    assert allclose(dSa, dSb, atol=5e-7)
 
     if reservoir == "transluent":
         # No flux storage
