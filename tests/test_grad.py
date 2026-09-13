@@ -709,7 +709,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             fig.suptitle(ftitle, fontweight="bold")
             plt.show()
 
-        print(f"x={dx_err:8.3e} fx={np.nanmax(dfx_err_max):8.3e}")
+        #print(f"x={dx_err:8.3e} fx={np.nanmax(dfx_err_max):8.3e}")
         assert dx_err < xtol
         assert np.nanmax(dfx_err_max) < ftol
 
