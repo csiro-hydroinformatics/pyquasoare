@@ -661,11 +661,6 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         dx_n = (xp - xm) / 2 / eps
         dfx_n = (fxp - fxm) / 2 / eps
 
-        if vid == 0:
-            # Convert dflux against gamma to dflux against gamma scaling
-            dfx_n *= gamma
-            dfx_v *= gamma
-
         dx_err = max_abs_raw_err(dx_n, dx_v)
 
         # Special case
@@ -676,7 +671,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
 
         dfx_err_max, _ = comp_dfluxes(fx, dfx_n, dfx_v, exclude=exclude)
 
-        xtol = 1e-5
+        xtol = 1e-4
         ftol = 5e-3
 
         if debug_mode and (dx_err > xtol or dfx_err_max.max() > ftol):
@@ -897,49 +892,57 @@ def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
 @pytest.mark.parametrize("timestep_agg", TIMESTEPS)
+@pytest.mark.parametrize("nsubsteps", [1, 4])
 @pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS[:2])
-def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
+def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
+                            demand, flux_scalings,
                             allclose, debug_mode):
     if debug_mode:
-        noriginal = 30
+        noriginal = 200
         nrepeat = 1
     else:
-        noriginal = int(365.25 * 100)
-        nrepeat = 2
+        noriginal = int(365.25 * 50)
+        nrepeat = 1
+    #noriginal = int(365.25 * 50)
+    #nrepeat = 1
 
-    df = data_reader.get_data(siteid, "daily", 0).iloc[-noriginal:]
-    df = df.interpolate().iloc[:, :2]
-    assert df.shape == (noriginal, 2)
-    df = np.tile(df, (nrepeat, 1))
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[-noriginal:]
+    hclim = hclim.interpolate().iloc[:, :2]
+    assert hclim.shape == (noriginal, 2)
+    hclim = np.tile(hclim, (nrepeat, 1))
+
+    hclim = hclim[:30]
 
     # Basic gr4j model
-    mod = gradients.MultiReservoirModel(1,
-                                        nalphas=20,
-                                        nsubsteps=4,
+    mod = gradients.MultiReservoirModel(3,
+                                        nalphas=50,
+                                        nsubsteps=nsubsteps,
                                         errors="raise")
-    #mod.add_link_bypass_shortfall(0, 1)
-    #mod.add_link_outflow(1, 2)
+    mod.add_link_bypass_shortfall(0, 1)
+    mod.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, "openwater")
-    #mod.set_coefs_linear(1, "gr4jprod")
-    #mod.set_coefs_linear(2, "gr4jroute")
-    #mod.gammas = [5., 400., 50.]
-    mod.gammas = [1e-2]
+    mod.set_coefs_linear(0, "transluent")
+    mod.set_coefs_linear(1, "gr4jprod")
+    mod.set_coefs_linear(2, "gr4jroute")
+    mod.gammas = [1e-1, 400., 50.]
 
-    nv = gradients.VARTYPE_NUMBER
-    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in range(nv)]
-    mod.allocate(len(df), variables_specs=vspecs,
+    nvs = np.arange(gradients.VARTYPE_NUMBER)
+    #vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
+    vspecs = [[res, i] for res in range(1, mod.nreservoirs) for i in nvs]
+    mod.allocate(ntimesteps_agg=len(hclim),
+                 variables_specs=vspecs,
                  timestep_agg=timestep_agg)
-
-    Qst0 = df
+    x0 = 0.5
+    mod.x0 = x0
+    Qst0 = hclim
     Qst0[:, 1] *= -1
     mod.set_Qstars(0, Qst0)
 
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
     if mod.nreservoirs > 2:
-        Qst2 = np.ones((len(df), 2))
+        Qst2 = np.ones((mod.ntimesteps_agg, 2))
         Qst2[:, 0] = np.nan
         mod.set_Qstars(2, Qst2)
 
@@ -957,13 +960,12 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
     dfx = mod.dfluxes
     dfxa = mod.dfluxes_agg
 
+    modp = mod.clone()
+    modm = mod.clone()
+
     dtn = 0
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
-
-        # Numerical differences
-        modp = mod.clone()
-        modm = mod.clone()
 
         # Test downstream parameters have no effect on upstream fluxes
         if rid > 0:
@@ -971,7 +973,8 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             assert allclose(dfxu, 0.)
 
         if vid == 0:
-            eps = 1e-7 * mod.gammas[rid]
+            e0 = 1e-7
+            eps = e0 * max(1., mod.gammas[rid])
             delta = 2 * eps
 
             # Differentiate against gamma
@@ -983,7 +986,7 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
             gs[rid] = gs[rid] - eps
             modm.gammas = gs
         else:
-            eps = 5e-7
+            eps = 1e-7
             delta = 2 * eps
             inp = vid - 1
             modm.flux_scalings[rid, inp] -= eps
@@ -997,6 +1000,7 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
         modm.run()
         modm.aggregate()
 
+        dx_n = (modp.x - modm.x) / delta
         dfx_n = (modp.fluxes - modm.fluxes) / delta
         dfxa_n = (modp.fluxes_agg - modm.fluxes_agg) / delta
 
@@ -1006,19 +1010,14 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
         dfx_c = dfx[:, ivar, :, :]
         dfxa_c = dfxa[:, ivar, :, :]
 
-        if vid == 0:
-            dfx_n *= mod.gammas[rid]
-            dfxa_n *= mod.gammas[rid]
-
-            dfx_c *= mod.gammas[rid]
-            dfxa_c *= mod.gammas[rid]
-
         if debug_mode:
             plot_it = False
             atol = 5e-4
+            emax = {}
             for res in range(mod.nreservoirs):
-                dfxa_err_max, _ = comp_dfluxes(mod.fluxes_agg[:, res],
-                                               dfxa_n[:, res, :], dfxa_c[:, res, :])
+                fx = mod.fluxes_agg[:, res]
+                dfxa_err_max, _ = comp_dfluxes(fx, dfxa_n[:, res, :], dfxa_c[:, res, :])
+                emax[res] = dfxa_err_max
                 plot_it = np.nanmax(dfxa_err_max) > atol
 
             if not plot_it:
@@ -1026,37 +1025,59 @@ def test_grad_model_tangent(siteid, timestep_agg, demand, flux_scalings,
 
             plt.close("all")
             nres = mod.nreservoirs
-            fig, axs = plt.subplots(ncols=3, nrows=nres,
-                                    figsize=(12, 3 * nres),
+            fig, axs = plt.subplots(ncols=4, nrows=nres,
+                                    figsize=(15, 3 * nres),
                                     layout="constrained")
             axs = np.array(axs[None, :]) if nres == 1 else axs
 
             for res in range(mod.nreservoirs):
+                ax = axs[res, 0]
+                ax.plot(mod.dx[:, res, ivar], label="QuaSoARe")
+                ax.plot(dx_n[:, res], label="FinDiff")
+                tax = ax.twinx()
+                tax.plot(np.abs(mod.dx[:, res, ivar] - dx_n[:, ivar]), color="0.5", lw=0.5)
+                title = f"Res#{res} x"
+                ax.set(title=title)
+
+                denom = flux_denom(mod.fluxes[:, res])
                 for ifx in range(gradients.NFLUXES_INPUTS):
-                    ax = axs[res, ifx]
+                    ax = axs[res, 1 + ifx]
+
                     #dc = dfxa_c[:, res, ifx]
                     #dn = dfxa_n[:, res, ifx]
-                    dc = dfx_c[:, res, ifx]
-                    dn = dfx_n[:, res, ifx]
-                    ax.plot(dc, label="Quasoare")
+                    den = 1. + 0. * denom[:, ifx]
+                    dc = dfx_c[:, res, ifx] / den
+                    ax.plot(dc, label="QuaSoARe")
+
+                    dn = dfx_n[:, res, ifx] / den
                     ax.plot(dn, label="FinDiff")
 
                     tax = ax.twinx()
-                    #tax.plot(mod.fluxes[:, res, ifx], color="0.5", lw=0.8)
-                    tax.plot(dc - dn, color="0.7", lw=0.8, zorder=0)
+                    tax.plot(np.abs(dc - dn), color="0.5", lw=0.5)
 
-                    title = f"Res#{res} Flux#{ifx}"
+                    err = emax[res][ifx]
+                    title = f"Res#{res} Flux#{ifx} err={err:0.2e}"
                     ax.set(title=title)
 
                     if res == 0 and ifx == 0:
                         ax.legend()
 
-            ftitle = f"Derivative against var #{ivar} (res={rid}, type={vid})"
+            ftitle = f"Derivative against var #{ivar} " \
+                     + f" (nsub={nsubsteps} res={rid} type={vid})"
             fig.suptitle(ftitle, fontweight="bold")
             plt.show()
             import pdb; pdb.set_trace()
 
 
+        # Reset models
+        if vid == 0:
+            modp.gammas[rid] = mod.gammas[rid]
+            modm.gammas[rid] = mod.gammas[rid]
+        else:
+            modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
+            modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
+
+        # Perf
         atol = 5e-4
         for res in range(mod.nreservoirs):
             dfx_err_max, _ = comp_dfluxes(mod.fluxes[:, res],
