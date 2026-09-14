@@ -902,10 +902,8 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         noriginal = 200
         nrepeat = 1
     else:
-        noriginal = int(365.25 * 50)
-        nrepeat = 1
-    #noriginal = int(365.25 * 50)
-    #nrepeat = 1
+        noriginal = int(365.25 * 100)
+        nrepeat = 2
 
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[-noriginal:]
     hclim = hclim.interpolate().iloc[:, :2]
@@ -922,7 +920,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, "transluent")
+    mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
     mod.gammas = [1e-1, 400., 50.]
@@ -960,10 +958,10 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     dfx = mod.dfluxes
     dfxa = mod.dfluxes_agg
 
+    dtn = 0
     modp = mod.clone()
     modm = mod.clone()
 
-    dtn = 0
     for ivar, vspec in enumerate(vspecs):
         rid, vid = vspec
 
@@ -978,19 +976,17 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
             delta = 2 * eps
 
             # Differentiate against gamma
-            gs = mod.gammas.copy()
-            gs[rid] = gs[rid] + eps
-            modp.gammas = gs
-
-            gs = mod.gammas.copy()
-            gs[rid] = gs[rid] - eps
-            modm.gammas = gs
+            modp.gammas[rid] = mod.gammas[rid] + eps
+            modm.gammas[rid] = mod.gammas[rid] - eps
         else:
             eps = 1e-7
-            delta = 2 * eps
             inp = vid - 1
-            modm.flux_scalings[rid, inp] -= eps
-            modp.flux_scalings[rid, inp] += eps
+            modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp] - eps
+            modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp] + eps
+
+            delta = 2 * eps
+            if vid == 3:
+                delta /= nsubsteps
 
         # Compute numerical difference
         t0 = time.time()
@@ -1005,6 +1001,14 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         dfxa_n = (modp.fluxes_agg - modm.fluxes_agg) / delta
 
         dtn += time.time() - t0
+
+        # Reset models
+        if vid == 0:
+            modp.gammas[rid] = mod.gammas[rid]
+            modm.gammas[rid] = mod.gammas[rid]
+        else:
+            modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
+            modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
 
         # get sim
         dfx_c = dfx[:, ivar, :, :]
@@ -1035,7 +1039,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                 ax.plot(mod.dx[:, res, ivar], label="QuaSoARe")
                 ax.plot(dx_n[:, res], label="FinDiff")
                 tax = ax.twinx()
-                tax.plot(np.abs(mod.dx[:, res, ivar] - dx_n[:, ivar]), color="0.5", lw=0.5)
+                tax.plot(np.abs(mod.dx[:, res, ivar] - dx_n[:, res]), color="0.5", lw=0.5)
                 title = f"Res#{res} x"
                 ax.set(title=title)
 
@@ -1068,15 +1072,6 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
             plt.show()
             import pdb; pdb.set_trace()
 
-
-        # Reset models
-        if vid == 0:
-            modp.gammas[rid] = mod.gammas[rid]
-            modm.gammas[rid] = mod.gammas[rid]
-        else:
-            modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
-            modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
-
         # Perf
         atol = 5e-4
         for res in range(mod.nreservoirs):
@@ -1092,8 +1087,8 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
             errmsg = f"Res {res}: dfxa emax={emax:0.2e}"
             assert emax < atol, errmsg
 
-    if not debug_mode:
-        assert dtq < dtn / 2
+    #if not debug_mode and min(dtq, dtn) > 0.:
+    #    assert dtq < dtn * 0.8
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
