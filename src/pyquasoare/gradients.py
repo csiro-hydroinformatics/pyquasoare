@@ -842,7 +842,7 @@ class MultiReservoirModel():
         else:
             fxs = self._flux_scalings_substeps
             fxs[:] = self.flux_scalings[:]
-            fxs[:, 2] = 1. / self.nsubsteps
+            fxs[:, 2] *= 1. / self.nsubsteps
 
         # Run model
         grad_model(alphas=self.alphas,
