@@ -70,6 +70,11 @@ FLUX_FUNCTIONS = {
         lambda x: np.where(x < 1., 1., 0.),
         lambda x: np.where(x > 0., 1., 0.),
         lambda x: np.where(x < 1., 0., (x - 1) * 1e3)
+        ],
+    "openwatersmooth": [
+        lambda x: np.where(x < 1., thresh_smooth(1 - x, 1e-2), 0.),
+        lambda x: np.where(x > 0., thresh_smooth(x, 1e-2), 0.),
+        lambda x: np.where(x < 1., 0., (x - 1) * 1e3)
         ]
 }
 
@@ -831,9 +836,13 @@ class MultiReservoirModel():
         # Then we need a correction on the drainage flux
         # to keep the reservoir equation as:
         # dx/dt = Qst1/Γ f1(x) + Qst2/Γ f2(x) -1/Δ f3(x)
-        fxs = self._flux_scalings_substeps
-        fxs[:] = self.flux_scalings[:]
-        fxs[:, 2] = 1. / self.nsubsteps
+        nsub = self.nsubsteps
+        if nsub == 1:
+            fxs = self.flux_scalings
+        else:
+            fxs = self._flux_scalings_substeps
+            fxs[:] = self.flux_scalings[:]
+            fxs[:, 2] = 1. / self.nsubsteps
 
         # Run model
         grad_model(alphas=self.alphas,
