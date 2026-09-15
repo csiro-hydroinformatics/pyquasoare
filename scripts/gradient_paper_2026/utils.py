@@ -12,11 +12,12 @@ def smooth_nodes(x, npts=5, prc=10):
     return np.linspace(x0, x1, npts)
 
 def smooth_X(x, nodes):
-    X = np.empty((len(x), len(nodes) + 1))
+    X = np.empty((len(x), len(nodes) + 2))
     X[:, 0] = 1.
+    X[:, 1] = x
     for i, n in enumerate(nodes):
         dx = x - n
-        X[:, i + 1] = np.abs(dx) * dx
+        X[:, i + 2] = np.abs(dx) * dx
     return X
 
 def smooth_reg(x, y):
@@ -25,11 +26,14 @@ def smooth_reg(x, y):
     X = smooth_X(x[iok], nodes)
 
     # Quantile reg objfun
+    theta_ext = np.empty(X.shape[1])
     def ofun(theta):
-        yhat = X @ theta
+        theta_ext[:-1] = theta
+        theta_ext[-1] = -theta[2:-1].sum()
+        yhat = X @ theta_ext
         return np.abs(yhat - y[iok]).sum()
 
-    theta0 = np.zeros(X.shape[1])
+    theta0 = np.zeros(X.shape[1] - 1)
     theta0[0] = np.nanmean(y) - np.nanmean(x)
     opt = minimize(ofun, theta0)
     theta = opt.x
@@ -86,28 +90,26 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps=1e-3):
-    afx = np.abs(fx)
-    #means = np.mean(afx, axis=0)[None, :]
-    maxs = np.max(afx, axis=0)[None, :]
-    #denom = eps + means
-    denom = eps + afx
-
-    _, i1, i2 = np.where(maxs < eps)
-    denom[:, i1, i2] = np.nan
-    return denom
-
 def flux_isabove(afx, prob):
     thresh = np.percentile(afx, prob, axis=0)[None, :]
     return np.where(afx > thresh, 1., np.nan)
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps=1e-3):
+
+def flux_denom(fx, eps1=1e-4, eps2=1e-3):
+    afx = np.abs(fx)
+    means = np.mean(afx, axis=0)[None, :]
+    maxs = np.max(afx, axis=0)[None, :]
+    shift = eps1 + eps2 * means
+    shift[maxs < eps1] = np.nan
+    return afx + shift
+
+
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
-    denom = flux_denom(fx_ref, eps)[:, None, :, :]
+    denom = flux_denom(fx_ref, eps1, eps2)
     err = num / denom
 
     emean = pd.Series(np.nan, index=REPORT_PROBS)
-    afx = np.abs(fx_ref)
     stats = {}
     for prob in REPORT_PROBS:
         is_above = flux_isabove(afx, prob)[:, None, :, :]
