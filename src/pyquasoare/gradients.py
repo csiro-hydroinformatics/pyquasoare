@@ -759,7 +759,18 @@ class MultiReservoirModel():
         ralphas = self.alphas[rid]
         self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
 
-    def set_Qstars(self, reservoir_id, Qstars):
+    def set_Qstars(self, Qstars):
+        self.check_allocated()
+        nres = self.nreservoirs
+        if Qstars.shape != (self.ntimesteps_agg, nres, NFLUXES_POTENTIAL):
+            errmsg = "Expected Qstars.shape to be"\
+                     + f" ({self.ntimesteps_agg}, {nres}, {NFLUXES_POTENTIAL}),"\
+                     + f" got {Qstars.shape}."
+            raise ValueError(errmsg)
+
+        self._Qstars[:] = np.repeat(Qstars, self.nsubsteps, axis=0)
+
+    def set_Qstars_one_reservoir(self, reservoir_id, Qstars):
         self.check_allocated()
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
