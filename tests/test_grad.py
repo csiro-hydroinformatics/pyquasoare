@@ -29,7 +29,7 @@ FTEST = source_file.parent
 NALPHAS = 50
 
 DEMANDS = [-0.5, 0., 0.1]
-TIMESTEPS = [1., 5.]
+TIMESTEPS_AGG = [1., 5.]
 GAMMAS = [10, 100, 10000]
 FLUX_SCALINGS = [
     [1., 1., 1.],
@@ -38,6 +38,8 @@ FLUX_SCALINGS = [
     [1., 1., 1.2]
     ]
 NUMDIFF_EPS = 1e-5
+
+SITEIDS = ["203014", "203004"]
 
 FLUX_FUNCTIONS = {
     "gr4jprodquad": [
@@ -202,7 +204,7 @@ def test_get_alphas(nalphas, amin, amax, nreservoirs):
     assert al.shape == (nreservoirs, nalphas)
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", [10])
 @pytest.mark.parametrize("timestep", [1])
@@ -374,10 +376,10 @@ def test_grad_integrate_error():
     assert ierr == 604
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
-@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("timestep", TIMESTEPS_AGG)
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     skip_this(reservoir, gamma, demand)
@@ -506,10 +508,10 @@ def test_grad_reservoir_specific(debug_mode, allclose):
     assert allclose(fx1, fx2)
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
-@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("timestep", TIMESTEPS_AGG)
 @pytest.mark.parametrize("demand", DEMANDS)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
 def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
@@ -597,10 +599,10 @@ def test_grad_reservoir_maxfun(allclose):
     assert allclose(outflow, expected, atol=gamma * 1.1)
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("reservoir", FLUX_FUNCTIONS)
 @pytest.mark.parametrize("gamma", GAMMAS)
-@pytest.mark.parametrize("timestep", TIMESTEPS)
+@pytest.mark.parametrize("timestep", TIMESTEPS_AGG)
 @pytest.mark.parametrize("demand", DEMANDS)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
 def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
@@ -794,11 +796,15 @@ def test_grad_model_clone(nsub, allclose):
 
     assert ntested == 13
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("timestep_agg", TIMESTEPS)
+@pytest.mark.parametrize("siteid", SITEIDS)
+@pytest.mark.parametrize("timestep_agg", TIMESTEPS_AGG)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
-def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
-    mod = gradients.MultiReservoirModel(6, errors="raise")
+@pytest.mark.parametrize("nsubsteps", [1, 4])
+def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
+                    debug_mode, allclose):
+
+    mod = gradients.MultiReservoirModel(5, nsubsteps=nsubsteps,
+                                        errors="raise")
 
     # Model is the sum of 3 contributions summed via a transluent reservoir:
     # 1. Interception -> GR4Jprod -> GR4Jroute -> out
@@ -806,48 +812,45 @@ def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
     # 3. GR4Jroute -> out
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
-    mod.add_link_outflow(2, 5)
-    mod.add_link_outflow(3, 5)
-    mod.add_link_outflow(4, 5)
+    mod.add_link_outflow(2, 4)
+    mod.add_link_outflow(3, 4)
 
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
-    mod.set_coefs_linear(3, "gr4jroute")
-    mod.set_coefs_linear(4, "gr4jroute")
-    mod.set_coefs_linear(5, "transluent")
-    mod.gammas = [5., 400., 50., 10., 5., 1.]
+    mod.set_coefs_linear(3, "quadrouting")
+    mod.set_coefs_linear(4, "transluent")
+    mod.gammas = [5., 400., 50., 100., 1.]
 
     # Set flux scaling for the interception reservoir
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
     mod.flux_scalings = fxs
 
-    df = data_reader.get_data(siteid, "daily")
-    df = df.iloc[:1]
-
-    nrep = 5
-    t = timestep * (np.arange(len(df))[:, None] + np.linspace(1./nrep, 1, nrep)[None, :]).ravel()
-    df = pd.DataFrame(np.repeat(df, nrep, axis=0),
-                      columns=df.columns)
-    timestep /= nrep
-
     # Set potential fluxes for the interception reservoir
+    df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep_agg=timestep_agg)
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
-    Qst0 = np.ascontiguousarray(Qst0)
     mod.set_Qstars(0, Qst0)
 
-    # Set potential fluxes for the routing reservoirs (use rainfall data)
+    # Set potential fluxes for the routing reservoirs
+    demand = -0.5
+    Qst2 = np.zeros_like(Qst0)
+    Qst2[:, 0] = np.nan
+    Qst2[:, 1] = demand
+    mod.set_Qstars(2, Qst2)
+
     Qst3 = Qst0.copy()
     Qst3[:, 1] = 0.
     mod.set_Qstars(3, Qst3)
-    mod.set_Qstars(4, Qst3)
 
     mod.run()
 
     # Run single reservoirs
+    Qst0 = np.repeat(Qst0, nsubsteps, axis=0)
+    timestep = mod.timestep
+    fxs[:, 2] /= nsubsteps
     coefs = np.ascontiguousarray(mod.coefs_linear[0])
     _, x0, _, fx0, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[0]),
                                                mod.gammas[0],
@@ -855,43 +858,45 @@ def test_grad_model(siteid, timestep_agg, allclose, flux_scalings, debug_mode):
                                                np.ascontiguousarray(mod.coefs_linear[0]),
                                                timestep, mod.x0[0],
                                                flux_scalings=fxs[0])
+    fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
+    fxs[:, 2] /= nsubsteps
     Qst1 = np.ascontiguousarray(-fx0[:, 3:5])
     _, _, _, fx1, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[1]),
                                                mod.gammas[1],
                                                Qst1,
                                                np.ascontiguousarray(mod.coefs_linear[1]),
-                                               timestep, mod.x0[1])
-    Qst2 = np.zeros_like(Qst0)
+                                               timestep, mod.x0[1],
+                                               flux_scalings=fxs[0])
+    Qst2 = np.zeros((mod.ntimesteps, 2))
     Qst2[:, 0] = -fx1[:, 5]
+    Qst2[:, 1] = demand
     _, _, _, fx2, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[2]),
                                                mod.gammas[2],
                                                Qst2,
                                                np.ascontiguousarray(mod.coefs_linear[2]),
-                                               timestep, mod.x0[2])
-    Qst3 = np.zeros_like(Qst0)
+                                               timestep, mod.x0[2],
+                                               flux_scalings=fxs[0])
+    Qst3 = np.zeros((mod.ntimesteps, 2))
     Qst3[:, 0] = Qst0[:, 0]
     _, _, _, fx3, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[3]),
                                                mod.gammas[3],
                                                Qst3,
                                                np.ascontiguousarray(mod.coefs_linear[3]),
-                                               timestep, mod.x0[3])
+                                               timestep, mod.x0[3],
+                                               flux_scalings=fxs[0])
 
-    _, _, _, fx4, _ = gradients.grad_reservoir(np.ascontiguousarray(mod.alphas[4]),
-                                               mod.gammas[4],
-                                               Qst3,
-                                               np.ascontiguousarray(mod.coefs_linear[4]),
-                                               timestep, mod.x0[4])
-
+    # Individual reservoir outputs
     for ires in range(mod.nreservoirs - 1):
-        fx = [fx0, fx1, fx2, fx3, fx4][ires]
+        fx = [fx0, fx1, fx2, fx3][ires]
         assert allclose(fx, mod.fluxes[:, ires])
 
-    qout = fx2[:, 5] + fx3[:, 5] + fx4[:, 5]
-    assert allclose(qout, mod.fluxes[:, 5, 5])
+    # Transluent output
+    qout = fx2[:, 5] + fx3[:, 5]
+    assert allclose(qout, mod.fluxes[:, -1, 5])
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("timestep_agg", TIMESTEPS)
+@pytest.mark.parametrize("siteid", SITEIDS)
+@pytest.mark.parametrize("timestep_agg", TIMESTEPS_AGG)
 @pytest.mark.parametrize("nsubsteps", [1, 4])
 @pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS[:2])
@@ -1091,7 +1096,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     #    assert dtq < dtn * 0.8
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("gamma_size", [10., 0.1])
 @pytest.mark.parametrize("timestep_agg", [1., 0.1])
 def test_grad_model_vs_gradbench_quadrouting(siteid, timestep_agg, gamma_size,
@@ -1523,7 +1528,7 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
     # Benchmark
     dgammas = np.ones(1)
     qin = np.ascontiguousarray(hclim.values[:, 0])
-    x, _, fluxes, dfluxes = benchmarks.gradbench_quadrouting_tangent(timestep,
+    x, _, fluxes, dfluxes = benchmarks.gradbench_quadrouting_tangent(timestep_agg,
                                                                      qin,
                                                                      x0,
                                                                      np.array([gamma]),
@@ -1570,18 +1575,21 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
     dfluxes_2 = (1. / 2 * modhigh1.fluxes
                  - 1. / 2 * modlow1.fluxes) / findiff_eps
 
-    # process
-    dfluxes *= -gamma
-    modref.dfluxes *= gamma
-
     # Perf
-    ex_ref, em_ref = comp_dfluxes(fluxes, dfluxes, modref.dfluxes[:, 0, [0], 5],
+    g = -gamma
+    ex_ref, em_ref = comp_dfluxes(fluxes,
+                                  g * dfluxes,
+                                  g * modref.dfluxes[:, 0, [0], 5],
                                   exclude=0)
 
-    ex_1, em_1 = comp_dfluxes(fluxes, dfluxes, dfluxes_1[:, [0], 5],
+    ex_1, em_1 = comp_dfluxes(fluxes,
+                              g * dfluxes,
+                              dfluxes_1[:, [0], 5],
                               exclude=0)
 
-    ex_2, em_2 = comp_dfluxes(fluxes, dfluxes, dfluxes_2[:, [0], 5],
+    ex_2, em_2 = comp_dfluxes(fluxes,
+                              g * dfluxes,
+                              dfluxes_2[:, [0], 5],
                               exclude=0)
 
     mlrm = math.log(em_ref.squeeze())
@@ -1592,7 +1600,7 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
     assert mlrm2 < mlrm
 
 
-@pytest.mark.parametrize("siteid", data_reader.SITEIDS)
+@pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("timestep_agg", [1., 5., 0.1])
 @pytest.mark.parametrize("nsubsteps", [2])
 def test_openwater(siteid, timestep_agg, nsubsteps, allclose):
