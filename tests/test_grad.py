@@ -752,7 +752,7 @@ def test_grad_model_clone(nsub, allclose):
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
-    mod.set_Qstars(0, Qst1)
+    mod.set_Qstars_one_reservoir(0, Qst1)
 
     modc = mod.clone()
 
@@ -832,18 +832,18 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     mod.allocate(len(df), timestep_agg=timestep_agg)
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
-    mod.set_Qstars(0, Qst0)
+    mod.set_Qstars_one_reservoir(0, Qst0)
 
     # Set potential fluxes for the routing reservoirs
     demand = -0.5
     Qst2 = np.zeros_like(Qst0)
     Qst2[:, 0] = np.nan
     Qst2[:, 1] = demand
-    mod.set_Qstars(2, Qst2)
+    mod.set_Qstars_one_reservoir(2, Qst2)
 
     Qst3 = Qst0.copy()
     Qst3[:, 1] = 0.
-    mod.set_Qstars(3, Qst3)
+    mod.set_Qstars_one_reservoir(3, Qst3)
 
     mod.run()
 
@@ -940,14 +940,14 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     mod.x0 = x0
     Qst0 = hclim
     Qst0[:, 1] *= -1
-    mod.set_Qstars(0, Qst0)
+    mod.set_Qstars_one_reservoir(0, Qst0)
 
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
     if mod.nreservoirs > 2:
         Qst2 = np.ones((mod.ntimesteps_agg, 2))
         Qst2[:, 0] = np.nan
-        mod.set_Qstars(2, Qst2)
+        mod.set_Qstars_one_reservoir(2, Qst2)
 
         # Set demand for routing reservoir
         fxs[2, 1] = demand
@@ -1153,7 +1153,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep_agg, gamma_size,
                  variables_specs=vspecs)
     Qst0 = np.zeros((nval, 2))
     Qst0[:, 0] = qin
-    mod.set_Qstars(0, Qst0)
+    mod.set_Qstars_one_reservoir(0, Qst0)
     t0 = time.time()
     mod.run()
     dtq = time.time() - t0
@@ -1165,11 +1165,11 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, timestep_agg, gamma_size,
     # numerical diff on quasoare
     modm = mod.clone()
     modm.allocate(nval, timestep_agg=timestep_agg)
-    modm.set_Qstars(0, Qst0)
+    modm.set_Qstars_one_reservoir(0, Qst0)
 
     modp = mod.clone()
     modp.allocate(nval, timestep_agg=timestep_agg)
-    modp.set_Qstars(0, Qst0)
+    modp.set_Qstars_one_reservoir(0, Qst0)
 
     eps = gamma * 1e-6
     modm.gammas = gamma - eps
@@ -1301,7 +1301,7 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     # Set inputs
     inputs = np.ascontiguousarray(hclim.values)
     inputs[:, 1] *= -1
-    mod.set_Qstars(0, inputs)
+    mod.set_Qstars_one_reservoir(0, inputs)
 
     # Set parameters
     X0, X1 = 1e-2, 400
@@ -1361,7 +1361,7 @@ def test_flux_scalings(allclose):
     hclim.iloc[:, 1] *= -1
     ntimesteps = len(hclim)
     moda.allocate(ntimesteps)
-    moda.set_Qstars(0, hclim)
+    moda.set_Qstars_one_reservoir(0, hclim)
     moda.gammas = 100.
     moda.x0 = 0.5
 
@@ -1406,7 +1406,7 @@ def test_flux_aggreg(reservoir, nsub, allclose):
     mod.set_coefs_linear(0, reservoir)
     mod.allocate(ntimesteps_agg=ntimesteps_agg,
                  variables_specs=[[0, 0], [0, 1]])
-    mod.set_Qstars(0, hclim)
+    mod.set_Qstars_one_reservoir(0, hclim)
     mod.gammas = [500.]
     mod.x0 = 0.5
     mod.run()
@@ -1450,7 +1450,7 @@ def test_flux_aggreg_gr4jprod(allclose):
                                             errors="raise")
         mod.set_coefs_linear(0, "gr4jprod")
         mod.allocate(ntimesteps_agg=ntimesteps_agg)
-        mod.set_Qstars(0, hclim)
+        mod.set_Qstars_one_reservoir(0, hclim)
         mod.gammas = [400.]
         mod.x0 = 0.5
 
@@ -1486,7 +1486,7 @@ def test_flux_aggreg_uh(nuh, allclose):
             if iuh > 0:
                 mod.add_link_outflow(iuh - 1, iuh)
         mod.allocate(ntimesteps_agg=ntimesteps_agg)
-        mod.set_Qstars(0, hclim)
+        mod.set_Qstars_one_reservoir(0, hclim)
 
         mod.gammas = [1.] * nuh
         mod.x0 = 0.5
@@ -1551,7 +1551,7 @@ def test_grad_model_vs_gradbench_routing(findiff_log10eps, gamma, debug_mode):
         mod.set_alphas(0, amin, amax)
         mod.set_coefs_linear(0, "quadrouting")
 
-        mod.set_Qstars(0, hclim)
+        mod.set_Qstars_one_reservoir(0, hclim)
         mod.gammas = gamma * (1 + eps)
         mod.run()
         return mod
@@ -1617,7 +1617,7 @@ def test_openwater(siteid, timestep_agg, nsubsteps, allclose):
     mod.x0 = 0.5
     mod.set_coefs_linear(0, "openwater")
 
-    mod.set_Qstars(0, hclim)
+    mod.set_Qstars_one_reservoir(0, hclim)
     mod.gammas = [1e-4]
     mod.run()
     mod.aggregate()
