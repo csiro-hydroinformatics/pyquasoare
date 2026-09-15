@@ -527,6 +527,12 @@ class Network():
 
 
 # -- Model class --
+def isnone(x, name):
+    if x is None:
+        raise ValueError(f"{name} is not set.")
+    return x
+
+
 class MultiReservoirModel():
     def __init__(self, nreservoirs,
                  nalphas=10,
@@ -552,17 +558,16 @@ class MultiReservoirModel():
 
         self.variables_reservoir_id = None
         self.variables_type_id = None
-        self.Qstars = None
-        self.dQstars_ext = None
+        self._Qstars = None
+        self._dQstars_ext = None
         self._x0 = None
-        self.x = None
-        self.dx = None
-        self.fluxes = None
-        self.dfluxes = None
-        self.fluxes_agg = None
-        self.dfluxes_agg = None
-        self.idx_agg = None
-        self.niter = None
+        self._x = None
+        self._dx = None
+        self._fluxes = None
+        self._dfluxes = None
+        self._fluxes_agg = None
+        self._dfluxes_agg = None
+        self._niter = None
         self.timestep = None
         self.timestep_agg = None
         self.ntimesteps = None
@@ -598,9 +603,6 @@ class MultiReservoirModel():
     def nreservoirs(self):
         return self.network.nreservoirs
 
-    def get_input_mapping(self):
-        return self.network.get_input_mapping()
-
     @property
     def coefs_linear(self):
         return self._coefs_linear
@@ -615,17 +617,47 @@ class MultiReservoirModel():
 
     @property
     def alphas(self):
-        al = self._alphas
-        if al is None:
-            raise ValueError("alphas are not set.")
-        return al
+        return isnone(self._alphas, "alphas")
+
+    @property
+    def Qstars(self):
+        return isnone(self._Qstars, "Qstars")
+
+    @property
+    def dQstars_ext(self):
+        return isnone(self._dQstars_ext, "dQstars_ext")
+
+    @property
+    def x(self):
+        return isnone(self._x, "x")
+
+    @property
+    def dx(self):
+        return isnone(self._dx, "dx")
+
+    @property
+    def fluxes(self):
+        return isnone(self._fluxes, "fluxes")
+
+    @property
+    def dfluxes(self):
+        return isnone(self._dfluxes, "dfluxes")
+
+    @property
+    def fluxes_agg(self):
+        return isnone(self._fluxes_agg, "fluxes_agg")
+
+    @property
+    def dfluxes_agg(self):
+        return isnone(self._dfluxes_agg, "dfluxes_agg")
+
+    @property
+    def niter(self):
+        return isnone(self._niter, "niter")
 
     @property
     def gammas(self):
-        gm = self._gammas
-        if gm is None:
-            raise ValueError("gammas are not set.")
-        return gm
+        return isnone(self._gammas, "gammas")
 
     @gammas.setter
     def gammas(self, value):
@@ -643,10 +675,7 @@ class MultiReservoirModel():
 
     @property
     def x0(self):
-        x0 = self._x0
-        if x0 is None:
-            raise ValueError("x0s are not set.")
-        return x0
+        return isnone(self._x0, "x0")
 
     @x0.setter
     def x0(self, value):
@@ -664,10 +693,7 @@ class MultiReservoirModel():
 
     @property
     def flux_scalings(self):
-        fs = self._flux_scalings
-        if fs is None:
-            raise ValueError("flux_scalings are not set.")
-        return fs
+        return isnone(self._flux_scalings, "flux_scalings")
 
     @flux_scalings.setter
     def flux_scalings(self, value):
@@ -683,6 +709,9 @@ class MultiReservoirModel():
                 raise ValueError(errmsg)
 
             self._flux_scalings = value.astype(np.float64)
+
+    def get_input_mapping(self):
+        return self.network.get_input_mapping()
 
     def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
                  downstream_reservoir_id, downstream_potential_flux_id,
@@ -742,9 +771,9 @@ class MultiReservoirModel():
                      + f" got {Qstars.shape}."
             raise ValueError(errmsg)
 
-        self.Qstars[:, reservoir_id, :] = np.repeat(Qstars,
-                                                    self.nsubsteps,
-                                                    axis=0)
+        self._Qstars[:, reservoir_id, :] = np.repeat(Qstars,
+                                                     self.nsubsteps,
+                                                     axis=0)
 
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
@@ -776,16 +805,16 @@ class MultiReservoirModel():
 
         Qst = np.zeros((ntimesteps, nres, nfxp))
         Qst.fill(np.nan)
-        self.Qstars = Qst
-        self.dQstars_ext = np.zeros((nvariables, nfxi))
-        self.x0 = 0.5
-        self.x = np.zeros((ntimesteps, nres))
-        self.dx = np.zeros((ntimesteps, nres, nvariables))
-        self.fluxes = np.zeros((ntimesteps, nres, nfxo))
-        self.dfluxes = np.zeros((ntimesteps, nvariables, nres, nfxo))
-        self.fluxes_agg = np.zeros((ntimesteps_agg, nres, nfxo))
-        self.dfluxes_agg = np.zeros((ntimesteps_agg, nvariables, nres, nfxo))
-        self.niter = np.zeros((ntimesteps, nres), dtype=np.int32)
+        self._Qstars = Qst
+        self._dQstars_ext = np.zeros((nvariables, nfxi))
+        self._x0 = 0.5 * np.ones(nres)
+        self._x = np.zeros((ntimesteps, nres))
+        self._dx = np.zeros((ntimesteps, nres, nvariables))
+        self._fluxes = np.zeros((ntimesteps, nres, nfxo))
+        self._dfluxes = np.zeros((ntimesteps, nvariables, nres, nfxo))
+        self._fluxes_agg = np.zeros((ntimesteps_agg, nres, nfxo))
+        self._dfluxes_agg = np.zeros((ntimesteps_agg, nvariables, nres, nfxo))
+        self._niter = np.zeros((ntimesteps, nres), dtype=np.int32)
 
     def clone(self):
         mcl = MultiReservoirModel(self.nreservoirs,
@@ -801,21 +830,21 @@ class MultiReservoirModel():
             "_flux_scalings",
             "_alphas",
             "_gammas",
-            "Qstars",
-            "x0",
-            "x",
-            "dx",
-            "fluxes",
-            "dfluxes",
-            "niter",
+            "_Qstars",
+            "_x0",
+            "_x",
+            "_dx",
+            "_fluxes",
+            "_dfluxes",
+            "_niter",
             "timestep",
             "timestep_agg",
             "ntimesteps",
             "ntimesteps_agg",
-            "fluxes",
-            "dfluxes",
-            "fluxes_agg",
-            "dfluxes_agg"
+            "_fluxes",
+            "_dfluxes",
+            "_fluxes_agg",
+            "_dfluxes_agg"
             ]
         for attrn in attrns:
             value = getattr(self, attrn)
@@ -852,16 +881,16 @@ class MultiReservoirModel():
                    x0=self.x0,
                    variables_reservoir_id=self.variables_reservoir_id,
                    variables_type_id=self.variables_type_id,
-                   Qstars=self.Qstars,
-                   coefs_linear=self.coefs_linear,
+                   Qstars=self._Qstars,
+                   coefs_linear=self._coefs_linear,
                    timestep=self.timestep,
                    flux_scalings=fxs,
-                   x=self.x,
-                   dx=self.dx,
-                   fluxes=self.fluxes,
-                   dfluxes=self.dfluxes,
-                   niter=self.niter,
-                   dQstars_ext=self.dQstars_ext,
+                   x=self._x,
+                   dx=self._dx,
+                   fluxes=self._fluxes,
+                   dfluxes=self._dfluxes,
+                   niter=self._niter,
+                   dQstars_ext=self._dQstars_ext,
                    errors=self.errors,
                    enforce_potential_inflow_pos=self._enforce_potential_inflow_pos)
 
@@ -872,16 +901,18 @@ class MultiReservoirModel():
 
         # Could be improved...
         nsub = self.nsubsteps
-        if nsub > 1:
-            self.fluxes_agg[:-1] = aggregate(self.fluxes,
-                                             self.ntimesteps_agg,
-                                             nsub)
-            self.fluxes_agg[-1] = self.fluxes[-nsub:].mean(axis=0)
+        fx = self._fluxes
+        dfx = self._dfluxes
 
-            self.dfluxes_agg[:-1] = aggregate(self.dfluxes,
-                                              self.ntimesteps_agg,
+        if nsub > 1:
+
+            self._fluxes_agg[:-1] = aggregate(fx, self.ntimesteps_agg,
                                               nsub)
-            self.dfluxes_agg[-1] = self.dfluxes[-nsub:].mean(axis=0)
+            self._fluxes_agg[-1] = fx[-nsub:].mean(axis=0)
+
+            self._dfluxes_agg[:-1] = aggregate(dfx, self.ntimesteps_agg,
+                                               nsub)
+            self._dfluxes_agg[-1] = dfx[-nsub:].mean(axis=0)
         else:
-            self.fluxes_agg = self.fluxes
-            self.dfluxes_agg = self.dfluxes
+            self._fluxes_agg = fx
+            self._dfluxes_agg = dfx
