@@ -32,9 +32,13 @@ from hydrodiy.stat import armodels
 
 from pyquasoare import gradients
 
+import importlib
+import utils
+importlib.reload(utils )
+
 from utils import get_parameters, forwardP, backwardP
 from utils import forwardE, backwardE, random_scalings
-from utils import flux_denom, flux_isabove, comp_dfluxes
+from utils import comp_fun
 from utils import REPORT_PROBS
 
 import importlib.util
@@ -651,7 +655,7 @@ def process(config, script_paths, logger, data):
             delta = np.log10(dt_quas_diff) - np.log10(dt_quas_neutral)
             results.loc[irepeat, f"log10runtimedeltaneutral_diff{order}[sec]"] = delta
 
-            ex, st = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
+            ex, st = comp_fun(modref.dfluxes, dfluxes)
             for prob in REPORT_PROBS:
                 cn = f"dfx_log10errmax{prob:02d}_diff{order}[-]"
                 le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
