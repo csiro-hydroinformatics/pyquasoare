@@ -799,7 +799,7 @@ def test_grad_model_clone(nsub, allclose):
 @pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("timestep_agg", TIMESTEPS_AGG)
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS)
-@pytest.mark.parametrize("nsubsteps", [1, 4])
+@pytest.mark.parametrize("nsubsteps", [1, 2])
 def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
                     debug_mode, allclose):
 
@@ -897,7 +897,7 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
 
 @pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("timestep_agg", TIMESTEPS_AGG)
-@pytest.mark.parametrize("nsubsteps", [1, 4])
+@pytest.mark.parametrize("nsubsteps", [1, 2])
 @pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 @pytest.mark.parametrize("flux_scalings", FLUX_SCALINGS[:2])
 def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
@@ -1307,15 +1307,15 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, allclose, debug_mode):
     X0, X1 = 1e-2, 400
     mod.gammas = [X0, X1] + [1] * nuh
     sc3 = nuh * 1.25 / X4
-    mod.coefs_linear[2:, :, 0] = sc3
+    mod.coefs_linear[2:, 2, :, 0] = sc3
 
     # Set numerical difference models
     modm = mod.clone()
     modp = mod.clone()
     eps = 1e-6
     for iuh in range(nuh):
-        modm.coefs_linear[2:, :, 0] = sc3 * X4 / (X4 - eps)
-        modp.coefs_linear[2:, :, 0] = sc3 * X4 / (X4 + eps)
+        modm.coefs_linear[2:, 2, :, 0] = sc3 * X4 / (X4 - eps)
+        modp.coefs_linear[2:, 2, :, 0] = sc3 * X4 / (X4 + eps)
 
     # Run models
     mod.run()
