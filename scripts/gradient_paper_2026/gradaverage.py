@@ -39,21 +39,16 @@ import importlib
 import utils
 importlib.reload(utils)
 
+import gradbench
+importlib.reload(gradbench)
+
 from gradbench import get_data, get_reservoir_id, \
     configure_model, allocate_model, log_model, set_qstars, \
-    set_parameters, comp_dfluxes, data_reader, \
-    MODEL_TIMESTEP
+    set_parameters, comp_dfluxes, data_reader
 
 from utils import comp_dfluxes, REPORT_PROBS
 
 np.random.seed(5446)
-
-
-def aggregate(x, ntimesteps, nagg):
-    agg = x.cumsum(axis=0)
-    agg[nagg:] = agg[nagg:] - agg[:-nagg]
-    idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
-    return agg[idx] / nagg
 
 
 def get_options():
@@ -63,7 +58,7 @@ def get_options():
     duration_repeat = 1
 
     nuh = 5
-    nsubsteps = [1, 12]
+    nsubsteps = [1, 4, 6, 12, 24, 48, 144]
 
     stationids = data_reader.SITEIDS
 
@@ -161,8 +156,7 @@ def process(config, script_paths, logger, data):
     mods = {}
     hclim = data.hydroclim
     #hclim = hclim.loc["2022"].values
-    #istart, iend = 0, len(hclim) - 1
-    istart, iend = 0, 70
+    istart, iend = 0, len(hclim) - 1
     time = hclim.index[istart:iend]
     hclim = hclim.values[istart:iend]
 
@@ -211,103 +205,107 @@ def process(config, script_paths, logger, data):
                 set_parameters(config, logger, mod)
             else:
                 mod1 = mods[1]
-                mod.Qstars = np.repeat(mod1.Qstars, nsub, axis=0)
+                mod.set_Qstars(mod1.Qstars)
                 mod.gammas = mod1.gammas
                 for res in np.arange(mod.nreservoirs):
                     mod.coefs_linear[res] = mod1.coefs_linear[res]
 
-            if irepeat == 0:
+            if irepeat == 0 and nsub == 1:
                 log_model(config, logger, mod)
 
             mod.run()
+            mod.aggregate()
 
             # Rescale fluxes -> Get dfluxes in mm / d
             nvars = len(mod.variables_reservoir_id)
             for ivar in range(nvars):
                 res = mod.variables_reservoir_id[ivar]
                 mod.dfluxes[:, ivar] *= mod.gammas[res]
+                mod.dfluxes_agg[:, ivar] *= mod.gammas[res]
+
 
         # Compute performance
         nsubmax = np.max(nsubsteps)
         modsmax = mods[nsubmax]
+        fxa = modsmax.fluxes_agg
+        dfxa = modsmax.dfluxes_agg
 
         for nsub, mod in mods.items():
             if nsub == nsubmax:
                 continue
 
-            if nsub != 1:
-                continue
-
             nagg = nsubmax // nsub
             assert nagg * nsub == nsubmax
-            fx = aggregate(modsmax.fluxes, mod.ntimesteps, nagg)
-            ex = comp_dfluxes(fx, fx[:, None, :], mod.fluxes[:-1, None, :])
+            ex, st = comp_dfluxes(fxa, fxa[:, None, :], mod.fluxes_agg[:, None, :])
 
             #import matplotlib.pyplot as plt
             #plt.close("all")
-            #fig, axs = plt.subplots(nrows=3, ncols=5, sharex=True,
+            #fig, axs = plt.subplots(nrows=3, ncols=4, sharex=True,
             #                        layout="constrained",
             #                        figsize=(15, 7))
 
-            #n = modsmax.nsubsteps
-            #delta = np.array([pd.Timedelta(days=i/n) for i in range(1, n+1)])
-            #delta = np.tile(delta,(len(time)))
-            #t0 = np.repeat(time, n) + delta
+            #t0 = pd.date_range(time[0], freq="D",
+            #                   periods=mod.ntimesteps_agg)
 
-            #n = mod.nsubsteps
-            #delta = np.array([pd.Timedelta(days=i/n) for i in range(1, n+1)])
-            #delta = np.tile(delta,(len(time)))
-            #t1 = np.repeat(time, n) + delta
+            #ts = 86400 * mod.timestep_agg / nsub
+            #t1 = pd.date_range(time[0], freq=f"{ts}s",
+            #                   periods=mod.ntimesteps)
+
+            #ts = 86400 * mod.timestep_agg / nsubmax
+            #t2 = pd.date_range(time[0], freq=f"{ts}s",
+            #                   periods=modsmax.ntimesteps)
 
             #res0 = get_reservoir_id(config, 0, "openwater")
             #res1 = get_reservoir_id(config, 0, "gr4jprod")
             #res2 = get_reservoir_id(config, 0, "uh0")
-            #res3 = get_reservoir_id(config, 0, "uh1")
-            #res4 = get_reservoir_id(config, 0, "gr4jroute")
+            #res3 = get_reservoir_id(config, 0, "gr4jroute")
 
             ##pstart = mdates.date2num(pd.to_datetime("2019-01-01"))
             ##pend = mdates.date2num(pd.to_datetime("2022-12-31"))
             #pstart = mdates.date2num(time[0])
             #pend = mdates.date2num(time[-1])
 
-            #for ires, res in enumerate([res0, res1, res2, res3, res4]):
+            #for ires, res in enumerate([res0, res1, res2, res3]):
             #    ax = axs[0, ires]
-            #    ax.plot(t0, modsmax.Qstars[:, res, :], "+-")
-            #    ax.plot(t1, mod.Qstars[:, res, :], "o-")
+            #    ax.plot(t0, mods[1].Qstars[:, res, :], "o-")
+            #    ax.plot(t2, modsmax.Qstars[:, res, :], "+-")
+            #    ax.set(title=f"Res {res} - Qstars")
 
             #    ax = axs[2, ires]
-            #    ax.plot(t0, -modsmax.fluxes[:, res, 5], "+-")
-            #    ax.plot(t1[:-1], -fx[:, res, 5], "o-")
-            #    ax.plot(t1, -mod.fluxes[:, res, 5], "o-")
+            #    ifx = 0
+            #    ax.plot(t2, -modsmax.fluxes[:, res, ifx], "k.-", lw=0.5)
+            #    ax.plot(t0, -fxa[:, res, ifx], "o-")
+            #    ax.plot(t0, -mod.fluxes_agg[:, res, ifx], "o-")
             #    tax = ax.twinx()
-            #    tax.plot(t1[:-1], np.abs(fx[:, res, 5]-mod.fluxes[:-1, res, 5]),
+            #    tax.plot(t0, np.abs(fxa[:, res, ifx]-mod.fluxes_agg[:, res, ifx]),
             #             color="0.1", lw=0.8, alpha=0.1)
 
-            #    ax.set(title=f"Res {res} - fluxes",
+
+            #    ex1, st1 = comp_dfluxes(fxa[:, res, ifx][:, None, None],
+            #                            fxa[:, res, ifx][:, None, None],
+            #                            mod.fluxes_agg[:, res, ifx][:, None, None])
+
+            #    ax.set(title=f"Res {res} - fluxes err={ex1[90]:0.2e}",
             #           xlim=(pstart, pend))
 
             #    ax = axs[1, ires]
-            #    ax.plot(t0, modsmax.x[:, res], "+-")
+            #    ax.plot(t2, modsmax.x[:, res], "k.-", lw=0.5)
             #    ax.plot(t1, mod.x[:, res], "o-")
             #    ax.set(title=f"Res {res} - stores",
             #           xlim=(pstart, pend))
 
             #plt.show()
-            #import pdb; pdb.set_trace()
 
             for prob in REPORT_PROBS:
                 cn = f"fx_log10errmax{prob:02d}_nsubsteps{nsub:03d}[-]"
                 le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
                 results.loc[irepeat, cn] = le
 
-            dfx = aggregate(modsmax.dfluxes, mod.ntimesteps, nsubmax // nsub)
-            ex = comp_dfluxes(fx, dfx, mod.dfluxes[:-1])
+            ex, st = comp_dfluxes(fxa, dfxa, mod.dfluxes_agg)
             for prob in REPORT_PROBS:
                 cn = f"dfx_log10errmax{prob:02d}_nsubsteps{nsub:03d}[-]"
                 le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
                 results.loc[irepeat, cn] = le
-
-        import pdb; pdb.set_trace()
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
@@ -347,9 +345,7 @@ if __name__ == "__main__":
     task = opm.get_task(taskid)
 
     if debug:
-        opm.context["nuh"] = 11
-        task.nreaches = 3
-        task.findiff_log10eps = -3
+        task.nreaches = 50
         task.gamma_mean = (1000, 500, 1000)
 
     config = Config(version, taskid, overwrite,

@@ -45,7 +45,7 @@ spec.loader.exec_module(data_reader)
 
 np.random.seed(5446)
 
-MODEL_TIMESTEP = 1.
+MODEL_TIMESTEP_AGG = 1.
 
 DIFF_ORDERS = [1, 2, 3]
 
@@ -177,10 +177,10 @@ def get_data(config, script_paths, logger):
     # Replicate data
     nreaches = config.task.nreaches
     if config.debug:
-        nval = 5000
+        ntimestep_agg = 5000
     else:
-        nval = int(config.options.context["duration_base"][nreaches] * 365.25)
-    hydroclim = hydroclim.iloc[-nval:]
+        ntimestep_agg = int(config.options.context["duration_base"][nreaches] * 365.25)
+    hydroclim = hydroclim.iloc[-ntimestep_agg:]
     end = hydroclim.index[-1]
     cc = hydroclim.columns
 
@@ -230,7 +230,9 @@ def configure_model(config, logger, area):
     nres_per_reach = 5 + nuh
     nres = nres_per_reach * nreaches
     nalphas = 500 if config.debug else config.task.nalphas
-    mod = gradients.MultiReservoirModel(nres, nalphas,
+    mod = gradients.MultiReservoirModel(nres,
+                                        nalphas=nalphas,
+                                        nsubsteps=nsubsteps,
                                         errors="raise")
     mod.area = area
 
@@ -274,24 +276,17 @@ def configure_model(config, logger, area):
 
         itrans_up = itrans
 
-    # Correct for substeps in Q3 fluxes
-    mod.flux_scalings[:, 2] = 1. / nsubsteps
-
     mod.nreaches = nreaches
     mod.nres_per_reach = nres_per_reach
     mod.nuh = nuh
-    mod.nsubsteps = nsubsteps
     logger.info(".. done")
 
     return mod
 
 
 def allocate_model(config, logger, mod, hydroclim, grad=True):
-    nsubsteps = config.nsubsteps
-    ntimesteps = len(hydroclim) * nsubsteps
+    ntimesteps_agg = len(hydroclim)
     nreaches = mod.nreaches
-    nres = mod.nreservoirs
-    nres_per_reach = mod.nres_per_reach
 
     # .. gradients against GR4J X1/X3 + routing capacities
     if grad:
@@ -305,20 +300,21 @@ def allocate_model(config, logger, mod, hydroclim, grad=True):
     else:
         vspecs = None
 
-    mod.allocate(ntimesteps, timestep=MODEL_TIMESTEP / nsubsteps,
+    mod.allocate(ntimesteps_agg,
+                 timestep_agg=MODEL_TIMESTEP_AGG,
                  variables_specs=vspecs)
 
 def log_model(config, logger, mod):
     nreaches = mod.nreaches
     logger.info("****************************************", nret=1)
     logger.info(f"Model description")
-    logger.info(f"nreaches   : {mod.nreaches}", ntab=1)
-    logger.info(f"nuh        : {mod.nuh}", ntab=1)
-    logger.info(f"nsubsteps  : {mod.nsubsteps}", ntab=1)
-    ny = mod.ntimesteps / mod.nsubsteps / 365
-    logger.info(f"ntimesteps : {mod.ntimesteps} / {ny:0.0f}y", ntab=1)
-    logger.info(f"nvars      : {len(mod.variables_reservoir_id)}", ntab=1)
-    logger.info(f"timestep   : {mod.timestep:0.3f}", ntab=1)
+    logger.info(f"nreaches       : {mod.nreaches}", ntab=1)
+    logger.info(f"nuh            : {mod.nuh}", ntab=1)
+    logger.info(f"nsubsteps      : {mod.nsubsteps}", ntab=1)
+    ny = mod.ntimesteps_agg / 365
+    logger.info(f"ntimesteps_agg : {mod.ntimesteps_agg} ({ny:0.0f}y)", ntab=1)
+    logger.info(f"nvars          : {len(mod.variables_reservoir_id)}", ntab=1)
+    logger.info(f"timestep_agg   : {mod.timestep_agg:0.3f}", ntab=1)
 
     gammas = mod.gammas
     fxs = mod.flux_scalings
@@ -345,13 +341,12 @@ def set_qstars(config, logger, mod, hydroclim, perturb=True):
     nsubsteps = config.nsubsteps
 
     # Set 0 flow inputs for first reach
-    nval = len(hydroclim)
-    ntimesteps = nval * nsubsteps
-    Qstars0 = np.zeros((ntimesteps, 2))
+    ntimesteps_agg = len(hydroclim)
+    Qstars0 = np.zeros((ntimesteps_agg, 2))
     iro = get_reservoir_id(config, 0, "quadrouting")
-    mod.set_Qstars(iro, Qstars0)
+    mod.set_Qstars_one_reservoir(iro, Qstars0)
 
-    Qstars1 = np.nan * np.zeros((ntimesteps, 2))
+    Qstars1 = np.nan * np.zeros((ntimesteps_agg, 2))
     Qstars1[:, 1] = 1.
 
     # Transform inputs
@@ -366,26 +361,26 @@ def set_qstars(config, logger, mod, hydroclim, perturb=True):
     # Set inputs
     for ireach in range(mod.nreaches):
         if not perturb:
-            Qstars0[:, 0] = np.repeat(backwardP(tP), nsubsteps)
-            Qstars0[:, 1] = np.repeat(-backwardE(tE), nsubsteps)
+            Qstars0[:, 0] = backwardP(tP)
+            Qstars0[:, 1] = -backwardE(tE)
         else:
             # Reach climate + noise
             # .. rainfall
-            nu = np.random.normal(scale=rhoP, size=nval)
+            nu = np.random.normal(scale=rhoP, size=ntimesteps_agg)
             errP = armodels.armodel_sim(alphaP, nu)
-            Qstars0[:, 0] = np.repeat(backwardP(tP + errP), nsubsteps)
+            Qstars0[:, 0] = backwardP(tP + errP)
 
             # .. PET (negative -> demand!)
-            nu = np.random.normal(scale=rhoE, size=nval)
+            nu = np.random.normal(scale=rhoE, size=ntimesteps_agg)
             errE = 1 + armodels.armodel_sim(alphaE, nu)
-            Qstars0[:, 1] = np.repeat(-backwardE(tE + errE), nsubsteps)
+            Qstars0[:, 1] = -backwardE(tE + errE)
 
         ipr = get_reservoir_id(config, ireach, "openwater")
-        mod.set_Qstars(ipr, Qstars0)
+        mod.set_Qstars_one_reservoir(ipr, Qstars0)
 
         # Reach loss qstar
         irr = get_reservoir_id(config, ireach, "gr4jroute")
-        mod.set_Qstars(irr, Qstars1)
+        mod.set_Qstars_one_reservoir(irr, Qstars1)
 
 
 def set_parameters(config, logger, mod):
@@ -459,7 +454,7 @@ def process(config, script_paths, logger, data):
         allocate_model(config, logger, mod, hclim, False)
 
     nsubsteps = config.nsubsteps
-    nruntimeref = modref.ntimesteps * nsubsteps / 365.25 * modref.nreservoirs
+    nruntimeref = modref.ntimesteps_agg / 365.25 * modref.nreservoirs
 
     # Define job
     batch = config.task.batch
@@ -475,7 +470,7 @@ def process(config, script_paths, logger, data):
           for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
-    results.loc[:, "ntimesteps"] = modref.ntimesteps
+    results.loc[:, "ntimesteps_agg"] = modref.ntimesteps_agg
     results.loc[:, "nreservoirs"] = modref.nreservoirs
     results.loc[:, "nvariables"] = len(modref.variables_reservoir_id)
 
@@ -487,9 +482,10 @@ def process(config, script_paths, logger, data):
 
         # Set random model inputs
         set_qstars(config, logger, modref, hclim)
-        modneutral.Qstars = modref.Qstars
+        k = np.arange(0, modref.ntimesteps, modref.nsubsteps)
+        modneutral.set_Qstars(modref.Qstars[k])
         for e, mod in modeps.items():
-            mod.Qstars = modref.Qstars
+            mod.set_Qstars(modref.Qstars[k])
 
         # Set parameters
         set_parameters(config, logger, modref)
@@ -536,10 +532,10 @@ def process(config, script_paths, logger, data):
                 and config.task.findiff_log10eps == -5) or config.debug):
             logger.info("Plotting first simul", nret=1)
             nreaches = modref.nreaches
-            nval = min(2000, modref.ntimesteps)
-            kk = np.arange(-nval, 0)
+            ntimestep_agg = min(2000, modref.ntimesteps)
+            kk = np.arange(-ntimestep_agg, 0)
             nsims = 5
-            df = np.empty((nval, nreaches * nsims))
+            df = np.empty((ntimestep_agg, nreaches * nsims))
             cols = []
             for ireach in range(nreaches):
                 # Data
@@ -655,7 +651,7 @@ def process(config, script_paths, logger, data):
             delta = np.log10(dt_quas_diff) - np.log10(dt_quas_neutral)
             results.loc[irepeat, f"log10runtimedeltaneutral_diff{order}[sec]"] = delta
 
-            ex = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
+            ex, st = comp_dfluxes(modref.fluxes, modref.dfluxes, dfluxes)
             for prob in REPORT_PROBS:
                 cn = f"dfx_log10errmax{prob:02d}_diff{order}[-]"
                 le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
@@ -690,7 +686,7 @@ if __name__ == "__main__":
     overwrite = args.overwrite
     debug = args.debug
     taskid = 0 if debug else args.taskid
-    nsubsteps = 1
+    nsubsteps = 6
 
     Config = namedtuple("Config",
                         ["version", "taskid", "overwrite",
