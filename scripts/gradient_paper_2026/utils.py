@@ -86,25 +86,29 @@ def random_scalings(sigma, nval=1, s0=1e-2):
         return np.maximum(s0, 1 + np.random.normal(scale=sigma, size=nval))
 
 
-def flux_denom(fx, eps1=1e-4, eps2=1e-3):
+def flux_denom(fx, eps=1e-3):
     afx = np.abs(fx)
-    means = np.mean(afx, axis=0)[None, :]
+    #means = np.mean(afx, axis=0)[None, :]
     maxs = np.max(afx, axis=0)[None, :]
-    denom = eps1 + eps2 * means
-    denom[maxs < eps1] = np.nan
+    #denom = eps + means
+    denom = eps + afx
+
+    _, i1, i2 = np.where(maxs < eps)
+    denom[:, i1, i2] = np.nan
     return denom
 
 def flux_isabove(afx, prob):
     thresh = np.percentile(afx, prob, axis=0)[None, :]
     return np.where(afx > thresh, 1., np.nan)
 
-def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3):
+def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps=1e-3):
     num = np.abs(dfx_ref - dfx_alt)
-    denom = flux_denom(fx_ref, eps1, eps2)
+    denom = flux_denom(fx_ref, eps)[:, None, :, :]
     err = num / denom
 
     emean = pd.Series(np.nan, index=REPORT_PROBS)
     afx = np.abs(fx_ref)
+    stats = {}
     for prob in REPORT_PROBS:
         is_above = flux_isabove(afx, prob)[:, None, :, :]
         err_above = err * is_above
@@ -116,7 +120,8 @@ def comp_dfluxes(fx_ref, dfx_ref, dfx_alt, eps1=1e-4, eps2=1e-3):
 
         em[np.isnan(em)] = 0.
         emean[prob] = em.max()
+        stats[prob] = em.squeeze()
 
-    return emean
+    return emean, stats
 
 
