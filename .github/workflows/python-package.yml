@@ -30,10 +30,12 @@ jobs:
         run: |
           uv run --locked ruff check --ignore E402 src/pyquasoare
 
+      - name: Run doc tests
+        run: |
+          uv run --locked pytest --doctest-modules src
+
       - name: Run tests
         run: |
-          set -e
-          uv run --locked pytest --doctest-modules src
           uv run --locked pytest -s --tb=line --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
  
       - name: Parse coverage report and create badge
