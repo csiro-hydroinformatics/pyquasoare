@@ -20,23 +20,24 @@ def smooth_X(x, nodes):
         X[:, i + 2] = np.abs(dx) * dx
     return X
 
+def smooth_param(theta, out=None):
+    return np.insert(theta, len(theta), -theta.sum())
+
 def smooth_reg(x, y):
     nodes = smooth_nodes(x)
     iok = ~np.isnan(x) & ~np.isnan(y)
     X = smooth_X(x[iok], nodes)
 
     # Quantile reg objfun
-    theta_ext = np.empty(X.shape[1])
     def ofun(theta):
-        theta_ext[:-1] = theta
-        theta_ext[-1] = -theta[2:-1].sum()
+        theta_ext = smooth_param(theta)
         yhat = X @ theta_ext
         return np.abs(yhat - y[iok]).sum()
 
     theta0 = np.zeros(X.shape[1] - 1)
     theta0[0] = np.nanmean(y) - np.nanmean(x)
     opt = minimize(ofun, theta0)
-    theta = opt.x
+    theta = smooth_param(opt.x)
 
     xx = np.linspace(x[iok].min(), x[iok].max(), 500)
     XX = smooth_X(xx, nodes)
@@ -63,7 +64,7 @@ def get_parameters():
     X1 = 500.
     X2 = -0.1
     X3 = 50.
-    X4 = 1.
+    X4 = 0.2
     return X0, X1, X2, X3, X4
 
 

@@ -39,6 +39,10 @@ from pyquasoare import gradients
 import c_pyquasoare_grad
 from gradbench import data_reader
 
+import importlib
+import utils
+importlib.reload(utils)
+
 from utils import smooth_nodes, smooth_X, smooth_reg, perf, get_parameters
 
 def get_script_paths(config):
@@ -96,6 +100,7 @@ def configure_model(logger, config, data):
 
     # Create model
     mod = gradients.MultiReservoirModel(nres, nalphas,
+                                        nsubsteps=nsubsteps,
                                         errors="raise")
     # Links
     # .. Interception -> prod
@@ -115,30 +120,28 @@ def configure_model(logger, config, data):
         mod.set_coefs_linear(2 + iuh, "linrouting")
     mod.set_coefs_linear(nres - 1, "gr4jroute")
 
-    # Correct for timestep related to Qstar3
-    mod.flux_scalings[:, 2] = 1. / nsubsteps
-
     # Allocate
     # .. indep var = prod / route capacity + exchange
     #                + scaling of inputs
     hclim = data.hydroclim.loc[:, ["P", "PET"]]
-    ntimesteps = len(hclim) * nsubsteps
     vspecs = [[0, 1], [0, 2], [0, 0]] \
         + [[1, 0], [nres - 1, 1], [nres - 1, 0]] \
         + [[2 + iuh, 3] for iuh in range(nuh)]
-    mod.allocate(ntimesteps, variables_specs=vspecs,
-                 timestep=1. / nsubsteps)
+
+    ntimesteps_agg = len(hclim)
+    mod.allocate(ntimesteps_agg,
+                 variables_specs=vspecs,
+                 timestep_agg=1.)
 
     # Set inputs
-    inputs = np.repeat(np.ascontiguousarray(hclim.values),
-                       nsubsteps, axis=0)
+    inputs = hclim.values
     inputs[:, 1] *= -1
-    mod.set_Qstars(0, inputs)
+    mod.set_Qstars_one_reservoir(0, inputs)
 
     # Set demand
-    inputs = np.ones((ntimesteps, 2)) * np.nan
+    inputs = np.ones((ntimesteps_agg, 2)) * np.nan
     inputs[:, 1] = 1.
-    mod.set_Qstars(nres - 1, inputs)
+    mod.set_Qstars_one_reservoir(nres - 1, inputs)
 
     return mod
 
@@ -181,24 +184,26 @@ def process(config, script_paths, logger, data):
 
     # Run model
     mod.run()
+    mod.aggregate()
+
     gr.run()
 
     # Timeseries data
     qobs = data.hydroclim.Q
 
     time = qobs.index
-    qsim = pd.Series(-mod.fluxes[:, -1, 5], index=time)
+    qsim = pd.Series(-mod.fluxes_agg[:, -1, 5], index=time)
 
     grsim = gr.to_dataframe(index=time)
 
     # Gradients
     nuh = config.nuh
-    grads = pd.DataFrame(mod.dfluxes[:, :-nuh, -1, 5], index=time)
+    grads = pd.DataFrame(mod.dfluxes_agg[:, :-nuh, -1, 5], index=time)
     grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$",
                      r"$X_0$", r"$X_1$", r"$X_2$", r"$X_3$"]
     #grads.loc[:, r"$X_4$"] = -mod.dfluxes[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25 / X4
 
-    grads.loc[:, r"$X_4$"] = -mod.dfluxes[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
+    grads.loc[:, r"$X_4$"] = -mod.dfluxes_agg[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
     grads.loc[:, r"$X_1$"] *= X1
     grads.loc[:, r"$X_2$"] *= X2
     grads.loc[:, r"$X_3$"] *= X3
@@ -257,7 +262,9 @@ def process(config, script_paths, logger, data):
 
     # Plotting data
     res = qsim - qobs
-    x = pd.DataFrame(mod.x, index=time)
+    nsub = mod.nsubsteps
+    idx = np.arange(nsub - 1, mod.ntimesteps + nsub - 1, nsub)
+    x = pd.DataFrame(mod.x[idx], index=time)
 
     for iplot, (vn, dq) in enumerate(grads.items()):
         logger.info(f"Plot {iplot}", ntab=1)
@@ -277,10 +284,10 @@ def process(config, script_paths, logger, data):
                          x=0.02, y=0.92)
         t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
 
-        ylim = -100, 100
+        ylim = -300, 300
         ax.set(ylim=ylim,
                yticks=[-10, -1, 0, 1, 10],
-               ylabel="Parameter error [-]")
+               ylabel="Parameter scaling error [-]")
         ax.yaxis.set_minor_locator(mticker.NullLocator())
 
         # .. scatter plot
@@ -343,7 +350,7 @@ if __name__ == "__main__":
     nalphas = 50
     nuh = args.nuh
     zoom = args.zoom
-    nsubsteps = 1
+    nsubsteps = 6
     start = "1980"
     end = "2022"
 
