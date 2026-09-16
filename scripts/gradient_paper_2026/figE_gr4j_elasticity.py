@@ -116,10 +116,11 @@ def process(config, script_paths, logger, data):
 
     # Run model
     mod.run()
+    mod.aggregate()
 
     # Timeseries data
     time = data.hydroclim.index
-    q = pd.Series(-mod.fluxes[:, -1, 5], index=time)
+    q = pd.Series(-mod.fluxes_agg[:, -1, 5], index=time)
 
     p_interan = data.hydroclim.P.mean() * 365.25
     e_interan = data.hydroclim.PET.mean() * 365.25
@@ -132,7 +133,7 @@ def process(config, script_paths, logger, data):
 
     # Gradients
     nuh = config.nuh
-    grads = pd.Series(-mod.dfluxes[:, 0, -1, 5], index=time)
+    grads = pd.Series(-mod.dfluxes_agg[:, 0, -1, 5], index=time)
 
     # .. inversing sign because qsim is neg
     q_mthly = q.resample("MS").mean()
@@ -178,12 +179,12 @@ def process(config, script_paths, logger, data):
 
     arid_mthly = p_mthly / e_mthly
     ax.plot(arid_mthly, elast_mthly, "o", ms=5,
-            label="GQ Monthly",
+            label="GQ Monthly", mec="0.8",
             color=col_mthly)
 
     arid_an = p_an / e_an
     ax.plot(arid_an, elast_an, "o", ms=8,
-            label="GQ Annual",
+            label="GQ Annual", mec="0.5",
             color=col_an)
 
     arid_interan = p_interan / e_interan
@@ -297,7 +298,7 @@ if __name__ == "__main__":
     nalphas = 50
     nuh = args.nuh
     zoom = args.zoom
-    nsubsteps = 1
+    nsubsteps = 6
     start = "1990"
     end = "2023"
 
