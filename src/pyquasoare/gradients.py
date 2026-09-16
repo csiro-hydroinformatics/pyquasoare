@@ -136,8 +136,8 @@ def compare_denom(abs_y, eps=1e-3):
     #return abs_y + shift
 
     den = abs_y.std(axis=0)
-    maxs = np.max(abs_y, axis=0)
-    den[maxs < eps] = np.nan
+    means = np.mean(abs_y, axis=0)
+    den[means < eps] = np.nan
     return den[None, :] + eps
 
 
@@ -387,7 +387,7 @@ def grad_model(alphas, gammas,
     return x, fluxes, dfluxes
 
 # -- Classes to handle networks --
-class NetworkLink():
+class GradNetworkLink():
     def __init__(self,
                  upstream_reservoir_id,
                  upstream_output_flux_id,
@@ -435,14 +435,14 @@ class NetworkLink():
         self.weight = float(weight)
 
     def clone(self):
-        return NetworkLink(self.upstream_reservoir_id,
+        return GradNetworkLink(self.upstream_reservoir_id,
                            self.upstream_output_flux_id,
                            self.downstream_reservoir_id,
                            self.downstream_potential_flux_id,
                            self.weight, self.nreservoirs)
 
 
-class Network():
+class GradNetwork():
     def __init__(self, nreservoirs):
         if nreservoirs >= INPUT_MAPPING_MISSINGRESERVOIRID:
             errmsg = f"nreservoirs cannot exceed {INPUT_MAPPING_MISSINGRESERVOIRID}."
@@ -454,7 +454,7 @@ class Network():
         self._input_mapping_weights = None
 
     def clone(self):
-        netw = Network(self.nreservoirs)
+        netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
             netw.links.append(lk.clone())
         return netw
@@ -526,7 +526,7 @@ class Network():
                  downstream_reservoir_id, downstream_potential_flux_id,
                  weight):
         nres = self.nreservoirs
-        lk = NetworkLink(upstream_reservoir_id,
+        lk = GradNetworkLink(upstream_reservoir_id,
                          upstream_output_flux_id,
                          downstream_reservoir_id,
                          downstream_potential_flux_id,
@@ -586,22 +586,24 @@ class MultiReservoirModel():
                  errors="ignore",
                  enforce_potential_inflow_pos=True):
         self._enforce_potential_inflow_pos = enforce_potential_inflow_pos
-        self._network = Network(nreservoirs)
+        nreservoirs = max(1, int(nreservoirs))
+        self._network = GradNetwork(nreservoirs)
         self._errors = errors
-        self._gammas = None
 
         self._flux_scalings = np.ones((nreservoirs,
                                        NFLUXES_INPUTS))
         self._flux_scalings_substeps = np.ones((nreservoirs,
                                                 NFLUXES_INPUTS))
-        self._nsubsteps = int(nsubsteps)
-        nalphas = int(nalphas)
+
+        self._nsubsteps = max(1, int(nsubsteps))
+
+        nalphas = max(1, int(nalphas))
         self._nalphas = nalphas
         self._alphas = get_alphas(nalphas,
                                   nreservoirs=nreservoirs)
 
+        self._gammas = None
         self._coefs_linear = None
-
         self.variables_reservoir_id = None
         self.variables_type_id = None
         self._Qstars = None
@@ -962,7 +964,6 @@ class MultiReservoirModel():
         dfx = self._dfluxes
 
         if nsub > 1:
-
             self._fluxes_agg[:-1] = aggregate(fx, self.ntimesteps_agg,
                                               nsub)
             self._fluxes_agg[-1] = fx[-nsub:].mean(axis=0)
