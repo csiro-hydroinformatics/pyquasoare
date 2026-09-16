@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 
@@ -115,6 +116,51 @@ def lin_coefficient_matrix(funs, alphas):
     coefs = approx.quad_coefficient_matrix(funs, alphas,
                                            approx_opt=0)
     return np.ascontiguousarray(coefs[:, :, 1:])
+
+
+# -- comparison functions --
+def isabove(abs_y, prob):
+    thresh = np.percentile(abs_y, prob, axis=0)[None, :]
+    return np.where(abs_y > thresh, 1., np.nan)
+
+
+def compare_denom(abs_y, eps=1e-3):
+    if np.any(abs_y < 0):
+        errmsg = "Denominator data needs to be >=0."
+        raise ValueError(errmsg)
+
+    #means = np.mean(abs_y, axis=0)[None, :]
+    #maxs = np.max(abs_y, axis=0)[None, :]
+    #shift = eps1 + eps2 * means
+    #shift[maxs < eps1] = np.nan
+    #return abs_y + shift
+
+    den = abs_y.std(axis=0)
+    maxs = np.max(abs_y, axis=0)
+    den[maxs < eps] = np.nan
+    return den[None, :] + eps
+
+
+def compare(y0, y1, eps=1e-3, report_probs=[0, 50, 90]):
+    ay0 = np.abs(y0)
+    den = compare_denom(ay0, eps)
+    err = np.abs(y1 - y0) / den
+
+    emean = pd.Series(np.nan, index=report_probs)
+    stats = {}
+    for prob in report_probs:
+        err_above = err * isabove(ay0, prob)
+
+        with warnings.catch_warnings():
+            # removes nan mean warning
+            warnings.simplefilter("ignore")
+            em = np.nanmean(err_above, axis=0)
+
+        em[np.isnan(em)] = 0.
+        emean[prob] = em.max()
+        stats[prob] = em.squeeze()
+
+    return emean, stats
 
 
 # -- code modelling functions --
