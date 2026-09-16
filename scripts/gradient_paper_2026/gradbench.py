@@ -38,8 +38,6 @@ importlib.reload(utils )
 
 from utils import get_parameters, forwardP, backwardP
 from utils import forwardE, backwardE, random_scalings
-from utils import comp_fun
-from utils import REPORT_PROBS
 
 import importlib.util
 FTESTS = Path(__file__).parent.parent.parent / "tests"
@@ -457,7 +455,6 @@ def process(config, script_paths, logger, data):
     for e, mod in modeps.items():
         allocate_model(config, logger, mod, hclim, False)
 
-    nsubsteps = config.nsubsteps
     nruntimeref = modref.ntimesteps_agg / 365.25 * modref.nreservoirs
 
     # Define job
@@ -470,8 +467,11 @@ def process(config, script_paths, logger, data):
     mnames = [f"diff{o}" for o in DIFF_ORDERS]
     cc = [f"log10runtime_{m}[sec]" for m in ["ref", "neutral"] + mnames]
     cc += [f"log10runtimedeltaneutral_{m}[sec]" for m in ["ref"] + mnames]
+
+    t1 = np.random.uniform(0, 1, (10, 2, 2))
+    ex, _ = gradients.compare(t1, t1)
     cc += [f"dfx_log10errmax{p:02d}_{m}[-]" for m in mnames
-          for p in REPORT_PROBS]
+          for p in ex.index]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
     results.loc[:, "ntimesteps_agg"] = modref.ntimesteps_agg
@@ -498,6 +498,7 @@ def process(config, script_paths, logger, data):
 
         modneutral.gammas = modref.gammas.copy()
         modneutral.flux_scalings = modref.flux_scalings.copy()
+        modneutral._coefs_linear = modref._coefs_linear.copy()
 
         for e, mod in modeps.items():
             mod.gammas = modref.gammas.copy()
@@ -509,6 +510,7 @@ def process(config, script_paths, logger, data):
 
         t0 = time.time()
         modneutral.run()
+        modneutral.aggregate()
         dt_quas_neutral = time.time() - t0
 
         dt = np.log10(dt_quas_neutral / nruntimeref)
@@ -516,6 +518,7 @@ def process(config, script_paths, logger, data):
 
         t0 = time.time()
         modref.run()
+        modref.aggregate()
         dt_quas_ref = time.time() - t0
 
         dt = np.log10(dt_quas_ref / nruntimeref)
@@ -526,8 +529,7 @@ def process(config, script_paths, logger, data):
 
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
-        for ivar in range(nvars):
-            res = modref.variables_reservoir_id[ivar]
+        for ivar, res in enumerate(modref.variables_reservoir_id):
             modref.dfluxes[:, ivar] *= modref.gammas[res]
 
         # Print one simulation to make sure it makes sense
@@ -600,51 +602,50 @@ def process(config, script_paths, logger, data):
         for order in DIFF_ORDERS:
             logger.info(f"Run numerical difference - order {order}", nret=1)
 
-            dfluxes = np.empty((modref.ntimesteps, nvars,
+            dfluxes = np.empty((modref.ntimesteps_agg, nvars,
                                 modref.nreservoirs,
                                 gradients.NFLUXES_OUTPUTS))
 
             t0 = time.time()
             modneutral.run()
+            modneutral.aggregate()
+
             for ivar, vinfo in modref.variables_specs.iterrows():
+                if ivar > 0:
+                    continue
                 res = vinfo.reservoir_id
 
                 # Run models
                 for ieps in np.arange(1, 1 + order):
                     mod = modeps[ieps]
+                    # .. set param change
                     mod.gammas[res] = modref.gammas[res] * (1 + ieps * findiff_eps)
+                    # .. run model
                     mod.run()
+                    mod.aggregate()
+                    # ..reset back to original
+                    mod.gammas[res] = modref.gammas[res]
 
                 # Compute flux gradient
+                # we divide by findiff_eps only, hence the gradient is
+                # Γ df/dΓ and not df/dΓ
                 if order == 1:
                     dfluxes[:, ivar] = (
-                        modeps[1].fluxes
-                        - modneutral.fluxes) / findiff_eps
+                        modeps[1].fluxes_agg
+                        - modneutral.fluxes_agg) / findiff_eps
+
                 elif order == 2:
                     dfluxes[:, ivar] = (
-                        - 1./ 2 * modeps[2].fluxes
-                        + 2. * modeps[1].fluxes
-                        - 3. / 2 * modneutral.fluxes) / findiff_eps
+                        - 1./ 2 * modeps[2].fluxes_agg
+                        + 2. * modeps[1].fluxes_agg
+                        - 3. / 2 * modneutral.fluxes_agg) / findiff_eps
 
                 elif order == 3:
                     dfluxes[:, ivar] = (
-                        1./ 3 * modeps[3].fluxes
-                        - 3./ 2 * modeps[2].fluxes
-                        + 3. * modeps[1].fluxes
-                        - 11. / 6 * modneutral.fluxes) / findiff_eps
-
-                elif order == 4:
-                    dfluxes[:, ivar] = (
-                        -1./ 4 * modeps[4].fluxes
-                        + 4./ 3 * modeps[3].fluxes
-                        - 3. * modeps[2].fluxes
-                        + 4. * modeps[1].fluxes
-                        - 25. / 12 * modneutral.fluxes) / findiff_eps
-
-                # Reset
-                for ieps in np.arange(1, 1 + order):
-                    mod = modeps[ieps]
-                    mod.gammas[res] = modref.gammas[res]
+                        1./ 3 * modeps[3].fluxes_agg
+                        - 3./ 2 * modeps[2].fluxes_agg
+                        + 3. * modeps[1].fluxes_agg
+                        - 11. / 6 * modneutral.fluxes_agg) / findiff_eps
 
             dt_quas_diff = time.time() - t0
 
@@ -655,10 +656,30 @@ def process(config, script_paths, logger, data):
             delta = np.log10(dt_quas_diff) - np.log10(dt_quas_neutral)
             results.loc[irepeat, f"log10runtimedeltaneutral_diff{order}[sec]"] = delta
 
-            ex, st = comp_fun(modref.dfluxes, dfluxes)
-            for prob in REPORT_PROBS:
+            ex, st = gradients.compare(modref.dfluxes_agg, dfluxes)
+
+            #plt.close("all")
+            #ibad = np.where(st[0] > 0.5)
+            #ivar, ires, ifx = [ii[0] for ii in ibad]
+            #fig, ax = plt.subplots()
+            ##y1 = modref.dfluxes_agg[:, ivar, ires, ifx]
+            ##y2 = dfluxes[:, ivar, ires, ifx]
+            #y1 = modref.fluxes_agg[:, ires, ifx]
+            #y2 = modeps[1].fluxes_agg[:, ires, ifx]
+            #ax.plot(y1)
+            #ax.plot(y2)
+
+            #tax = ax.twinx()
+            #den = gradients.compare_denom(np.abs(y1)[:, None])
+            #err = np.abs(y1 - y2) / den[:, 0]
+            #tax.plot(err, color="0.5")
+
+            #plt.show()
+            #import pdb; pdb.set_trace()
+
+            for prob, val in ex.items():
                 cn = f"dfx_log10errmax{prob:02d}_diff{order}[-]"
-                le = math.log10(ex[prob]) if ex[prob] > 0 else np.nan
+                le = math.log10(val) if val > 0 else np.nan
                 results.loc[irepeat, cn] = le
 
     results.index.name = "REPEAT"
@@ -690,7 +711,7 @@ if __name__ == "__main__":
     overwrite = args.overwrite
     debug = args.debug
     taskid = 0 if debug else args.taskid
-    nsubsteps = 6
+    nsubsteps = 1
 
     Config = namedtuple("Config",
                         ["version", "taskid", "overwrite",
@@ -700,10 +721,11 @@ if __name__ == "__main__":
     task = opm.get_task(taskid)
 
     if debug:
-        opm.context["nuh"] = 11
+        opm.context["nuh"] = 5
         task.nreaches = 3
-        task.findiff_log10eps = -3
-        task.gamma_mean = (1000, 500, 1000)
+        task.findiff_log10eps = -5
+        _, X1, X2, X3, _ = get_parameters()
+        task.gamma_mean = (X1, X3, X1)
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task, nsubsteps)
