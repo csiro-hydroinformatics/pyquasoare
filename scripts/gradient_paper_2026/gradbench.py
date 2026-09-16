@@ -33,8 +33,7 @@ from hydrodiy.stat import armodels
 from pyquasoare import gradients
 
 import importlib
-import utils
-importlib.reload(utils )
+importlib.reload(gradients)
 
 from utils import get_parameters, forwardP, backwardP
 from utils import forwardE, backwardE, random_scalings
@@ -611,20 +610,20 @@ def process(config, script_paths, logger, data):
             modneutral.aggregate()
 
             for ivar, vinfo in modref.variables_specs.iterrows():
-                if ivar > 0:
-                    continue
                 res = vinfo.reservoir_id
 
                 # Run models
                 for ieps in np.arange(1, 1 + order):
                     mod = modeps[ieps]
                     # .. set param change
-                    mod.gammas[res] = modref.gammas[res] * (1 + ieps * findiff_eps)
+                    g0 = modref.gammas[res]
+                    g1 = g0 * (1 + ieps * findiff_eps)
+                    mod.gammas[res] = g1
                     # .. run model
                     mod.run()
                     mod.aggregate()
                     # ..reset back to original
-                    mod.gammas[res] = modref.gammas[res]
+                    mod.gammas[res] = g0
 
                 # Compute flux gradient
                 # we divide by findiff_eps only, hence the gradient is
@@ -657,26 +656,6 @@ def process(config, script_paths, logger, data):
             results.loc[irepeat, f"log10runtimedeltaneutral_diff{order}[sec]"] = delta
 
             ex, st = gradients.compare(modref.dfluxes_agg, dfluxes)
-
-            #plt.close("all")
-            #ibad = np.where(st[0] > 0.5)
-            #ivar, ires, ifx = [ii[0] for ii in ibad]
-            #fig, ax = plt.subplots()
-            ##y1 = modref.dfluxes_agg[:, ivar, ires, ifx]
-            ##y2 = dfluxes[:, ivar, ires, ifx]
-            #y1 = modref.fluxes_agg[:, ires, ifx]
-            #y2 = modeps[1].fluxes_agg[:, ires, ifx]
-            #ax.plot(y1)
-            #ax.plot(y2)
-
-            #tax = ax.twinx()
-            #den = gradients.compare_denom(np.abs(y1)[:, None])
-            #err = np.abs(y1 - y2) / den[:, 0]
-            #tax.plot(err, color="0.5")
-
-            #plt.show()
-            #import pdb; pdb.set_trace()
-
             for prob, val in ex.items():
                 cn = f"dfx_log10errmax{prob:02d}_diff{order}[-]"
                 le = math.log10(val) if val > 0 else np.nan
@@ -688,7 +667,6 @@ def process(config, script_paths, logger, data):
                   script_paths.source_file,
                   write_index=True,
                   lineterminator="\n")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark gradient "
