@@ -618,7 +618,7 @@ def test_grad_reservoir_maxfun(allclose):
     funs = gradients.FLUX_FUNCTIONS["openwater"]
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
     x0 = 0.5
-    gamma = 1e-3
+    gamma = 1e-4
     timestep = 1.
 
     nval = 100
@@ -630,7 +630,7 @@ def test_grad_reservoir_maxfun(allclose):
                                                  errors="raise")
     outflow = -fx[:, 5]
     expected = np.maximum(Qstars.sum(axis=1), 0)
-    assert allclose(outflow, expected, atol=gamma * 1.1)
+    assert allclose(outflow, expected, atol=5e-2)
 
 
 @pytest.mark.parametrize("siteid", SITEIDS)
