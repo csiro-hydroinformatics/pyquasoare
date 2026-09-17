@@ -46,14 +46,20 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0)**4 / 3.
         ],
     "gr4jroute": [
-        # Safety on gr4j route store to avoid blow up if demand > 0
-        lambda x: 0.9 * thresh_smooth(1 - x, 1e-3) * thresh_smooth(x , 1e-3),
+        # NOTE: this routing reservoir can store more than X3.
+        #       in this case, the flux functions become linear
+        #       if the store exceeds max(alphas). This is
+        #       not the GR4J behaviour.
+        lambda x: 0.9 * np.ones_like(x),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
         ],
     "gr2mroute": [
-        # Safety on gr2m route store to avoid blow up if demand > 0
-        lambda x: thresh_smooth(1 - x, 1e-3) * thresh_smooth(x , 1e-3),
+        # NOTE: this routing reservoir can store more than X3.
+        #       in this case, the flux functions become linear
+        #       if the store exceeds max(alphas). This is
+        #       not the GR2M behaviour.
+        lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.),
         lambda x: np.maximum(x, 0.)**2
         ],
@@ -702,6 +708,12 @@ class MultiReservoirModel():
     @property
     def niter(self):
         return isnone(self._niter, "niter")
+
+    @property
+    def idx_end_timestep_agg(self):
+        nsub = self.nsubsteps
+        nts = self.ntimesteps
+        return np.arange(nsub - 1, nts + nsub - 1, nsub)
 
     @property
     def gammas(self):
