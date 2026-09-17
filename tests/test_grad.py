@@ -1118,9 +1118,11 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
 
 @pytest.mark.parametrize("nuh", [2, 5])
 @pytest.mark.parametrize("nsubsteps", [2, 4])
+@pytest.mark.parametrize("X1", [50, 400])
 @pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
-def test_gr4j_nash_cascade_tangent(nuh, X4, nsubsteps,
-                                   allclose, debug_mode):
+@pytest.mark.parametrize("varname", ["X1", "X4"])
+def test_gr4j_nash_cascade_tangent(nuh, X1, X4, nsubsteps,
+                                   varname, allclose, debug_mode):
     nalphas = 100
     nres = nuh + 2
     mod = gradients.MultiReservoirModel(nres, nalphas,
@@ -1142,8 +1144,12 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, nsubsteps,
     siteid = "203014"
     nval = 5 * 365
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[-nval:, :2]
+    #hclim = hclim.iloc[:50]
     ntimesteps_agg = len(hclim)
-    vspecs = [[2 + iuh, 3] for iuh in range(nuh)]
+    if varname == "X1":
+        vspecs = [[1, 0]]
+    else:
+        vspecs = [[2 + iuh, 3] for iuh in range(nuh)]
     mod.allocate(ntimesteps_agg, variables_specs=vspecs)
 
     # Set inputs
@@ -1152,7 +1158,7 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, nsubsteps,
     mod.set_Qstars_one_reservoir(0, inputs)
 
     # Set parameters
-    X0, X1 = 1e-2, 400
+    X0 = 1e-2
     mod.gammas = [X0, X1] + [1] * nuh
     sc3 = nuh * 1.25 / X4
     mod.flux_scalings[2:, 2] = sc3
@@ -1160,34 +1166,67 @@ def test_gr4j_nash_cascade_tangent(nuh, X4, nsubsteps,
     # Set numerical difference models
     modm = mod.clone()
     modp = mod.clone()
-    eps = 1e-6
-    for iuh in range(nuh):
-        modm.flux_scalings[2:, 2] = sc3 * X4 / (X4 - eps)
-        modp.flux_scalings[2:, 2] = sc3 * X4 / (X4 + eps)
+    eps = 1e-7
+    if varname == "X1":
+        modm.gammas[1] = X1 - eps
+        modp.gammas[1] = X1 + eps
+    else:
+        for iuh in range(nuh):
+            modm.flux_scalings[2:, 2] = sc3 * X4 / (X4 - eps)
+            modp.flux_scalings[2:, 2] = sc3 * X4 / (X4 + eps)
 
     # Run models
     mod.run()
     modm.run()
     modp.run()
 
-    # Gradient against X4 = dη/dX4 × Σdf/dη
-    dq1 = -mod.dfluxes[:, :, -1, 5].sum(axis=1) * nuh * 1.25 / X4**2
-
-    # Num diff taking substeps into account
-    dq2 = (modp.fluxes[:, -1, 5] - modm.fluxes[:, -1, 5]) * mod.nsubsteps / 2 / eps
-
-    em, _ = gradients.compare(dq2[:, None], dq1[:, None])
+    if varname == "X1":
+        # Gradient against X1
+        dq1 = mod.dfluxes[:, 0, :, :]
+        dq2 = (modp.fluxes - modm.fluxes) / 2 / eps
+        em, st = gradients.compare(dq1, dq2)
+    else:
+        # Gradient against X4 = dη/dX4 × Σdf/dη
+        dq1 = -mod.dfluxes[:, 2:, -1, 5].sum(axis=1) * nuh * 1.25 / X4**2
+        dq2 = (modp.fluxes[:, -1, 5] - modm.fluxes[:, -1, 5]) * mod.nsubsteps / 2 / eps
+        dq1, dq2 = dq1[:, None, None], dq2[:, None, None]
+        em, st = gradients.compare(dq1, dq2)
 
     atol = 1e-4
-    if debug_mode and err.max() > atol:
+    if debug_mode and em.max() > atol:
+        #imax = np.where(st[90] == st[90].max())
+        imax = np.where(st[90] > 1e-1)
+        res, ifx = [ii[0] for ii in imax]
+
         plt.close("all")
-        fig, ax = plt.subplots()
-        ax.plot(dq1, label="Quas")
-        ax.plot(dq2, label="NumDiff")
+        fig, axs = plt.subplots(nrows=3, sharex=True, layout="constrained")
+        ax = axs[0]
+        y1 = mod.x[:, res]
+        ax.plot(y1, label="Quas")
+        ax.set(title="Store")
+
+        ax = axs[1]
+        y1 = mod.fluxes[:, res, ifx]
+        y2 = modp.fluxes[:, res, ifx]
+        ax.plot(y1, label="Quas")
+        ax.plot(y2, label="NumDiff+")
         tax = ax.twinx()
-        den = gradients.compare_denom(np.abs(dq1))
-        err = np.abs(dq1-dq2) / den
-        tax.plot(err, color="0.5")
+        tax.plot(y2 - y1, color="0.5", lw=0.5)
+        ax.set(title="Flux")
+
+        ax = axs[2]
+        y1 = dq1[:, res, ifx]
+        y2 = dq2[:, res, ifx]
+        ax.plot(y1, label="Quas")
+        ax.plot(y2, label="NumDiff")
+        tax = ax.twinx()
+        den = gradients.compare_denom(np.abs(y1)[:, None])
+        err = np.abs(y1-y2) / den[:, 0]
+        tax.plot(err, color="0.5", lw=0.5)
+        ax.set(title="grad")
+
+        ftitle = f"Res {res} - Fx {ifx} / var={varname}"
+        fig.suptitle(ftitle, fontweight="bold")
         plt.show()
         import pdb; pdb.set_trace()
 
