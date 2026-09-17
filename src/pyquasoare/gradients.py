@@ -627,6 +627,16 @@ class MultiReservoirModel():
         self.ntimesteps = None
         self.ntimesteps_agg = None
 
+    def __str__(self):
+        txt = "Model description"
+        txt += f"\nnreservoirs    : {self.nreservoirs}"
+        txt += f"\nnalphas        : {self.nalphas}"
+        txt += f"\nnsubsteps      : {self.nsubsteps}"
+        txt += f"\nntimesteps_agg : {self.ntimesteps_agg}"
+        txt += f"\nnvars          : {len(self.variables_reservoir_id)}"
+        txt += f"\ntimestep_agg   : {self.timestep_agg:0.3f}"
+        return txt
+
     def check_reservoir_id(self, reservoir_id):
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
@@ -912,8 +922,6 @@ class MultiReservoirModel():
             "timestep_agg",
             "ntimesteps",
             "ntimesteps_agg",
-            "_fluxes",
-            "_dfluxes",
             "_fluxes_agg",
             "_dfluxes_agg"
             ]
@@ -984,5 +992,5 @@ class MultiReservoirModel():
                                                nsub)
             self._dfluxes_agg[-1] = dfx[-nsub:].mean(axis=0)
         else:
-            self._fluxes_agg = fx
-            self._dfluxes_agg = dfx
+            self._fluxes_agg[:] = fx
+            self._dfluxes_agg[:] = dfx
