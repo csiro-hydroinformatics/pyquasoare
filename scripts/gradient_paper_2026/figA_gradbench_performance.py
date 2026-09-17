@@ -84,8 +84,8 @@ def process(config, script_paths, logger, data):
 
     for na, gm, eps in prod(nas, gms, epss):
         match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
-        if match < 2:
-            continue
+        #if match < 2:
+        #    continue
 
         logger.info(f"Plotting na={na} gm={gm} eps={eps}", nret=1)
 
@@ -125,7 +125,7 @@ def process(config, script_paths, logger, data):
                     idx = idx0 & (perf.TASK_OPT_nreaches == int(t1))
                     nr = (perf.loc[idx, "nreservoirs"].unique()).squeeze()
                     nv = (perf.loc[idx, "nvariables"].unique()).squeeze()
-                    ny = (perf.loc[idx, "ntimesteps"].unique() / 365.25).squeeze()
+                    ny = (perf.loc[idx, "ntimesteps_agg"].unique() / 365.25).squeeze()
                     subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
                         + f"  {ny:0.0f} Years"
                     ax.text(0.5, 0.1, subtitle,
