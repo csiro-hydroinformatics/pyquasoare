@@ -49,6 +49,9 @@ MODEL_TIMESTEP_AGG = 1.
 
 DIFF_ORDERS = [1, 2, 3]
 
+REPORT_PROBS = gradients.compare(np.random.uniform(size=(10, 2, 2)),
+                                 np.random.uniform(size=(10, 2, 2)))[0].index
+
 def get_options():
     timestep = "daily"
     # Duration depends on number of reaches
@@ -319,9 +322,12 @@ def log_model(config, logger, mod):
 
     gammas = mod.gammas
     fxs = mod.flux_scalings
+    nres_per_reach = mod.nres_per_reach
 
     for ireach in range(nreaches):
-        logger.info(f"Reach {ireach}", nret=1)
+        res1 = ireach * nres_per_reach
+        res2 = res1 + nres_per_reach - 1
+        logger.info(f"Reach {ireach} (reservoirs {res1}-{res2})", nret=1)
 
         ipr = get_reservoir_id(config, ireach, "gr4jprod")
         logger.info(f"Gamma RR prod = {gammas[ipr]:0.1f}", ntab=1)
@@ -467,10 +473,8 @@ def process(config, script_paths, logger, data):
     cc = [f"log10runtime_{m}[sec]" for m in ["ref", "neutral"] + mnames]
     cc += [f"log10runtimedeltaneutral_{m}[sec]" for m in ["ref"] + mnames]
 
-    t1 = np.random.uniform(0, 1, (10, 2, 2))
-    ex, _ = gradients.compare(t1, t1)
     cc += [f"dfx_log10errmax{p:02d}_{m}[-]" for m in mnames
-          for p in ex.index]
+           for p in REPORT_PROBS]
     results = pd.DataFrame(np.nan, index=ibatches, columns=cc)
 
     results.loc[:, "ntimesteps_agg"] = modref.ntimesteps_agg
