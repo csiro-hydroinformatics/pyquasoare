@@ -1116,7 +1116,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     #    assert dtq < dtn * 0.9
 
 
-@pytest.mark.parametrize("nuh", [2, 5])
+@pytest.mark.parametrize("nuh", [1, 2, 4])
 @pytest.mark.parametrize("nsubsteps", [2, 4])
 @pytest.mark.parametrize("X1", [50, 400])
 @pytest.mark.parametrize("X4", [0.1, 1., 5., 20.])
@@ -1187,7 +1187,7 @@ def test_gr4j_nash_cascade_tangent(nuh, X1, X4, nsubsteps,
         em, st = gradients.compare(dq1, dq2)
     else:
         # Gradient against X4 = dη/dX4 × Σdf/dη
-        dq1 = -mod.dfluxes[:, 2:, -1, 5].sum(axis=1) * nuh * 1.25 / X4**2
+        dq1 = -mod.dfluxes[:, :, -1, 5].sum(axis=1) * nuh * 1.25 / X4**2
         dq2 = (modp.fluxes[:, -1, 5] - modm.fluxes[:, -1, 5]) * mod.nsubsteps / 2 / eps
         dq1, dq2 = dq1[:, None, None], dq2[:, None, None]
         em, st = gradients.compare(dq1, dq2)
