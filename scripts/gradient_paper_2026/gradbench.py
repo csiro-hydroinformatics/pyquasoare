@@ -10,11 +10,10 @@
 
 
 import sys
-import os
 import time
 import re
-import json
 import math
+from itertools import product as prod
 import argparse
 from pathlib import Path
 from collections import namedtuple
@@ -230,7 +229,7 @@ def configure_model(config, logger, area):
     nreaches = config.task.nreaches
     nres_per_reach = 5 + nuh
     nres = nres_per_reach * nreaches
-    nalphas = 500 if config.debug else config.task.nalphas
+    nalphas = config.task.nalphas
     mod = gradients.MultiReservoirModel(nres,
                                         nalphas=nalphas,
                                         nsubsteps=nsubsteps,
@@ -310,6 +309,7 @@ def log_model(config, logger, mod):
     logger.info("****************************************", nret=1)
     logger.info(f"Model description")
     logger.info(f"nreaches       : {mod.nreaches}", ntab=1)
+    logger.info(f"nalphas        : {mod.nalphas}", ntab=1)
     logger.info(f"nuh            : {mod.nuh}", ntab=1)
     logger.info(f"nsubsteps      : {mod.nsubsteps}", ntab=1)
     ny = mod.ntimesteps_agg / 365
@@ -661,6 +661,38 @@ def process(config, script_paths, logger, data):
                 le = math.log10(val) if val > 0 else np.nan
                 results.loc[irepeat, cn] = le
 
+            #if config.debug and ex.max() > 10.:
+            #    imax = np.where(st[90] == st[90].max())
+            #    ivar, res, ifx = [ii[0] for ii in imax]
+
+            #    plt.close("all")
+            #    fig, axs = plt.subplots(nrows=3, figsize=(10, 10),
+            #                            layout="constrained", sharex=True)
+            #    ax = axs[0]
+            #    nsub = modref.nsubsteps
+            #    k = np.arange(nsub, modref.ntimesteps, nsub)
+            #    y1 = modref.x[k, res]
+            #    ax.plot(y1)
+
+            #    ax = axs[1]
+            #    y1 = modref.fluxes_agg[:, res, ifx]
+            #    ax.plot(y1)
+            #    ax.set(yscale="asinh")
+
+            #    ax = axs[2]
+            #    y1 = modref.dfluxes_agg[:, ivar, res, ifx]
+            #    y2 = dfluxes[:, ivar, res, ifx]
+            #    ax.plot(y1)
+            #    ylim = ax.get_ylim()
+            #    ax.plot(y2)
+            #    ax.set(yscale="asinh", ylim=ylim)
+
+            #    ftitle = f"Res {res} - Var {ivar} - Fx {ifx}"
+            #    fig.suptitle(ftitle, fontweight="bold")
+            #    plt.show()
+            #    import pdb; pdb.set_trace()
+
+
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
     csv.write_csv(results, fres, "Performance",
@@ -699,11 +731,11 @@ if __name__ == "__main__":
     task = opm.get_task(taskid)
 
     if debug:
-        opm.context["nuh"] = 5
-        task.nreaches = 3
-        task.findiff_log10eps = -5
+        task.nreaches = 5
+        task.nalphas = 200
+        task.findiff_log10eps = -4
         _, X1, X2, X3, _ = get_parameters()
-        task.gamma_mean = (X1, X3, X1)
+        task.gamma_mean = (X1 / 10., X3 / 10., X1 / 10.)
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task, nsubsteps)
