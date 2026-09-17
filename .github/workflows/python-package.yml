@@ -83,3 +83,4 @@ jobs:
           set -e
           echo "--- Gradient paper scripts ---"
           uv run --locked python scripts/gradient_paper_2026/gradbench.py -v 1 -t 0 -d
+          uv run --locked python scripts/gradient_paper_2026/gradaverage.py -v 1 -t 0 -d
