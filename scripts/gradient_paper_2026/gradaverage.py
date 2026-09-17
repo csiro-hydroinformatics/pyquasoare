@@ -54,7 +54,7 @@ def get_options():
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref, 50]
+    nreaches = [1, nreaches_ref]
 
     nalphas_ref = 100
     nalphas = [nalphas_ref]
