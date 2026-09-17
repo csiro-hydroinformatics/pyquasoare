@@ -58,12 +58,12 @@ FLUX_FUNCTIONS = {
         lambda x: np.maximum(x, 0.)**2
         ],
     "quadrouting": [
-        lambda x: np.where(x > 0., 1., 0.),
+        lambda x: np.ones_like(x),
         lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.)**2
         ],
     "linrouting": [
-        lambda x: np.where(x > 0., 1., 0.),
+        lambda x: np.ones_like(x),
         lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.)
         ],
@@ -158,7 +158,7 @@ def compare(y0, y1, eps=1e-3, report_probs=[0, 50, 90]):
 
         em[np.isnan(em)] = 0.
         emean[prob] = em.max()
-        stats[prob] = em.squeeze()
+        stats[prob] = em
 
     return emean, stats
 
