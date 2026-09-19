@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 
 from hydrodiy.io import csv, iutils, hyruns
 
-from gradbench import get_options
+from gradaverage import get_options
 
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
