@@ -50,6 +50,8 @@ FLUX_FUNCTIONS = {
         #       in this case, the flux functions become linear
         #       if the store exceeds max(alphas). This is
         #       not the GR4J behaviour.
+        #       TODO: add a version of this reservoir with bounded
+        #       demand when > 0
         lambda x: 0.9 * np.ones_like(x),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
@@ -59,6 +61,8 @@ FLUX_FUNCTIONS = {
         #       in this case, the flux functions become linear
         #       if the store exceeds max(alphas). This is
         #       not the GR2M behaviour.
+        #       TODO: add a version of this reservoir with bounded
+        #       demand when > 0
         lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.),
         lambda x: np.maximum(x, 0.)**2
