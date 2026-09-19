@@ -49,12 +49,15 @@ def get_options():
     duration_repeat = 1
 
     nuh = 5
-    nsubsteps = [1, 6, 12, 24, 144]
+
+    nsubsteps = [1, 6, 12, 24, 96]
 
     stationids = data_reader.SITEIDS
 
+    nsubmaxs = [24, 96]
+
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref]
+    nreaches = [1, nreaches_ref, 50]
 
     nalphas_ref = 100
     nalphas = [nalphas_ref]
@@ -96,7 +99,16 @@ def get_options():
                                stationid=stationids,
                                nreaches=nreaches,
                                nalphas=nalphas,
+                               nsubmax=nsubmaxs,
                                gamma_mean=gamma_means)
+
+    tasks = []
+    for task in opm.tasks:
+        if task["nreaches"] > 5 and task["nsubmax"] == max(nsubsteps):
+            continue
+        tasks.append(task)
+    opm.tasks = tasks
+
     return opm
 
 
@@ -152,7 +164,9 @@ def process(config, script_paths, logger, data):
     time = hclim.index[istart:iend]
     hclim = hclim.values[istart:iend]
 
-    nsubsteps = config.options.context["nsubsteps"]
+    nsmax = config.task.nsubmax
+    nsubsteps = [n for n in config.options.context["nsubsteps"]
+                 if n <= nsmax]
     nsubsteps.sort()
     assert nsubsteps[0] == 1
 
@@ -200,7 +214,8 @@ def process(config, script_paths, logger, data):
             else:
                 mod1 = mods[1]
                 mod.set_Qstars(mod1.Qstars)
-                mod.gammas = mod1.gammas
+                mod.flux_scalings = mod1.flux_scalings.copy()
+                mod.gammas = mod1.gammas.copy()
                 for res in np.arange(mod.nreservoirs):
                     mod.coefs_linear[res] = mod1.coefs_linear[res]
 
@@ -328,10 +343,12 @@ if __name__ == "__main__":
                         ["version", "taskid", "overwrite",
                          "debug", "options", "task", "nsubsteps"])
     opm = get_options()
+
     task = opm.get_task(taskid)
 
     if debug:
         task.nreaches = 5
+        task.nsubmax = 96
         _, X1, _, X3, _ = get_parameters()
         task.gamma_mean = (X1, X3, X1)
 
