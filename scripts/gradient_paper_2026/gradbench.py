@@ -418,7 +418,7 @@ def set_parameters(config, logger, mod):
         gammas[irr] = random_scalings(gamma_std) * gamma_mean[1]
 
         dem = np.random.normal(loc=demand_mean, scale=demand_std)
-        mod.flux_scalings[irr, 1] = dem
+        mod.flux_scalings[irr, 1] = min(0, dem)
 
         # RO reservoir
         iro = get_reservoir_id(config, ireach, "quadrouting")

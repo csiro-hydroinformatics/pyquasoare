@@ -78,14 +78,14 @@ def process(config, script_paths, logger, data):
     epss = perf.TASK_OPT_findiff_log10eps.unique()
     nas = perf.TASK_OPT_nalphas.unique()
 
-    gm_ref = "500_50_500"
+    gm_ref = "500.0_50.0_500.0"
     eps_ref = -5
     na_ref = 50
 
     for na, gm, eps in prod(nas, gms, epss):
         match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
-        #if match < 2:
-        #    continue
+        if match < 2:
+            continue
 
         logger.info(f"Plotting na={na} gm={gm} eps={eps}", nret=1)
 
@@ -134,11 +134,11 @@ def process(config, script_paths, logger, data):
                     rot = 0.
                 else:
                     if re.search("delta", t2):
-                        title = "Runtime ratio [-]"
+                        title = "Runtime grad/sim ratio [-]"
                     elif re.search("max90", t2):
-                        title = "Relative error\nabove 90th prc [-]"
+                        title = "Error/stdev ratio\nabove 90th prc [-]"
                     else:
-                        title = "Relative error [-]"
+                        title = "Error/stdev ratio [-]"
                     rot = 90.
 
                 ax.text(0.5, 0.5, title,
@@ -161,10 +161,11 @@ def process(config, script_paths, logger, data):
 
             if re.search("runtimedelta", metric):
                 quas_dt = perf.loc[idx, "log10runtime_neutral[sec]"].mean()
-                txt = f"QuaSoARe sim runtime:\n"\
+                txt = f"simulation runtime:\n"\
                     + f"{10**quas_dt:0.1e} sec/yr/reservoir"
                 ax.text(0.98, 0.02, txt, va="bottom", ha="right",
-                        transform=ax.transAxes, fontstyle="italic")
+                        transform=ax.transAxes, fontstyle="italic",
+                        fontsize="large")
 
             logger.info(f"len(df) = {len(df)}", ntab=1)
 
@@ -209,8 +210,8 @@ def process(config, script_paths, logger, data):
                     ax.set_ylim((-0.5, 3.5))
                     tk = np.arange(0, 4)
                 else:
-                    ax.set_ylim((-6.5, 0.5))
-                    tk = np.arange(-6, 2, 2)
+                    ax.set_ylim((-10.5, -3.5))
+                    tk = np.arange(-10, -3, 2)
 
                 labs = ["1" if k == 0 else f"$10^{{{k}}}$" for k in tk]
                 ax.set_yticks(tk, labels=labs)
