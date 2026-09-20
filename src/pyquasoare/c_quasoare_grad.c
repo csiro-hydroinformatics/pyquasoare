@@ -52,6 +52,74 @@ double c_grad_inverse(double M, double S, double x0, double x){
     }
 }
 
+int c_grad_aggregate_fluxes(unsigned int ntimesteps,
+                            unsigned int nreservoirs,
+                            unsigned int nsubsteps,
+                            double * fluxes, double * fluxes_agg) {
+    int ierr = 0;
+    unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned int t, t_agg, ires, ifx, is_first, idx, idx_agg;
+    unsigned int nres_times_t, nres_times_t_agg;
+
+    for(t = 0; t < ntimesteps; t++) {
+        t_agg = t / nsubsteps;
+        is_first = t % nsubsteps == 0;
+
+        nres_times_t = nreservoirs * t;
+        nres_times_t_agg = nreservoirs * t_agg;
+
+        for(ires = 0; ires < nreservoirs; ires ++ ) {
+            /* Data indices */
+            idx = nfxo * (nres_times_t + ires);
+            idx_agg = nfxo * (nres_times_t_agg + ires);
+
+            /* Set aggregate */
+            for(ifx = 0; ifx < nfxo; ifx ++) {
+                if(is_first)
+                    fluxes_agg[idx_agg + ifx] = 0;
+
+                fluxes_agg[idx_agg + ifx] += fluxes[idx + ifx] / nsubsteps;
+            }
+        }
+    }
+    return ierr;
+}
+
+int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
+                            unsigned int nvariables,
+                            unsigned int nreservoirs,
+                            unsigned int nsubsteps,
+                            double * dfluxes, double * dfluxes_agg) {
+    int ierr = 0;
+    unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned int t, t_agg, ivar, ires, ifx, is_first, idx, idx_agg;
+    unsigned int nvar_nres_times_t, nvar_nres_times_t_agg;
+
+    for(t = 0; t < ntimesteps; t++) {
+        t_agg = t / nsubsteps;
+        is_first = t % nsubsteps == 0;
+
+        nvar_nres_times_t = nvariables * nreservoirs * t;
+        nvar_nres_times_t_agg = nvariables * nreservoirs * t_agg;
+
+        for(ivar = 0; ivar < nvariables; ivar ++ ) {
+            for(ires = 0; ires < nreservoirs; ires ++ ) {
+                /* Data indices */
+                idx = nfxo * (nvar_nres_times_t + nreservoirs * ivar + ires);
+                idx_agg = nfxo * (nvar_nres_times_t_agg + nreservoirs * ivar + ires);
+
+                /* Set aggregate */
+                for(ifx = 0; ifx < nfxo; ifx ++) {
+                    if(is_first)
+                        dfluxes_agg[idx_agg + ifx] = 0;
+
+                    dfluxes_agg[idx_agg + ifx] += dfluxes[idx + ifx] / nsubsteps;
+                }
+            }
+        }
+    }
+    return ierr;
+}
 
 /* Integrate reservoir equation over 1 time step and compute associated fluxes
  * flux_scalings are scaling factors applied to
