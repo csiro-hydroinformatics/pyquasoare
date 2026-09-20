@@ -58,4 +58,5 @@ src/pyquasoare/c_pyquasoare.c
 *.log
 *.xml
 examples/notebooks/.ipynb_checkpoints/*
+.ipynb_checkpoints/*
 
