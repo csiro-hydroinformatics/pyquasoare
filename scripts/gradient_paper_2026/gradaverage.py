@@ -50,11 +50,11 @@ def get_options():
 
     nuh = 5
 
-    nsubsteps = [1, 6, 12, 24, 96]
+    nsubsteps = [1, 6, 12, 24, 48]
 
     stationids = data_reader.SITEIDS
 
-    nsubmaxs = [24, 96]
+    nsubmaxs = [24, max(nsubsteps)]
 
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 50]
