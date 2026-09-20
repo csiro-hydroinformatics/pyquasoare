@@ -63,7 +63,7 @@ def get_options():
     stationids = data_reader.SITEIDS
 
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref, 50]
+    nreaches = [1, nreaches_ref, 20]
 
     nalphas_ref = 50
     nalphas = [10, nalphas_ref, 200]
@@ -71,7 +71,7 @@ def get_options():
     findiff_log10eps_ref = -5
     findiff_log10eps = [-4, findiff_log10eps_ref, -6]
 
-    nrepeat = 20
+    nrepeat = 50
     nbatch = 1
     batches = np.arange(nbatch)
 
@@ -82,13 +82,12 @@ def get_options():
         (X1 / 10, X3 / 10, X1 / 10)
         ]
 
-    gamma_std = 0.2
-
+    gamma_std = 0.5
     demand_mean = -0.5
-    demand_std = 0.2
+    demand_std = 0.5
 
     x4_mean = 1.
-    x4_std = 0.2
+    x4_std = 0.5
 
     opm = hyruns.OptionManager(duration_base=duration_base,
                                duration_repeat=duration_repeat,
@@ -425,7 +424,7 @@ def set_parameters(config, logger, mod):
         gammas[iro] = random_scalings(gamma_std) * gamma_mean[2]
 
         # UH
-        x4 = random_scalings(x4_std) * x4_mean
+        x4 = max(0.05, random_scalings(x4_std) * x4_mean)
         for iuh in range(nuh):
             iru = get_reservoir_id(config, ireach, f"uh{iuh}")
             mod.coefs_linear[iru, 2, :, 0] = 1.25 * nuh / x4
