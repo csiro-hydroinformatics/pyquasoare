@@ -91,7 +91,7 @@ def process(config, script_paths, logger, data):
 
         # Create figure
         plt.close("all")
-        nrs = [1, 5, 50]
+        nrs = [1, 5, 20]
         metrics = ["runtimedelta", "errmax00", "errmax90"]
         mosaic = [["."] + [f"{nr}/title" for nr in nrs]] \
             + [[f"title/{vn}"] + [f"{nr}/{vn}" for nr in nrs]

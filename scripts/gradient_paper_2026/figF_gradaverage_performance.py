@@ -91,7 +91,7 @@ def process(config, script_paths, logger, data):
 
         # Create figure
         plt.close("all")
-        nrs = [1, 5, 50]
+        nrs = [1, 5, 20] if nsmax == 24 else [1, 5]
         metrics = [f"{vt}_{vn}" for vn in ["errmax00", "errmax90"]
                    for vt in ["fx", "dfx"]]
         mosaic = [["."] + [f"{nr}/title" for nr in nrs]] \
