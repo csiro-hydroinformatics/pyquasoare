@@ -45,7 +45,7 @@ np.random.seed(5446)
 def get_options():
     timestep = "daily"
     # Duration depends on number of reaches
-    duration_base = {1: 100, 2: 100, 3: 50, 5: 20, 20: 5, 50: 5}
+    duration_base = {1: 100, 2: 100, 3: 50, 5: 20, 20: 5, 30: 5, 40: 5, 50: 5}
     duration_repeat = 1
 
     nuh = 5
@@ -57,12 +57,12 @@ def get_options():
     nsubmaxs = [24, max(nsubsteps)]
 
     nreaches_ref = 5
-    nreaches = [1, nreaches_ref, 50]
+    nreaches = [1, nreaches_ref, 20]
 
     nalphas_ref = 100
     nalphas = [nalphas_ref]
 
-    nrepeat = 20
+    nrepeat = 50
     nbatch = 1
     batches = np.arange(nbatch)
 
@@ -72,13 +72,13 @@ def get_options():
         (X1 * 10, X3 * 10, X1 * 10),
         (X1 / 10, X3 / 10, X1 / 10)
         ]
-    gamma_std = 0.2
 
+    gamma_std = 0.5
     demand_mean = -0.5
-    demand_std = 0.2
+    demand_std = 0.5
 
-    x4_mean = 1.0
-    x4_std = 0.2
+    x4_mean = 1.
+    x4_std = 0.5
 
     opm = hyruns.OptionManager(duration_base=duration_base,
                                duration_repeat=duration_repeat,
