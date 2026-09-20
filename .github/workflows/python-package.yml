@@ -28,17 +28,19 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          uv run ruff check src/pyquasoare
+          uv run --locked ruff check --ignore E402 src/pyquasoare
+
+      - name: Run doc tests
+        run: |
+          uv run --locked pytest --doctest-modules src
 
       - name: Run tests
         run: |
-          set -e
-          uv run --locked pytest --doctest-modules src
-          uv run --locked pytest --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
+          uv run --locked pytest -s --tb=line --cov=pyquasoare --cov-report=xml --cov-report=html -cov-report=missing-term tests
  
       - name: Parse coverage report and create badge
         run: |
-          uv run python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
+          uv run --locked python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
 
       - name: Update gist badge
         run: |
@@ -50,13 +52,13 @@ jobs:
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
 
       - name: Upload pytest test log files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-logs
           path: tests/*.log
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-coverage
           path: htmlcov/*.*
@@ -64,10 +66,9 @@ jobs:
       - name: Run examples
         run: |
           set -e
-          echo "--- pyquasoare examples : located in $PWD ---"
-          echo "... python examples"
-          uv run ruff check examples
-          uv run python examples/run_all_examples.py
+          echo "--- pyquasoare examples ---"
+          uv run --locked ruff check examples
+          uv run --locked python examples/run_all_examples.py
           
           echo "... C example quadroute"
           cd examples/quadroute
@@ -76,3 +77,9 @@ jobs:
           echo "... C example vicmod"
           cd ../vicmod
           ./compile_unix.sh
+
+      - name: Run jupyter notebooks
+        run: |
+          set -e
+          echo "--- Jupyter notebooks ---"
+          uv run jupyter execute examples/notebooks/quasoare_examples_01_defining_an_ode.ipynb
