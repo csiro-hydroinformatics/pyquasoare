@@ -222,10 +222,13 @@ def process(config, script_paths, logger, data):
             if irepeat == 0 and nsub == 1:
                 log_model(config, logger, mod)
 
+            logger.info(".. run model", ntab=1)
             mod.run()
+            logger.info(".. aggregate", ntab=1)
             mod.aggregate()
 
             # Rescale fluxes -> Get dfluxes in mm / d
+            logger.info(".. post process", ntab=1)
             nvars = len(mod.variables_reservoir_id)
             for ivar in range(nvars):
                 rid = mod.variables_reservoir_id[ivar]
@@ -245,6 +248,7 @@ def process(config, script_paths, logger, data):
             if nsub == nsubmax:
                 continue
 
+            logger.info(f"Compute perf - nsubsteps={nsub}", nret=1)
             nagg = nsubmax // nsub
             assert nagg * nsub == nsubmax
             ex, st = gradients.compare(fxa[:, None, :], mod.fluxes_agg[:, None, :])
