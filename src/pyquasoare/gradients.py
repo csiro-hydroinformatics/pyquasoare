@@ -982,8 +982,8 @@ class MultiReservoirModel():
         dfx_agg = self._dfluxes_agg
 
         if nsub > 1:
-            ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsub, fx, fx_agg)
-            ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsub, dfx, dfx_agg)
+            c_pyquasoare_grad.grad_aggregate_fluxes(nsub, fx, fx_agg)
+            c_pyquasoare_grad.grad_aggregate_dfluxes(nsub, dfx, dfx_agg)
         else:
             self._fluxes_agg[:] = fx
             self._dfluxes_agg[:] = dfx
