@@ -65,8 +65,8 @@ def get_options():
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 20]
 
-    nalphas_ref = 50
-    nalphas = [10, nalphas_ref, 200]
+    nalphas_ref = 100
+    nalphas = [10, nalphas_ref, 500]
 
     findiff_log10eps_ref = -5
     findiff_log10eps = [-4, findiff_log10eps_ref, -6]
@@ -410,18 +410,18 @@ def set_parameters(config, logger, mod):
     for ireach in range(nreaches):
         # RR prod reservoir
         ipr = get_reservoir_id(config, ireach, "gr4jprod")
-        gammas[ipr] = random_scalings(gamma_std) * gamma_mean[0]
+        gammas[ipr] = max(1, random_scalings(gamma_std) * gamma_mean[0])
 
         # RR route reservoir
         irr = get_reservoir_id(config, ireach, "gr4jroute")
-        gammas[irr] = random_scalings(gamma_std) * gamma_mean[1]
+        gammas[irr] = max(1, random_scalings(gamma_std) * gamma_mean[1])
 
         dem = np.random.normal(loc=demand_mean, scale=demand_std)
         mod.flux_scalings[irr, 1] = min(0, dem)
 
         # RO reservoir
         iro = get_reservoir_id(config, ireach, "quadrouting")
-        gammas[iro] = random_scalings(gamma_std) * gamma_mean[2]
+        gammas[iro] = max(1, random_scalings(gamma_std) * gamma_mean[2])
 
         # UH
         x4 = max(0.05, random_scalings(x4_std) * x4_mean)
@@ -735,8 +735,8 @@ if __name__ == "__main__":
 
     if debug:
         task.nreaches = 5
-        task.nalphas = 200
-        task.findiff_log10eps = -4
+        task.nalphas = 50
+        task.findiff_log10eps = -5
         _, X1, X2, X3, _ = get_parameters()
         task.gamma_mean = (X1 / 10., X3 / 10., X1 / 10.)
 
