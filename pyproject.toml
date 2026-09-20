@@ -31,7 +31,8 @@ dependencies = [
     "pandas>=2.0.0",
     "cython>=3.2.4",
     "pip>=25.0.1",
-    "hydrodiy"
+    "hydrodiy",
+    "notebook>=7.3.3",
 ]
 
 [dependency-groups]
