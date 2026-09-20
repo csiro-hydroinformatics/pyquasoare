@@ -223,6 +223,71 @@ def test_compare(allclose):
         assert allclose(st[prob], erram, equal_nan=True)
 
 
+def test_grad_aggregate_fluxes(allclose):
+    ntimesteps_agg = 100
+    nsubsteps = 24
+    ntimesteps = nsubsteps * ntimesteps_agg
+    nres = 20
+    nfxo = gradients.NFLUXES_OUTPUTS
+
+    fx = np.random.uniform(-1, 1, size=(ntimesteps, nres, nfxo))
+    fx_agg = np.empty((ntimesteps_agg - 1, nres, nfxo))
+    with pytest.raises(ValueError, match="Number of timesteps"):
+        ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsubsteps, fx, fx_agg)
+
+    fx_agg = np.empty((ntimesteps_agg, nres, nfxo - 1))
+    with pytest.raises(ValueError, match="fluxes_agg.shape"):
+        ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsubsteps, fx, fx_agg)
+
+    fx = np.random.uniform(-1, 1, size=(ntimesteps, nres, nfxo - 1))
+    fx_agg = np.empty((ntimesteps_agg, nres, nfxo))
+    with pytest.raises(ValueError, match="fluxes.shape"):
+        ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsubsteps, fx, fx_agg)
+
+    fx = np.random.uniform(-1, 1, size=(ntimesteps, nres, nfxo))
+    fx_agg = np.empty((ntimesteps_agg, nres, nfxo))
+    ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsubsteps, fx, fx_agg)
+
+    for t in range(ntimesteps_agg):
+        agg  = fx_agg[t]
+        idx = np.arange(t * nsubsteps, (t + 1) * nsubsteps)
+        expected = fx[idx].mean(axis=0)
+        allclose(agg, expected)
+
+
+def test_grad_aggregate_dfluxes(allclose):
+    ntimesteps_agg = 100
+    nsubsteps = 24
+    ntimesteps = nsubsteps * ntimesteps_agg
+    nvar = 50
+    nres = 20
+    nfxo = gradients.NFLUXES_OUTPUTS
+
+    dfx = np.random.uniform(-1, 1, size=(ntimesteps, nvar, nres, nfxo))
+    dfx_agg = np.empty((ntimesteps_agg - 1, nvar, nres, nfxo))
+    with pytest.raises(ValueError, match="Number of timesteps"):
+        ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsubsteps, dfx, dfx_agg)
+
+    dfx_agg = np.empty((ntimesteps_agg, nvar, nres, nfxo - 1))
+    with pytest.raises(ValueError, match="dfluxes_agg.shape"):
+        ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsubsteps, dfx, dfx_agg)
+
+    dfx = np.random.uniform(-1, 1, size=(ntimesteps, nvar, nres, nfxo - 1))
+    dfx_agg = np.empty((ntimesteps_agg, nvar, nres, nfxo))
+    with pytest.raises(ValueError, match="dfluxes.shape"):
+        ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsubsteps, dfx, dfx_agg)
+
+    dfx = np.random.uniform(-1, 1, size=(ntimesteps, nvar, nres, nfxo))
+    dfx_agg = np.empty((ntimesteps_agg, nvar, nres, nfxo))
+    ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsubsteps, dfx, dfx_agg)
+
+    for t in range(ntimesteps_agg):
+        agg  = dfx_agg[t]
+        idx = np.arange(t * nsubsteps, (t + 1) * nsubsteps)
+        expected = dfx[idx].mean(axis=0)
+        allclose(agg, expected)
+
+
 @pytest.mark.parametrize("nalphas", [10, 500])
 @pytest.mark.parametrize("amin", [0., 0.5])
 @pytest.mark.parametrize("amax", [0.5, 1., 5.])

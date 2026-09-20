@@ -35,6 +35,17 @@ double c_grad_forward(double M, double S, double t0, double x0, double t);
 
 double c_grad_inverse(double M, double S, double x0, double x1);
 
+int c_grad_aggregate_fluxes(unsigned int ntimesteps,
+                            unsigned int nreservoirs,
+                            unsigned int nsubsteps,
+                            double * fluxes, double * fluxes_agg);
+
+int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
+                            unsigned int nvariables,
+                            unsigned int nreservoirs,
+                            unsigned int nsubsteps,
+                            double * dfluxes, double * dfluxes_agg);
+
 int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                      unsigned int enforce_potential_inflow_pos,
                      double *alphas,

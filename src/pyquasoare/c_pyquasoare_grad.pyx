@@ -22,6 +22,17 @@ cdef extern from 'c_quasoare_grad.h':
     cdef unsigned int QUASOARE_GRAD_IFLUX_SHORTFALL
     cdef unsigned int QUASOARE_GRAD_IFLUX_OUTFLOW
 
+    int c_grad_aggregate_fluxes(unsigned int ntimesteps,
+                                unsigned int nreservoirs,
+                                unsigned int nsubsteps,
+                                double * fluxes, double * fluxes_agg);
+
+    int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
+                                 unsigned int nvariables,
+                                 unsigned int nreservoirs,
+                                 unsigned int nsubsteps,
+                                 double * dfluxes, double * dfluxes_agg);
+
     unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          unsigned int enforce_potential_inflow_pos,
                          double *alphas,
@@ -130,6 +141,57 @@ def check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, is_model):
 
     if coefs_linear.shape[ibase + 2] != NFLUXES_POTENTIAL:
         raise ValueError(f"coefs_linear.shape[{ibase + 2}] != NFLUXES_POTENTIAL")
+
+
+def grad_aggregate_fluxes(unsigned int nsubsteps,
+                          np.ndarray[double, ndim=3, mode='c'] fluxes not None,
+                          np.ndarray[double, ndim=3, mode='c'] fluxes_agg not None):
+    cdef unsigned int ntimesteps = fluxes.shape[0];
+    cdef unsigned int nreservoirs = fluxes.shape[1];
+
+    if fluxes.shape[2] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes.shape[2] != NFLUXES_OUTPUTS")
+
+    if fluxes_agg.shape[2] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes_agg.shape[2] != NFLUXES_OUTPUTS")
+
+    if fluxes_agg.shape[0] * nsubsteps != ntimesteps:
+        raise ValueError("Number of timesteps in fluxes and fluxes_agg" \
+                         + " incompatible with nsubsteps")
+
+    if fluxes_agg.shape[1] != nreservoirs:
+        raise ValueError("fluxes_agg.shape[1] != nreservoirs")
+
+    return c_grad_aggregate_fluxes(ntimesteps, nreservoirs, nsubsteps,
+                                   <double*> np.PyArray_DATA(fluxes),
+                                   <double*> np.PyArray_DATA(fluxes_agg));
+
+def grad_aggregate_dfluxes(unsigned int nsubsteps,
+                          np.ndarray[double, ndim=4, mode='c'] dfluxes not None,
+                          np.ndarray[double, ndim=4, mode='c'] dfluxes_agg not None):
+    cdef unsigned int ntimesteps = dfluxes.shape[0];
+    cdef unsigned int nvariables = dfluxes.shape[1];
+    cdef unsigned int nreservoirs = dfluxes.shape[2];
+
+    if dfluxes.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes.shape[3] != NFLUXES_OUTPUTS")
+
+    if dfluxes_agg.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes_agg.shape[3] != NFLUXES_OUTPUTS")
+
+    if dfluxes_agg.shape[0] * nsubsteps != ntimesteps:
+        raise ValueError("Number of timesteps in dfluxes and dfluxes_agg" \
+                         + " incompatible with nsubsteps")
+
+    if dfluxes_agg.shape[1] != nvariables:
+        raise ValueError("dfluxes_agg.shape[1] != nvariables")
+
+    if dfluxes_agg.shape[2] != nreservoirs:
+        raise ValueError("dfluxes_agg.shape[2] != nreservoirs")
+
+    return c_grad_aggregate_dfluxes(ntimesteps, nvariables, nreservoirs, nsubsteps,
+                                    <double*> np.PyArray_DATA(dfluxes),
+                                    <double*> np.PyArray_DATA(dfluxes_agg));
 
 
 def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,

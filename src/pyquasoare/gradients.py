@@ -90,13 +90,6 @@ FLUX_FUNCTIONS = {
 }
 
 # -- utility function --
-def aggregate(x, ntimesteps, nagg):
-    agg = x.cumsum(axis=0)
-    agg[nagg:] = agg[nagg:] - agg[:-nagg]
-    idx = np.arange(nagg - 1, (ntimesteps - 1) * nagg, nagg)
-    return agg[idx] / nagg
-
-
 def get_alphas(nalphas, amin=0, amax=1.,
                nreservoirs=1,
                eps=1e-5):
@@ -982,19 +975,15 @@ class MultiReservoirModel():
             errmsg = "fluxes and dfluxes are none. Please allocate."
             raise ValueError(errmsg)
 
-        # Could be improved...
         nsub = self.nsubsteps
         fx = self._fluxes
+        fx_agg = self._fluxes_agg
         dfx = self._dfluxes
+        dfx_agg = self._dfluxes_agg
 
         if nsub > 1:
-            self._fluxes_agg[:-1] = aggregate(fx, self.ntimesteps_agg,
-                                              nsub)
-            self._fluxes_agg[-1] = fx[-nsub:].mean(axis=0)
-
-            self._dfluxes_agg[:-1] = aggregate(dfx, self.ntimesteps_agg,
-                                               nsub)
-            self._dfluxes_agg[-1] = dfx[-nsub:].mean(axis=0)
+            ierr = c_pyquasoare_grad.grad_aggregate_fluxes(nsub, fx, fx_agg)
+            ierr = c_pyquasoare_grad.grad_aggregate_dfluxes(nsub, dfx, dfx_agg)
         else:
             self._fluxes_agg[:] = fx
             self._dfluxes_agg[:] = dfx
