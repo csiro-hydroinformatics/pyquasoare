@@ -80,7 +80,7 @@ def process(config, script_paths, logger, data):
 
     gm_ref = "500.0_50.0_500.0"
     eps_ref = -5
-    na_ref = 100
+    na_ref = 50
 
     for na, gm, eps in prod(nas, gms, epss):
         match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
