@@ -80,7 +80,7 @@ def process(config, script_paths, logger, data):
 
     gm_ref = "500.0_50.0_500.0"
     eps_ref = -5
-    na_ref = 50
+    na_ref = 100
 
     for na, gm, eps in prod(nas, gms, epss):
         match = int(eps == eps_ref) + int(gm == gm_ref) + int(na == na_ref)
@@ -118,20 +118,24 @@ def process(config, script_paths, logger, data):
         for iax, (aname, ax) in enumerate(axs.items()):
             if re.search("title", aname):
                 ax.axis("off")
+                ax.set(xlim=(0, 1), ylim=(0, 1))
                 t1, t2 = aname.split("/")
                 if t2 == "title":
-                    title = f"{t1} reach" if t1 == "1" else f"{t1} reaches"
+                    t1 = int(t1)
+                    title = f"{t1} reach" if t1 == 1 else f"{t1} reaches"
 
                     idx = idx0 & (perf.TASK_OPT_nreaches == int(t1))
-                    nr = (perf.loc[idx, "nreservoirs"].unique()).squeeze()
+                    nr = t1 * 9
                     nv = (perf.loc[idx, "nvariables"].unique()).squeeze()
                     ny = (perf.loc[idx, "ntimesteps_agg"].unique() / 365.25).squeeze()
+                    ng = nr * 6 * nv
                     subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
-                        + f"  {ny:0.0f} Years"
-                    ax.text(0.5, 0.1, subtitle,
-                            va="center", ha="center",
+                        + f"  {ny:0.0f} Years\n({ng} gradient timeseries)"
+                    ax.text(0.5, 0.3, subtitle,
+                            va="top", ha="center",
                             fontsize="large")
                     rot = 0.
+                    va = "bottom"
                 else:
                     if re.search("delta", t2):
                         title = "Runtime grad/sim ratio [-]"
@@ -140,13 +144,13 @@ def process(config, script_paths, logger, data):
                     else:
                         title = "Error/stdev ratio [-]"
                     rot = 90.
+                    va = "center"
 
                 ax.text(0.5, 0.5, title,
-                        va="center", ha="center",
+                        va=va, ha="center",
                         fontweight="bold",
                         fontsize="x-large",
                         rotation=rot)
-
                 continue
 
             nreaches, metric = aname.split("/")

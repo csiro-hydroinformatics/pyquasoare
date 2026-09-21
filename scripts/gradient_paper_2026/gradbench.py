@@ -65,7 +65,7 @@ def get_options():
     nreaches_ref = 5
     nreaches = [1, nreaches_ref, 20]
 
-    nalphas_ref = 100
+    nalphas_ref = 50
     nalphas = [10, nalphas_ref, 500]
 
     findiff_log10eps_ref = -5
