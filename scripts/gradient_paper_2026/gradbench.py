@@ -532,7 +532,7 @@ def process(config, script_paths, logger, data):
         # Rescale fluxes -> Get dfluxes in mm / d
         nvars = len(modref.variables_reservoir_id)
         for ivar, res in enumerate(modref.variables_reservoir_id):
-            modref.dfluxes[:, ivar] *= modref.gammas[res]
+            modref.dfluxes_agg[:, ivar] *= modref.gammas[res]
 
         # Print one simulation to make sure it makes sense
         if irepeat == 0 and ((modref.nreaches == 5 \
@@ -669,7 +669,7 @@ def process(config, script_paths, logger, data):
             #    ivar, res, ifx = [ii[0] for ii in imax]
 
             #    plt.close("all")
-            #    fig, axs = plt.subplots(nrows=3, figsize=(10, 10),
+            #    fig, axs = plt.subplots(nrows=3, figsize=(10, 8),
             #                            layout="constrained", sharex=True)
             #    ax = axs[0]
             #    nsub = modref.nsubsteps
@@ -679,7 +679,9 @@ def process(config, script_paths, logger, data):
 
             #    ax = axs[1]
             #    y1 = modref.fluxes_agg[:, res, ifx]
+            #    y2 = modeps[1].fluxes_agg[:, res, ifx]
             #    ax.plot(y1)
+            #    ax.plot(y2)
             #    ax.set(yscale="asinh")
 
             #    ax = axs[2]
@@ -694,7 +696,6 @@ def process(config, script_paths, logger, data):
             #    fig.suptitle(ftitle, fontweight="bold")
             #    plt.show()
             #    import pdb; pdb.set_trace()
-
 
     results.index.name = "REPEAT"
     fres =  fperf / f"performance_v{version}_TASK{taskid}.csv"
@@ -738,7 +739,8 @@ if __name__ == "__main__":
         task.nalphas = 50
         task.findiff_log10eps = -5
         _, X1, X2, X3, _ = get_parameters()
-        task.gamma_mean = (X1 / 10., X3 / 10., X1 / 10.)
+        #task.gamma_mean = (X1 / 10., X3 / 10., X1 / 10.)
+        task.gamma_mean = (X1, X3, X1)
 
     config = Config(version, taskid, overwrite,
                     debug, opm, task, nsubsteps)
