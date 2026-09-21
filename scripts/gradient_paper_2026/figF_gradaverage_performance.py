@@ -79,13 +79,13 @@ def process(config, script_paths, logger, data):
     nsmaxs = perf.TASK_OPT_nsubmax.unique()
 
     gm_ref = "500.0_50.0_500.0"
-    na_ref = 50
+    na_ref = 100
     nsmax_ref = 24
 
     for na, gm, nsmax in prod(nas, gms, nsmaxs):
         match = int(na == na_ref) + int(gm == gm_ref) + int(nsmax == nsmax_ref)
-        #if match < 2:
-        #    continue
+        if match < 2:
+            continue
 
         logger.info(f"Plotting na={na} gm={gm} nsmax={nsmax}", nret=1)
 
