@@ -121,23 +121,25 @@ def process(config, script_paths, logger, data):
                 ax.axis("off")
                 t1, t2 = aname.split("/")
                 if t2 == "title":
-                    title = f"{t1} reach" if t1 == "1" else f"{t1} reaches"
+                    t1 = int(t1)
+                    title = f"{t1} reach" if t1 == 1 else f"{t1} reaches"
 
                     idx = idx0 & (perf.TASK_OPT_nreaches == int(t1))
                     if idx.sum() == 0:
                         logger.info("No data. Skip.", ntab=2)
                         continue
 
-                    nr = (perf.loc[idx, "nreservoirs"].unique()).squeeze()
+                    nr = t1 * 9
                     nv = (perf.loc[idx, "nvariables"].unique()).squeeze()
                     ny = (perf.loc[idx, "ntimesteps_agg"].unique() / 365.25).squeeze()
-
+                    ng = nr * 6 * nv
                     subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
-                        + f"  {ny:0.0f} Years"
-                    ax.text(0.5, 0.1, subtitle,
-                            va="center", ha="center",
+                        + f"  {ny:0.0f} Years\n({ng} gradient timeseries)"
+                    ax.text(0.5, 0.3, subtitle,
+                            va="top", ha="center",
                             fontsize="large")
                     rot = 0.
+                    va = "bottom"
                 else:
                     n = "Grad" if re.search("dfx", t2) else "Flux"
                     if re.search("max90", t2):
@@ -145,9 +147,10 @@ def process(config, script_paths, logger, data):
                     else:
                         title = f"{n} Error/stdev ratio [-]"
                     rot = 90.
+                    va = "center"
 
                 ax.text(0.5, 0.5, title,
-                        va="center", ha="center",
+                        va=va, ha="center",
                         fontweight="bold",
                         fontsize="x-large",
                         rotation=rot)
