@@ -79,7 +79,7 @@ def process(config, script_paths, logger, data):
     nsmaxs = perf.TASK_OPT_nsubmax.unique()
 
     gm_ref = "500.0_50.0_500.0"
-    na_ref = 100
+    na_ref = 50
     nsmax_ref = 24
 
     for na, gm, nsmax in prod(nas, gms, nsmaxs):
