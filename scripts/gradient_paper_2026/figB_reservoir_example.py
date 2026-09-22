@@ -112,6 +112,7 @@ def inverse(M, S, x0, x):
 
     return tau
 
+
 def integrate_details(alphas, gamma, Qstars, coefs, x0,
                       timestep, logger, debug=False):
     nval = len(Qstars)
@@ -378,11 +379,18 @@ def process(config, script_paths, logger, data):
 
     # Build quadratic model
     funs = gradients.FLUX_FUNCTIONS["quadrouting"]
-    #nalphas = 15
-    #alphas = gradients.get_alphas(nalphas)[0]
     alphas = 0.2 * np.arange(6)
     nalphas = len(alphas)
     coefs = gradients.lin_coefficient_matrix(funs, alphas)
+
+    # .. check formula
+    for ia in range(len(alphas) - 1):
+        aj, ajp = alphas[[ia, ia + 1]]
+        sigj = (ajp**2 - aj**2) / (ajp - aj)
+        assert np.isclose(coefs[2, ia, 0], sigj)
+
+        muj = aj**2 - sigj * aj
+        assert np.isclose(coefs[2, ia, 1], muj)
 
     # Set inputs
     Qstars = np.zeros((nsubsteps * nval, 2))
@@ -454,26 +462,23 @@ def process(config, script_paths, logger, data):
     ax = axs[0, 0]
     x = np.linspace(0, 1, 100)
     dx = -x**2
-    ax.plot(x, dx, "-", color="0.4", label="True")
+    ax.plot(x, dx, "-", color="tab:blue",
+            lw=2, label="Flux function")
 
     dxa = -alphas**2
     ax.plot(alphas, dxa, "s",
             color="0.6", label="Interpolation nodes")
-    dxi = np.interp(x, alphas, dxa)
-    col = "tab:blue"
+    #dxi = np.interp(x, alphas, dxa)
+    dxi = np.zeros_like(x) * np.nan
+    for i in range(len(x) - 1):
+        xx = x[i]
+        ia = (xx - alphas >= 0).sum() - 1
+        dxi[i] = - coefs[2, ia, 1] - coefs[2, ia, 0] * xx
+
+    col = "0.5"
     ax.plot(x, dxi, "-", color=col,
             label="Linear interpolation")
     ax.plot([], [], ":", color="0.5", label="Interpolation bands")
-
-    #for j in range(nalphas - 1):
-    #    aj = alphas[j]
-    #    ajp = alphas[j + 1]
-    #    da = ajp - aj
-    #    da2 = ajp**2 - aj**2
-    #    s = -da2 / da
-    #    m = -aj**2 + da2 / da * aj
-    #    xx = np.linspace(aj, ajp, 10)
-    #    ax.plot(xx, m + s * xx, "-", color="purple", lw=5)
 
     title = "(a) Linear approximation of discharge flux function"
     ax.set(title=title, xticks=alphas,

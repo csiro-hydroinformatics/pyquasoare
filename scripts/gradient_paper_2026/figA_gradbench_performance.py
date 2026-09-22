@@ -130,12 +130,11 @@ def process(config, script_paths, logger, data):
                     ny = (perf.loc[idx, "ntimesteps_agg"].unique() / 365.25).squeeze()
                     ng = nr * 6 * nv
                     subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
-                        + f"  {ny:0.0f} Years\n({ng} gradient timeseries)"
-                    ax.text(0.5, 0.3, subtitle,
-                            va="top", ha="center",
+                        + f"  {ny:0.0f} Years"
+                    ax.text(0.5, 0.1, subtitle,
+                            va="center", ha="center",
                             fontsize="large")
                     rot = 0.
-                    va = "bottom"
                 else:
                     if re.search("delta", t2):
                         title = "Runtime grad/sim ratio [-]"
@@ -144,10 +143,9 @@ def process(config, script_paths, logger, data):
                     else:
                         title = "Error/stdev ratio [-]"
                     rot = 90.
-                    va = "center"
 
                 ax.text(0.5, 0.5, title,
-                        va=va, ha="center",
+                        va="center", ha="center",
                         fontweight="bold",
                         fontsize="x-large",
                         rotation=rot)
