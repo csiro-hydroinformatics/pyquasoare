@@ -33,6 +33,7 @@ dependencies = [
     "pip>=25.0.1",
     "hydrodiy",
     "notebook>=7.3.3",
+    "ipython>=8.12.3"
 ]
 
 [dependency-groups]
