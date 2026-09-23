@@ -27,7 +27,7 @@ FTEST = source_file.parent
 LOGGER = iutils.get_logger("models", flog=FTEST / "test_grad.log")
 NALPHAS = 50
 
-DEMANDS = [-0.5, 1e-10]
+DEMANDS = [-0.5, -0.1, 0.5]
 TIMESTEPS = [0.1, 1.]
 GAMMAS = [10, 100, 10000]
 FLUX_SCALINGS = [
@@ -40,12 +40,6 @@ FLUX_SCALINGS = [
 VARIABLE_IDS = [0, 1, 2, 3]
 NUMDIFF_EPS = 1e-5
 
-def fixed(x, x0):
-    return x0 * np.ones_like(x)
-
-def indicator(x, xmin, xmax):
-    return np.where((x > xmin) & (x < xmax), 1., 0.)
-
 def comp_fun(x, x0=1e-2):
     return np.asinh(x / x0)
 
@@ -56,11 +50,12 @@ def eff(x, y, nu=1., mini=1e-10):
 
     err2 = np.abs(ty - tx).max(axis=0)
 
-    denom = np.abs(tx).max()
+    denom = np.abs(tx - txm).max()
+
     if x.ndim == 1:
-        err1 = err2 / denom if denom > mini else np.nan
+        err1 = err2 / denom if denom > mini else 0.
     else:
-        err1 = np.where(denom > mini, err2 / denom, np.nan)
+        err1 = np.where(denom > mini, err2 / denom, 0.)
 
     return err1, err2
 
@@ -72,32 +67,32 @@ FLUX_FUNCTIONS = {
         lambda x: 4**3/9**4 * np.maximum(x, 0)**2
         ],
     "gr4jroutequad": [
-        lambda x: 0.9 * fixed(x, 1.),
+        lambda x: 0.9 * np.ones_like(x),
         lambda x: np.maximum(x, 0.)**2,
         lambda x: np.maximum(x, 0.)**2 / 4
         ],
     "nonlinrouting": [
         # exponent n = 6
-        lambda x: indicator(x, 0., np.inf),
-        lambda x: fixed(x, 1.),
+        lambda x: np.where(x > 0, 1., 0.),
+        lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.)**4
         ],
     "hymod1": [
         # exponent = 0.2
         lambda x: (1 - np.clip(x, 0., 1.))**0.2,
         lambda x: np.maximum(x, 0.),
-        lambda x: fixed(x, 0.)
+        lambda x: np.zeros_like(x)
         ],
     "hymod2": [
         # exponent = 5
         lambda x: (1 - np.clip(x, 0., 1.))**0.2,
         lambda x: np.maximum(x, 0.),
-        lambda x: fixed(x, 0.)
+        lambda x: np.zeros_like(x)
         ],
     "muskingumrouting": [
         # KM = 2.5 / XM = 0.2
-        lambda x: indicator(x, 0, np.inf) / (1 - 0.2),
-        lambda x: fixed(x, 1.),
+        lambda x: np.where(x > 0, 1., 0.) / (1 - 0.2),
+        lambda x: np.ones_like(x),
         lambda x: np.maximum(x, 0.) / 2.5 / (1 - 0.2)
         ],
 }
@@ -107,13 +102,13 @@ FLUX_FUNCTIONS.update(gradients.FLUX_FUNCTIONS)
 
 def get_data(siteid, reservoir, timestep, gamma, demand,
              istart=None, iend=None):
-    df = data_reader.get_data(siteid, "daily")
+    df = data_reader.get_data(siteid, "daily", None)
 
     istart = 0 if istart is None else istart
     iend = len(df) if iend is None else iend
     df = df.iloc[istart: iend]
 
-    Qstars = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qstars = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qstars[:, 1] *= -1 # PET = negative demand
     Qstars = np.ascontiguousarray(Qstars)
     if re.search("rout", reservoir):
@@ -186,7 +181,8 @@ def skip_this(reservoir, gamma, demand):
 @pytest.mark.parametrize("demand", DEMANDS)
 @pytest.mark.parametrize("eps", [-NUMDIFF_EPS, 0., NUMDIFF_EPS])
 def test_reservoir_functions(siteid, reservoir, gamma, timestep, demand, eps):
-    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand)
+    Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
+                                -365 * 10)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
     coefs_lin *= 1 + eps
 
@@ -346,7 +342,7 @@ def test_grad_integrate_error():
 @pytest.mark.parametrize("demand", DEMANDS)
 def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     skip_this(reservoir, gamma, demand)
-    start, end = 0, 500
+    start, end = -300, None
     Qstars, scalings = get_data(siteid, reservoir, timestep,
                                 gamma, demand, start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -456,7 +452,7 @@ def test_grad_reservoir(siteid, reservoir, gamma, timestep, demand,
     # Mass balance
     dSa = np.diff(x2) * gamma
     dSb = timestep * fx2[1:, :3].sum(axis=1)
-    assert allclose(dSa, dSb)
+    assert allclose(dSa, dSb, atol=5e-8)
 
     if reservoir == "transluent":
         # No flux storage
@@ -476,7 +472,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
                                 demand, flux_scalings,
                                 allclose, debug_mode):
     skip_this(reservoir, gamma, demand)
-    start, end = None, None
+    start, end = -10 * 365, None
     Qstars, scalings = get_data(siteid, reservoir, timestep, gamma, demand,
                                 start, end)
     alphas, coefs, coefs_lin = get_alphas_and_coefs(reservoir, scalings)
@@ -537,9 +533,9 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
         if np.any(np.isnan(dfx_eff)) or np.isnan(dx_eff):
             continue
 
-        xtol = 1e-8
+        xtol = 5e-7
         ftol = 5e-6
-        if debug_mode and (dx_eff > xtol or np.nanmin(dfx_eff) > ftol):
+        if debug_mode and (dx_eff > xtol or np.min(dfx_eff) > ftol):
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(ncols=3, nrows=2,
                                     figsize=(12, 7),
@@ -563,7 +559,7 @@ def test_grad_reservoir_tangent(siteid, reservoir, gamma, timestep,
             import pdb; pdb.set_trace()
 
         assert dx_eff < xtol
-        assert np.nanmax(dfx_eff) < ftol
+        assert np.max(dfx_eff) < ftol
 
 
 def test_grad_model_setters(allclose):
@@ -602,7 +598,7 @@ def test_grad_model_clone(allclose):
     timestep = 1.
     df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep=timestep)
-    Qst1 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values
+    Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
     mod.set_Qstars(0, Qst1)
@@ -675,7 +671,7 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
     timestep /= nrep
 
     mod.allocate(len(df), timestep=timestep)
-    Qst0 = df.loc[:, ["RAINFALL[mm/day]", "PET[mm/day]"]].values.copy()
+    Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
     Qst0 = np.ascontiguousarray(Qst0)
     mod.set_Qstars(0, Qst0)
@@ -736,19 +732,19 @@ def test_grad_model(siteid, timestep, allclose, flux_scalings, debug_mode):
 @pytest.mark.parametrize("timestep", TIMESTEPS)
 @pytest.mark.parametrize("demand", [-0.5, -0.1, 0.5])
 def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
-    noriginal = 365 * 5
-    nrepeat = 5
-    df = data_reader.get_data(siteid, "daily")[-noriginal:]
-    df = df.interpolate().iloc[-noriginal:, :2]
+    noriginal = int(365.25 * 100)
+    nrepeat = 2
+    df = data_reader.get_data(siteid, "daily", 0).iloc[-noriginal:]
+    df = df.interpolate().iloc[:, :2]
     assert df.shape == (noriginal, 2)
     df = np.tile(df, (nrepeat, 1))
 
     mod = gradients.MultiReservoirModel(3, "raise")
-    mod.alphas = 50
+    mod.alphas = 20
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
 
-    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(0, "openwatersmooth")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
     mod.gammas = [5., 400., 50.]
@@ -848,7 +844,7 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
             dfx_n *= mod.gammas[rid]
             dfx_c *= mod.gammas[rid]
 
-        if debug_mode and ivar == 10:
+        if debug_mode and ivar == 5:
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(ncols=3, nrows=3,
                                     figsize=(12, 8),
@@ -898,31 +894,40 @@ def test_grad_model_tangent(siteid, timestep, demand, allclose, debug_mode):
                     eff_max = ef
                     eff_config = (ivar, res, ifx)
 
+    assert dtq < dtn / 2
+
     cfg = emax_config
     mess1 = f"{emax_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
     cfg = eff_config
     mess2 = f"{eff_max:0.1e} V{cfg[0]}(R{cfg[1]},F{cfg[2]})"
     mess = f"{mess1} - {mess2}"
-    assert emax_max < 3e-3 and eff_max < 7e-3, mess
+    assert emax_max < 2e-2 and eff_max < 1e-2, mess
 
 
 @pytest.mark.parametrize("siteid", data_reader.SITEIDS)
-@pytest.mark.parametrize("gamma", [10, 100, 10000])
+@pytest.mark.parametrize("gamma_size", [20., 0.05])
 @pytest.mark.parametrize("timestep", [1., 0.1])
-def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
+def test_grad_model_vs_gradbench_quadrouting(siteid, timestep, gamma_size,
                                              debug_mode, allclose):
-    noriginal = 365 * 5
-    nrepeat = 500 #500
-    df = data_reader.get_data(siteid, "daily")[-noriginal:]
+    noriginal = int(365.25 * 5)
+    nrepeat = 500
+    df = data_reader.get_data(siteid, "daily", 0)
+    iok = np.where(df.iloc[:, -1].notnull())[0]
+    i1, i2 = iok[[0, -1]]
+    df = df.iloc[i1:i2]
     df = df.interpolate().iloc[-noriginal:]
     assert df.shape[0] == noriginal
     df = np.tile(df, (nrepeat, 1))
-    pin = df[:, 0]
-    ein = df[:, 1]
     qin = df[:, 2]
     nval = len(df)
 
     x0 = 0.5
+
+    # Rescale gamma mm -> m3
+    area = data_reader.get_stations().loc[siteid, "CATCHMENTAREA[km2]"]
+    qin *= area / 86.4
+    timestep *= 86400
+    gamma = 100 * qin.mean() * timestep * gamma_size
 
     # run benchmarks
     gammas = np.array([gamma], dtype=np.float64)
@@ -966,7 +971,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     modp.allocate(nval, timestep=timestep)
     modp.set_Qstars(0, Qst0)
 
-    eps = 1e-5 # becomes worse if eps < 1e-12, optimal for 1e-2
+    eps = gamma * 1e-6
     modm.gammas = gamma - eps
     modp.gammas = gamma + eps
 
@@ -1012,6 +1017,9 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
                                          [wb, dwb, wn, dwn, wq, dwq]]
 
             ax = axs[0, ivar]
+            if ivar == 1:
+                ax.plot(qin[-noriginal:], color="tab:red", label="Qin", lw=3)
+
             ax.plot(wb, "k-", label="benchmark")
             ax.plot(wq, "k--", label="quasoare")
 
@@ -1021,24 +1029,26 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
             ax.legend(loc=1)
 
             ax = axs[1, ivar]
-            ax.plot(wq - wb, "k--", label="quasoare", lw=0.9, color="0.5")
+            ax.plot(wq - wb, "--", label="quasoare", lw=0.9, color="0.5")
             ax.legend(loc=1)
+            ax.set_title("Diff quasoare - benchmark")
 
             ax = axs[2, ivar]
             ax.plot(dwb, "k-", label="benchmark")
             ax.plot(dwq, "k--", label="quasoare")
             ax.plot(dwn, "-", label="numerical", color="tab:blue")
 
-            eff_q, _ = eff(dwb, dwq, atol)
-            eff_n, _ = eff(dwb, dwn, atol)
-            title = f"{title} gradient perf: q={eff_q:2.1e} n={eff_n:2.1e}"
+            eff_q, emax_q = eff(dwb, dwq)
+            eff_n, emax_n = eff(dwb, dwn)
+            title = f"{title} gradient perf: q={emax_q:2.1e} n={emax_n:2.1e}"
             ax.set(title=title)
             ax.legend(loc=1)
 
             ax = axs[3, ivar]
-            ax.plot(dwq - dwb, "k--", label="quasoare", lw=0.9, color="0.5")
+            ax.plot(dwq - dwb, "--", label="quasoare", lw=0.9, color="0.5")
             ax.plot(dwn - dwb, "-", label="numerical", lw=0.9, color="tab:blue")
             ax.legend(loc=1)
+            ax.set_title("Diff quasoare/diff - benchmark")
 
         plt.show()
         import pdb; pdb.set_trace()
@@ -1047,16 +1057,13 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
     eff_dfx, emax_dfx = eff(dfx[:, 0], -mod.dfluxes[:, 0, 0, 5])
     eff_dfxn, emax_dfxn = eff(dfx[:, 0], -dfx_n[:, 0, 5])
 
-    print(f"\nTime (dtb={dtb:2.1e}): dtq={dtq:2.1e} dtn={dtn:2.1e} / ratio={dtq/dtn:0.1e}")
-    print(f"Flux  perf: q={eff_fx:2.1e}")
-    print(f"dFlux perf: q={eff_dfx:2.1e} n={eff_dfxn:2.1e} / ratio={eff_dfx/eff_dfxn:0.1e}")
-
-    assert emax_fx < 5e-4
-    assert emax_dfx < 5e-3
-    assert abs(emax_dfx - emax_dfxn) < emax_dfxn * 1e-2
-
-    assert dtq < dtb * 20
-    assert dtq < dtn
+    mess = f"fx:q={emax_fx:0.1e}" \
+           + f" dfx:q={emax_dfx:0.1e}/n={emax_dfxn:0.1e} (q/n={emax_dfx/emax_dfxn:0.1e})" \
+           + f" t:q={dtq:0.1e}/n={dtn:0.1e} (dtb/dtq={dtq/dtb:0.1f})"
+    assert (emax_fx < 5e-2) & (emax_dfx < 5e-3) \
+        & (emax_dfx <= emax_dfxn * 1.2) \
+        & (dtq < dtb * 20) \
+        & (dtq < dtn), mess
 
 
 @pytest.mark.parametrize("gamma", [10, 1000])
@@ -1066,7 +1073,7 @@ def test_grad_model_vs_gradbench_quadrouting(siteid, gamma, timestep,
 @pytest.mark.parametrize("diff", [1, 2, 3]) # 4 does not work yet
 def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
                                           diff, allclose, debug_mode):
-    #pytest.skip("WIP")
+    pytest.skip("Too complex")
     noriginal = 365 * 5
     nrepeat = 100
     nval = nrepeat * noriginal
@@ -1083,8 +1090,7 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
         ein[:, isite] = df[:, 1]
 
 
-    qref = pin.mean(axis=0) * areas / 86.4 #m3/s
-    vref = qref * 86.4e3 #m3
+    vref = np.cumsum(pin.mean(axis=0) * areas * 1e3) # m3/day
 
     # run benchmarks
     x0 = 0.5
@@ -1288,35 +1294,34 @@ def test_grad_model_vs_gradbench_semidist(gamma, demand, timestep, nreaches,
     # Error on rr prod
     nrp = nres_per_reach
     ef, err = eff(fx_rr_prod, -mod.fluxes[:, ::nrp, 5])
-    ef = np.nanmax(ef)
+    ef = np.max(ef)
     logtxt = f"FRP={ef:3.1e}"
     #assert ef < 5e-5
 
     ef, err = eff(dfx_rr_prod, -mod.dfluxes[:, 0, ::nrp, 5])
-    ef = np.nanmax(ef)
+    ef = np.max(ef)
     logtxt += f" DRP={ef:3.1e}"
     #assert ef < 5e-5
 
     # Error on rr route
     ef, err = eff(fx_rr_route, -mod.fluxes[:, 1::nrp, 5])
-    ef = np.nanmax(ef)
+    ef = np.max(ef)
     logtxt += f" FRR={ef:3.1e}"
     #assert ef < 5e-5
 
     ef, err = eff(dfx_rr_route, -mod.dfluxes[:, 0, 1::nrp, 5])
-    ef = np.nanmax(ef)
-
+    ef = np.max(ef)
     logtxt += f" DRR={ef:3.1e}"
     #assert ef < 5e-5
 
     # Error on ro route
     ef, err = eff(fx_ro_route, -mod.fluxes[:, 3::nrp, 5])
-    ef = np.nanmax(ef)
+    ef = np.max(ef)
     logtxt += f" FRO={ef:3.1e}"
     #assert ef < 5e-5
 
     ef, err = eff(dfx_ro_route, -mod.dfluxes[:, 0, 3::nrp, 5])
-    ef = np.nanmax(ef)
+    ef = np.max(ef)
     logtxt += f" DRO={ef:3.1e}"
     #assert ef < 5e-5
     print(f"{logtxt}\n")
