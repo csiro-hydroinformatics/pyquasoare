@@ -83,3 +83,4 @@ jobs:
           set -e
           echo "--- Jupyter notebooks ---"
           uv run jupyter execute examples/notebooks/quasoare_examples_01_defining_an_ode.ipynb
+          uv run jupyter execute examples/notebooks/quasoare_examples_02_running_simple_rainfall_runoff_model.ipynb
