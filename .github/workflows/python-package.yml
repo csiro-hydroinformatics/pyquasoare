@@ -67,11 +67,7 @@ jobs:
         run: |
           set -e
           echo "--- pyquasoare examples ---"
-<<<<<<< HEAD
           uv run --locked ruff check examples/*/*.py
-=======
-          uv run --locked ruff check examples
->>>>>>> b1f5cfc (chore: added gradient paper script to workflow)
           uv run --locked python examples/run_all_examples.py
           
           echo "... C example quadroute"
@@ -82,17 +78,15 @@ jobs:
           cd ../vicmod
           ./compile_unix.sh
 
-<<<<<<< HEAD
       - name: Run jupyter notebooks
         run: |
           set -e
           echo "--- Jupyter notebooks ---"
           uv run jupyter execute examples/notebooks/quasoare_examples_01_defining_an_ode.ipynb
           uv run jupyter execute examples/notebooks/quasoare_examples_02_running_simple_rainfall_runoff_model.ipynb
-=======
+
       - name: Run scripts for gradient paper in debug mode
         run: |
           set -e
           echo "--- Gradient paper scripts ---"
           uv run --locked python scripts/gradient_paper_2026/gradbench.py -v 1 -t 0 -d
->>>>>>> b1f5cfc (chore: added gradient paper script to workflow)
