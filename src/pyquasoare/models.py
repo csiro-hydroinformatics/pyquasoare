@@ -1,7 +1,9 @@
 import warnings
+
 import numpy as np
 
 from pyquasoare import has_c_module
+
 if has_c_module():
     import c_pyquasoare
 else:

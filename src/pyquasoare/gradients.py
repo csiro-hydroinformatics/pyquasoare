@@ -1,9 +1,10 @@
 import warnings
+
 import numpy as np
 import pandas as pd
 
-from pyquasoare import has_c_module, approx
-from pyquasoare.models import errors_check, error_management, get_errorsid
+from pyquasoare import approx, has_c_module
+from pyquasoare.models import error_management, errors_check, get_errorsid
 
 if has_c_module():
     import c_pyquasoare_grad
@@ -25,6 +26,8 @@ IFLUX_DRAINAGE = c_pyquasoare_grad.IFLUX_DRAINAGE
 IFLUX_BYPASS = c_pyquasoare_grad.IFLUX_BYPASS
 IFLUX_SHORTFALL = c_pyquasoare_grad.IFLUX_SHORTFALL
 IFLUX_OUTFLOW = c_pyquasoare_grad.IFLUX_OUTFLOW
+
+COMPARE_REPORT_PROBS = [0, 50, 90]
 
 def thresh_smooth(x, eps):
     return  np.maximum(x, 0) / np.sqrt(x**2 + eps**2)
@@ -144,7 +147,7 @@ def compare_denom(abs_y, eps=1e-3):
     return den[None, :] + eps
 
 
-def compare(y0, y1, eps=1e-3, report_probs=[0, 50, 90]):
+def compare(y0, y1, eps=1e-3, report_probs=COMPARE_REPORT_PROBS):
     ay0 = np.abs(y0)
     den = compare_denom(ay0, eps)
     err = np.abs(y1 - y0) / den
@@ -390,7 +393,7 @@ def grad_model(alphas, gammas,
     return x, fluxes, dfluxes
 
 # -- Classes to handle networks --
-class GradNetworkLink():
+class GradNetworkLink:
     def __init__(self,
                  upstream_reservoir_id,
                  upstream_output_flux_id,
@@ -445,7 +448,7 @@ class GradNetworkLink():
                            self.weight, self.nreservoirs)
 
 
-class GradNetwork():
+class GradNetwork:
     def __init__(self, nreservoirs):
         if nreservoirs >= INPUT_MAPPING_MISSINGRESERVOIRID:
             errmsg = f"nreservoirs cannot exceed {INPUT_MAPPING_MISSINGRESERVOIRID}."
@@ -505,12 +508,11 @@ class GradNetwork():
                 if lk.downstream_reservoir_id == rid:
                     upid = lk.upstream_reservoir_id
 
-                    if len(upids) > 0:
-                        if upid == upids[0]:
-                            errmsg = "Reservoir receives"\
-                                     + " inputs from itself. This is"\
-                                     + " cyclical reservoir connection."
-                            raise ValueError(errmsg)
+                    if len(upids) > 0 and upid == upids[0]:
+                        errmsg = "Reservoir receives"\
+                                 + " inputs from itself. This is"\
+                                 + " cyclical reservoir connection."
+                        raise ValueError(errmsg)
 
                     # Move upstream
                     upids = add_upids(upid, upids)
@@ -582,7 +584,7 @@ def isnone(x, name):
     return x
 
 
-class MultiReservoirModel():
+class MultiReservoirModel:
     def __init__(self, nreservoirs,
                  nalphas=10,
                  nsubsteps=1,
@@ -729,7 +731,7 @@ class MultiReservoirModel():
     @gammas.setter
     def gammas(self, value):
         nres = self.nreservoirs
-        if isinstance(value, float) or isinstance(value, int):
+        if isinstance(value, (float, int)):
             self._gammas = value * np.ones(nres)
         else:
             value = np.array(value)
@@ -747,7 +749,7 @@ class MultiReservoirModel():
     @x0.setter
     def x0(self, value):
         nres = self.nreservoirs
-        if isinstance(value, float) or isinstance(value, int):
+        if isinstance(value, (float, int)):
             self._x0 = value * np.ones(nres)
         else:
             value = np.array(value)
@@ -766,7 +768,7 @@ class MultiReservoirModel():
     def flux_scalings(self, value):
         nres = self.nreservoirs
         nfxi = NFLUXES_INPUTS
-        if isinstance(value, float) or isinstance(value, int):
+        if isinstance(value, (float, int)):
             self._flux_scalings = value * np.ones((nres, nfxi))
         else:
             value = np.array(value)

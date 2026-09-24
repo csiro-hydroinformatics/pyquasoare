@@ -1,18 +1,25 @@
-import warnings
 import math
-import numpy as np
+import warnings
 
+import numpy as np
 from scipy.integrate import solve_ivp
 
-from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, \
-                                QUASOARE_ATOL, QUASOARE_RTOL,\
-                                QUASOARE_FLUX_TERM_RTOL1, \
-                                QUASOARE_FLUX_TERM_RTOL2, \
-                                QUASOARE_DELTA_ATOL
-
-from pyquasoare.approx import isequal, notequal, isnull, notnull
+from pyquasoare.approx import (
+    QUASOARE_ATOL,
+    QUASOARE_DELTA_ATOL,
+    QUASOARE_EPS,
+    QUASOARE_FLUX_TERM_RTOL1,
+    QUASOARE_FLUX_TERM_RTOL2,
+    QUASOARE_PI,
+    QUASOARE_RTOL,
+    isequal,
+    isnull,
+    notequal,
+    notnull,
+)
 from pyquasoare.integrate import quad_constants
 from pyquasoare.models import ERRORS
+
 
 def integrate_numerical(fluxes, dfluxes, t0, s0, t,
                         method="Radau", max_step=np.inf,
@@ -92,7 +99,7 @@ def numerical_model(fluxes, dfluxes, scalings, s0, timestep,
 
     for t in range(nval):
         # integrate
-        tn, send, nev, njac = integrate_numerical(fluxes,
+        _, send, nev, njac = integrate_numerical(fluxes,
                                                   dfluxes,
                                                   0, s0, [timestep],
                                                   scaling=scalings[t],
@@ -377,11 +384,10 @@ def quad_integrate(alphas, scalings, coefs,
         funval = quad_fun(Aj, Bj, Cj, s_start)
 
         # Check continuity
-        if nit > 1:
-            if notequal(funval_prev, funval):
-                errmess = f"continuity problem: prev({funval_prev:3.3e})"\
-                        + f"!=new({funval:3.3e})"
-                raise ValueError(errmess)
+        if nit > 1 and notequal(funval_prev, funval):
+            errmess = f"continuity problem: prev({funval_prev:3.3e})"\
+                    + f"!=new({funval:3.3e})"
+            raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
         if isnull(funval):
@@ -474,10 +480,10 @@ def quad_model(alphas, scalings, coefs,
                                                         coefs, t0, s0,
                                                         timestep,
                                                         debug=debug)
-        except Exception as err:
+        except ValueError as err:
             niter[t] = -1
             if errors == "raise":
-                raise err
+                raise ValueError(str(err))
             elif errors == "warn":
                 warnings.warn(str(err))
 

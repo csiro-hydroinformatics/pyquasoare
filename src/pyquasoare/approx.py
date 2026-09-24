@@ -46,7 +46,7 @@ def isnull(x):
 
 def all_scalar(*args):
     """ Check if all arguments are scalar """
-    return all([np.isscalar(x) for x in args])
+    return all(np.isscalar(x) for x in args)
 
 
 def get_vectors(*args, dtype=np.float64):
