@@ -84,8 +84,8 @@ def process(config, script_paths, logger, data):
 
     for na, gm, nsmax in prod(nas, gms, nsmaxs):
         match = int(na == na_ref) + int(gm == gm_ref) + int(nsmax == nsmax_ref)
-        if match < 2:
-            continue
+        #if match < 2:
+        #    continue
 
         logger.info(f"Plotting na={na} gm={gm} nsmax={nsmax}", nret=1)
 
