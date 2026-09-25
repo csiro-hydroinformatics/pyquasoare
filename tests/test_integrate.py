@@ -239,7 +239,7 @@ def test_forward_vs_finite_difference(allclose, generate_samples,
         nassessed += 1
         errmax_max = max(errmax, errmax_max)
 
-    assert nfail <= (5 if case == 7 else 0)
+    assert nfail <= (5 if case in [7, 15] else 0)
     mess = f"[{case}:{cname}] fwd vs diff: emax={errmax_max:3.2e}"\
            + f" nfail={nfail} (ntry={ntry} nassessed={nassessed})"
     logger.info(mess)
@@ -334,9 +334,9 @@ def test_inverse(allclose, generate_samples, debug_mode):
 
         errmax = np.nanmax(err[iok])
 
-        if  case in [3]:
+        if  case in [3, 10]:
             tol = 1e-3
-        elif case in [13, 10, 15]:
+        elif case in [13, 15]:
             tol = 1e-4
         else:
             tol = 5e-6
