@@ -50,7 +50,7 @@ def get_options():
 
     nuh = 5
 
-    nsubsteps = [1, 6, 12, 24, 48]
+    nsubsteps = [1, 2, 4, 8, 24, 48]
 
     stationids = data_reader.SITEIDS
 
