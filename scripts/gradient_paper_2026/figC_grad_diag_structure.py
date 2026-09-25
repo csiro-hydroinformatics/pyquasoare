@@ -48,7 +48,7 @@ from utils import smooth_nodes, smooth_X, smooth_reg, perf, get_parameters
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
     froot = source_file.parent.parent.parent
-    fimg = froot / "images" / "manuscript" / "gr4j_gradient"
+    fimg = froot / "images" / "manuscript" / source_file.stem
     ScriptPaths = namedtuple("ScriptPaths",
                              ["source_file", "basename",
                               "froot", "fimg"])
@@ -179,6 +179,7 @@ def process(config, script_paths, logger, data):
     # Good parameters
     X0, X1, X2, X3, X4 = get_parameters()
     set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4)
+    logger.info(f"X1={X1:0.0f} X2={X2:0.1f} X3={X3:0.0f} X4={X4:0.1f}")
 
     gr.params.values = [X1, X2, X3, X4]
 
@@ -303,7 +304,8 @@ def process(config, script_paths, logger, data):
         store = x.iloc[:, ires]
         ax.plot(store, ratio, ".", alpha=0.1)
 
-        xx, yy = smooth_reg(store, ratio)
+        iok = store < 1
+        xx, yy = smooth_reg(store[iok], ratio[iok])
         ax.plot(xx, yy, "--", color="k", lw=2)
 
         s, e = store.index[[0, -1]]
@@ -317,13 +319,16 @@ def process(config, script_paths, logger, data):
         ax.set_yscale("asinh", linear_threshold=1e-3)
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
         ax.yaxis.set_minor_locator(mticker.NullLocator())
+        x0 = int(store.min() * 10) / 10
+        x1 = min(1.1, int(store.max() * 10 + 1) / 10)
         ax.set(ylim=ylim,
+               xlim=[x0, x1],
                yticks=[-10, -1, 0, 1, 10],
                xlabel=store_name,
                yticklabels=[])
 
 
-    fp = script_paths.fimg / "gr4j_gradients_ts.png"
+    fp = script_paths.fimg / "figC_gr4j_gradients_ts.png"
     fig.savefig(fp)
 
     logger.completed()
@@ -350,7 +355,7 @@ if __name__ == "__main__":
     nalphas = 50
     nuh = args.nuh
     zoom = args.zoom
-    nsubsteps = 6
+    nsubsteps = 8
     start = "1980"
     end = "2022"
 

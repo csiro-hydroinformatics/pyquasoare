@@ -52,7 +52,7 @@ def aggregate(x, ntimesteps, nagg):
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
     froot = source_file.parent.parent.parent
-    fimg = froot / "images" / "manuscript" / "gr4j_flux_averaging"
+    fimg = froot / "images" / "manuscript" / "figD_gr4j_flux_averaging"
     ScriptPaths = namedtuple("ScriptPaths",
                              ["source_file", "basename",
                               "froot", "fimg"])

@@ -46,7 +46,7 @@ mpl.use("Agg")
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
     froot = source_file.parent.parent.parent
-    fimg = froot / "images" / "manuscript" / "reservoir_example"
+    fimg = froot / "images" / "manuscript" / source_file.stem
     ScriptPaths = namedtuple("ScriptPaths",
                              ["source_file", "basename",
                               "froot", "fimg"])
@@ -490,7 +490,7 @@ def process(config, script_paths, logger, data):
     # Potential inflows
     ax = axs[1, 0]
     title = "(d) Potential Inflow $Q^*_1$"
-    ax.bar(time + pd.Timedelta(hours=12), Qstars[:, 0], 1,
+    ax.bar(time - pd.Timedelta(hours=12), Qstars[:, 0], 1,
            ec="midnightblue", fc="none",
            linewidth=3, zorder=10)
     ax.set(title=title,
