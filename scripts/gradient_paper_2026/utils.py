@@ -62,9 +62,9 @@ def perf(qo, qs):
 def get_parameters():
     X0 = 1.
     X1 = 500.
-    X2 = -0.1
+    X2 = -0.5
     X3 = 50.
-    X4 = 0.2
+    X4 = 0.5
     return X0, X1, X2, X3, X4
 
 

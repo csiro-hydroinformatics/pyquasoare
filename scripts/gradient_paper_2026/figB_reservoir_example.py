@@ -528,23 +528,28 @@ def process(config, script_paths, logger, data):
 
     # Flux timeseries
     ax = axs[1, 1]
-    q = -outputs["Q"][:, 2]
+    q = outputs["Q"][:, 2]
     plot_timeseries(ax, sc.date, q, sc.end_timestep, col1, col2)
     title = "(e) Discharge flux ($Q_3$)"
-    ax.set(title=title,
-           ylabel="Flux [mm.d$^{-1}$]")
     format_time_xaxis(ax, time)
     ax.legend(fontsize="large", framealpha=1., loc=2,
               bbox_to_anchor=(0., 0.85))
+    y0, y1 = ax.get_ylim()
+    ax.set(title=title,
+           ylim=(y1, y0),
+           ylabel="Flux [mm.d$^{-1}$]")
 
     # Flux derivative timeseries
     ax = axs[1, 2]
-    dq = -(outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
+    dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
     plot_timeseries(ax, sc.date, dq, sc.end_timestep, col1, col2)
-    title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
-    ax.set(title=title,
-           ylabel="Flux gradient [d$^{-1}$]")
+
     format_time_xaxis(ax, time)
+    title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
+    y0, y1 = ax.get_ylim()
+    ax.set(title=title,
+           ylim=(y1, y0),
+           ylabel="Flux gradient [d$^{-1}$]")
 
     # Save file
     fp = script_paths.fimg / \

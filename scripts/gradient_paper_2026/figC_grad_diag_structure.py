@@ -124,7 +124,7 @@ def configure_model(logger, config, data):
     # .. indep var = prod / route capacity + exchange
     #                + scaling of inputs
     hclim = data.hydroclim.loc[:, ["P", "PET"]]
-    vspecs = [[0, 1], [0, 2], [0, 0]] \
+    vspecs = [[0, 1], [0, 2]] \
         + [[1, 0], [nres - 1, 1], [nres - 1, 0]] \
         + [[2 + iuh, 3] for iuh in range(nuh)]
 
@@ -201,15 +201,17 @@ def process(config, script_paths, logger, data):
     nuh = config.nuh
     grads = pd.DataFrame(mod.dfluxes_agg[:, :-nuh, -1, 5], index=time)
     grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$",
-                     r"$X_0$", r"$X_1$", r"$X_2$", r"$X_3$"]
-    #grads.loc[:, r"$X_4$"] = -mod.dfluxes[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25 / X4
+                     r"$X_1$", r"$X_2$", r"$X_3$"]
 
-    grads.loc[:, r"$X_4$"] = -mod.dfluxes_agg[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
+    # Ok, but not used to commented out
+    #grads.loc[:, r"$X_4$"] = -mod.dfluxes_agg[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
+
     grads.loc[:, r"$X_1$"] *= X1
     grads.loc[:, r"$X_2$"] *= X2
     grads.loc[:, r"$X_3$"] *= X3
 
-    grads = grads.iloc[:, 3:-1]
+    grads = grads.filter(regex="X_\d", axis=1)
+
 
     # Plot
     if args.zoom == 1:
@@ -328,7 +330,7 @@ def process(config, script_paths, logger, data):
                yticklabels=[])
 
 
-    fp = script_paths.fimg / "figC_gr4j_gradients_ts.png"
+    fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
     fig.savefig(fp)
 
     logger.completed()
@@ -355,7 +357,7 @@ if __name__ == "__main__":
     nalphas = 50
     nuh = args.nuh
     zoom = args.zoom
-    nsubsteps = 8
+    nsubsteps = 1
     start = "1980"
     end = "2022"
 
