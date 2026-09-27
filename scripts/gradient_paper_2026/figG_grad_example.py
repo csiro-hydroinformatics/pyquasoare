@@ -101,7 +101,8 @@ def process(config, script_paths, logger, data):
     grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$",
                      r"$X_1$", r"$X_2$", r"$X_3$"]
     grads.loc[:, r"$X_4$"] = -mod.dfluxes_agg[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25 * X4**2
-    grads = grads.filter(regex="X_\d", axis=1)
+    grads.loc[:, r"$X_2$"] /= X2
+    grads = grads.filter(regex="X_\\d", axis=1)
 
     # Plot
     if args.zoom == 1:
@@ -133,10 +134,11 @@ def process(config, script_paths, logger, data):
 
     nvars = grads.shape[1]
     nrows, ncols = nvars + 1, 2
-    cols = grads.columns
-    mosaic = [["flux", "perf"]] \
-             + [[f"{cols[ir * 2 + ic]}" for ic in range(ncols)]
-                for ir in range(2)]
+    mosaic = [["flux", "perf"]]
+    #cols = grads.columns
+    #mosaic += [[f"{cols[ir * 2 + ic]}" for ic in range(ncols)]
+    #            for ir in range(2)]
+    mosaic += [[cn for cn in grads.columns if re.search("1|3", cn)]]
 
     ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
@@ -160,7 +162,8 @@ def process(config, script_paths, logger, data):
 
     ax = axs["flux"]
     qobs[start:end].plot(ax=ax, label="Observed", color="k", ls="--")
-    qsim[start:end].plot(ax=ax, label="GR4J", lw=2)
+    lab = f"GR4J\nX1={X1:0.0f} X2={X2:0.1f} X3={X3:0.0f} X4={X4:0.1f}"
+    qsim[start:end].plot(ax=ax, label=lab, lw=2)
 
     eps = qobs.mean() * 1e-2
     sqeps = math.sqrt(eps)
@@ -175,12 +178,15 @@ def process(config, script_paths, logger, data):
     #             x=0.02, y=0.94)
     ax.set(ylabel="Streamflow [mm.d$^{-1}$]")
     set_title(ax, title)
-    ax.legend(loc=3, ncol=2, framealpha=0.)
+    ax.legend(loc=3, ncol=2, framealpha=0.,
+              fontsize="small")
 
     # Plotting gradients
     for iplot, (vn, dq) in enumerate(grads.items()):
+        if vn not in mosaic[1]:
+            continue
         logger.info(f"Plot {iplot} ({vn})", ntab=1)
-        ax = axs[f"{vn}"]
+        ax = axs[vn]
 
         dq[start:end].plot(ax=ax)
 
