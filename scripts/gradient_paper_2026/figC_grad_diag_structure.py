@@ -159,12 +159,8 @@ def set_parameters(mod, nsubsteps, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
     mod.gammas = [X0, X1] + [1] * nuh + [X3]
 
     # See Santos (2018), Eq. 6
-    fs3 = nuh * 1.25 / X4
-    #  + correct for timestep related to Qstar3
-    fs3 *= 1. / nsubsteps
-
     for iuh in range(nuh):
-        mod.flux_scalings[2 + iuh, 2] = fs3
+        mod.coefs_linear[2 + iuh, 2, :, 0] = 1.25 * nuh / X4
 
     mod.flux_scalings[nres - 1, 1] = X2
     mod.flux_scalings[0, 0] = eta_P
@@ -304,7 +300,7 @@ def process(config, script_paths, logger, data):
             store_name = "Routing store level"
 
         store = x.iloc[:, ires]
-        ax.plot(store, ratio, ".", alpha=0.1)
+        ax.plot(store, ratio, ".", alpha=0.05)
 
         iok = store < 1
         xx, yy = smooth_reg(store[iok], ratio[iok])
@@ -331,7 +327,7 @@ def process(config, script_paths, logger, data):
 
 
     fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
-    fig.savefig(fp)
+    fig.savefig(fp, dpi=config.fdpi)
 
     logger.completed()
 

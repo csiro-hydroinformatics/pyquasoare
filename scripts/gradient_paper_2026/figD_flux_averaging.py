@@ -27,7 +27,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import ticker as mticker
-from matplotlib.patches import Rectangle
 
 from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
@@ -37,7 +36,12 @@ from pyquasoare import gradients
 import c_pyquasoare_grad
 from gradbench import data_reader
 
-from figC_gr4j_gradient import get_data, configure_model, set_parameters
+import importlib
+import figC_grad_diag_structure
+importlib.reload(figC_grad_diag_structure)
+
+from figC_grad_diag_structure import get_data, configure_model, set_parameters
+from figB_reservoir_example import format_time_xaxis
 from utils import get_parameters
 
 # Select backend
@@ -83,67 +87,103 @@ def process(config, script_paths, logger, data):
     stores = {}
     mods = {}
     ntimesteps = data.hydroclim.shape[0]
-    #nsubs = [1, 24, 24 * 6, 24 * 60]
-    nsubs = [1, 6, 12]
+    #nsubs = [1, 2, 4, 8, 12, 24, 72]
+    nsubs = [1, 2, 4, 24]
 
     for nsub in nsubs:
         config = config._replace(nsubsteps=nsub)
         mod = configure_model(logger, config, data)
         set_parameters(mod, nsub, X0, X1, X2, X3, X4)
         mod.run()
+        mod.aggregate()
+        logger.info(f"nsub= {mod.nsubsteps}", ntab=1)
         logger.info(f"nts = {mod.ntimesteps}", ntab=1)
         logger.info(f"ts = 1/{1./mod.timestep:0.0f}", ntab=1)
         logger.info(f"fs3[3] = {mod.flux_scalings[3, 2]:0.2f}", ntab=1)
         mods[nsub] = mod
 
     nres = mod.nreservoirs
-    mosaic = [[f"fx/Qres{res}", f"dfx/Qres{res}", f"x/Qres{res}"]
-              for res in [0, 1, nres - 2, nres - 1]]
+    mosaic = [[f"{vn}/Qres{res}" for res in [2, nres - 1]]
+              for vn in ["fx", "dfx"]]
+
     nrows, ncols = len(mosaic), len(mosaic[0])
     figsize = (config.awidth * ncols, config.aheight * nrows)
     plt.close("all")
     fig = plt.figure(figsize=figsize, layout="constrained")
     axs = fig.subplot_mosaic(mosaic, sharex=True)
 
-    time = data.hydroclim.index[:-1]
-    ivar = 3
+    time_agg = data.hydroclim.index
+    ivar = 2
 
     for iax, (aname, ax) in enumerate(axs.items()):
         ptype, varn = aname.split("/")
         ires = int(re.sub("Qres", "", varn))
 
-        df = {}
+        leg_agg = []
+        leg_raw = []
         for nsub, mod in mods.items():
-            if ptype == "fx":
-                q = aggregate(mod.fluxes[:, ires, 5], ntimesteps,
-                              nsub)
-                df[nsub] = pd.Series(q, index=time)
-            elif ptype == "x":
-                k = np.arange(nsub - 1, nsub * (ntimesteps - 1), nsub)
-                x = mod.x[k, ires]
-                df[nsub] = pd.Series(x, index=time)
-            else:
-                dq = aggregate(mod.dfluxes[:, ivar, ires, 5], ntimesteps,
-                               nsub)
-                df[nsub] = pd.Series(dq, index=time)
+            dt = pd.Timedelta(minutes=(24 * 60)//nsub)
+            nts = mod.fluxes.shape[0]
+            time = pd.date_range(time_agg[0], freq=dt, periods=nts)
 
-        df = pd.DataFrame(df)
-        df.plot(ax=ax)
+            if ptype == "fx":
+                se = pd.Series(mod.fluxes[:, ires, 5], index=time)
+                se_agg = pd.Series(mod.fluxes_agg[:, ires, 5], index=time_agg)
+            elif ptype == "x":
+                se = pd.Series(mod.x[:, ires], index=time)
+                k = mod.idx_end_timestep_agg
+                se_agg = pd.Series(mod.x[k, ires], index=time_agg)
+            else:
+                se = pd.Series(mod.dfluxes[:, ivar, ires, 5], index=time)
+                se_agg = pd.Series(mod.dfluxes_agg[:, ivar, ires, 5],
+                                   index=time_agg)
+
+            col = "k" if nsub == 1 else None
+            lw = 3 if nsub == 1 else 2
+            dt = 24 / nsub
+            lab = f"{dt:2.0f}h daily average"
+            ax.step(se_agg.index, se_agg.values, where="post",
+                    color=col, label=lab, lw=lw)
+            line = ax.get_lines()[-1]
+            col = line.get_color()
+            leg_agg.append(line)
+            if nsub > 1:
+                lab = f"{dt:2.0f}h simulation"
+                ax.plot(se.index, se.values, "--", color=col, label=lab)
+                line = ax.get_lines()[-1]
+                leg_raw.append(line)
+
         if ptype != "x":
-            ax.set_yscale("asinh")
+            #ax.set_yscale("asinh")
             y0, y1 = ax.get_ylim()
             ax.set_ylim((y1, y0))
-        title = f"Reservoir {ires} / {ptype}"
-        ax.set_title(title)
 
-        tax = ax.twinx()
-        diff = df.iloc[:, [0, -1]].diff(axis=1).iloc[:, -1]
-        diff.plot(ax=tax, color="0.5")
-        ax.plot([], [], "-", color="0.5", label="diff")
+        if ires == 2:
+            rname = "First UH store"
+        elif ires == nres - 1:
+            rname = "Routing store"
+        else:
+            rname = "?"
 
+        if ptype == "fx":
+            yname = "Outflow flux"
+            yunit = "[mm.day-1]"
+        elif ptype == "dfx":
+            yname = "Outflow flux gradient"
+            yunit = "[day-1]"
+
+        format_time_xaxis(ax)
+        title = f"({letters[iax]}) {yname} - {rname} (reservoir #{ires + 1})"
+        ylab = f"{yname} {yunit}"
+        ax.set(title=title, ylabel=ylab)
+        if iax == 0:
+            ax.legend(handles=leg_agg + leg_raw,
+                      loc=1, framealpha=1.)
+
+        ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     fp = script_paths.fimg / "gr4j_flux_aggregation.png"
-    fig.savefig(fp)
+    fig.savefig(fp, dpi=config.fdpi)
 
     logger.completed()
 
@@ -174,11 +214,11 @@ if __name__ == "__main__":
     nuh = args.nuh
     zoom = args.zoom
     nsubsteps = 1
-    start = "2010"
-    end = "2023"
+    start = "2022-02-26"
+    end = "2022-03-04"
 
     stationid = args.stationid
-    awidth = 7
+    awidth = 5.5
     aheight = 3
     fdpi = 300
     imgext = "png"

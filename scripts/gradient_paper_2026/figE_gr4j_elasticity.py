@@ -38,9 +38,8 @@ from pygme.models.gr4j import GR4J
 from pyquasoare import gradients
 import c_pyquasoare_grad
 
-from figC_gr4j_gradient import get_data, \
-    configure_model, set_parameters, \
-    get_parameters
+from figC_grad_diag_structure import get_data, configure_model, set_parameters
+from utils import get_parameters
 
 # Select backend
 #mpl.use("Agg")
@@ -62,7 +61,7 @@ def tm_eP(p, e, n=N_TM):
 def get_script_paths(config):
     source_file = Path(__file__).resolve()
     froot = source_file.parent.parent.parent
-    fimg = froot / "images" / "manuscript" / "gr4j_elasticity"
+    fimg = froot / "images" / "manuscript" / source_file.stem
     ScriptPaths = namedtuple("ScriptPaths",
                              ["source_file", "basename",
                               "froot", "fimg"])
@@ -273,8 +272,8 @@ def process(config, script_paths, logger, data):
     format_y(ax, ylim_an[0], ylim_an[1], tk_an)
     ax.set(ylabel="")
 
-    fp = script_paths.fimg / "gr4j_elasticity.png"
-    fig.savefig(fp)
+    fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
+    fig.savefig(fp, dpi=config.fdpi)
 
 
 if __name__ == "__main__":

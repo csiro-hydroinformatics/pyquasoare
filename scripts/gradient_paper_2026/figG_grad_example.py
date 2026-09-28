@@ -211,7 +211,7 @@ def process(config, script_paths, logger, data):
         #ax.yaxis.set_minor_locator(mticker.NullLocator())
 
     fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
-    fig.savefig(fp)
+    fig.savefig(fp, dpi=config.fdpi)
 
     logger.completed()
 

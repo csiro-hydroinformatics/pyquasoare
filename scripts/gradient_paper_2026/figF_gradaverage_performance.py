@@ -40,7 +40,7 @@ def get_script_paths(config):
     source_file = Path(__file__).resolve()
     froot = source_file.parent.parent.parent
     fdata = froot / "outputs" / f"gradaverage_v{config.version}"
-    fimg = froot / "images" / "manuscript" / "figF_gradient_averaging"
+    fimg = froot / "images" / "manuscript" / source_file.stem
     ScriptPaths = namedtuple("ScriptPaths",
                              ["source_file", "basename",
                               "froot", "fdata", "fimg"])

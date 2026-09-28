@@ -350,7 +350,7 @@ def plot_timeseries(ax, time, values, end_timestep, color1,
         ax.plot([], [], color=color2, lw=2, label="Intermediary result")
 
 
-def format_time_xaxis(ax, time, label=True):
+def format_time_xaxis(ax, label=True):
     ax.xaxis.set_major_locator(mdates.DayLocator())
     fmt = mdates.DateFormatter("")
     ax.xaxis.set_major_formatter(fmt)
@@ -495,7 +495,7 @@ def process(config, script_paths, logger, data):
            linewidth=3, zorder=10)
     ax.set(title=title,
            ylabel="Flux [mm.d$^{-1}$]")
-    format_time_xaxis(ax, time)
+    format_time_xaxis(ax)
 
     # reservoir level timeseries
     ax = axs[0, 1]
@@ -509,7 +509,7 @@ def process(config, script_paths, logger, data):
     title = "(b) Reservoir filling level ($x$)"
     ax.set(title=title, yticks=alphas,
            ylabel="Reservoir level $x$ [-]")
-    format_time_xaxis(ax, time, True)
+    format_time_xaxis(ax, True)
     ax.legend(loc=4, fontsize="large", framealpha=1.)
     ax.grid(axis="y", ls=":")
 
@@ -524,14 +524,14 @@ def process(config, script_paths, logger, data):
     title = "(c) Gradient of reservoir filling level ($dx/d\\Gamma$)"
     ax.set(title=title,
            ylabel="Reservoir level gradient $dx/d\\Gamma$ [mm$^{-1}$]")
-    format_time_xaxis(ax, time, True)
+    format_time_xaxis(ax, True)
 
     # Flux timeseries
     ax = axs[1, 1]
     q = outputs["Q"][:, 2]
     plot_timeseries(ax, sc.date, q, sc.end_timestep, col1, col2)
     title = "(e) Discharge flux ($Q_3$)"
-    format_time_xaxis(ax, time)
+    format_time_xaxis(ax)
     ax.legend(fontsize="large", framealpha=1., loc=2,
               bbox_to_anchor=(0., 0.85))
     y0, y1 = ax.get_ylim()
@@ -544,7 +544,7 @@ def process(config, script_paths, logger, data):
     dq = (outputs["dfxG"] + outputs["dfxH"])[:, 0, 2]
     plot_timeseries(ax, sc.date, dq, sc.end_timestep, col1, col2)
 
-    format_time_xaxis(ax, time)
+    format_time_xaxis(ax)
     title = "(f) Gradient of discharge ($dQ_3/d\\Gamma$)"
     y0, y1 = ax.get_ylim()
     ax.set(title=title,

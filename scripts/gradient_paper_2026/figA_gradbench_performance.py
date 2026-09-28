@@ -129,23 +129,26 @@ def process(config, script_paths, logger, data):
                     nv = (perf.loc[idx, "nvariables"].unique()).squeeze()
                     ny = (perf.loc[idx, "ntimesteps_agg"].unique() / 365.25).squeeze()
                     ng = nr * 6 * nv
-                    subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Variables" \
-                        + f"  {ny:0.0f} Years"
+                    subtitle = f"{nr:0.0f} Reservoirs  {nv:0.0f} Indep. vars." \
+                        + f"  {ny:0.0f} Years\n" \
+                        + f"({ng:0.0f} gradient time series)"
                     ax.text(0.5, 0.1, subtitle,
                             va="center", ha="center",
                             fontsize="large")
                     rot = 0.
+                    va = "bottom"
                 else:
                     if re.search("delta", t2):
                         title = "Runtime grad/sim ratio [-]"
                     elif re.search("max90", t2):
-                        title = "Error/stdev ratio\nabove 90th prc [-]"
+                        title = "$E_{max}^{90}$ Error/stdev ratio\nabove 90th prc [-]"
                     else:
-                        title = "Error/stdev ratio [-]"
+                        title = "$E_{max}$ Error/stdev ratio [-]"
                     rot = 90.
+                    va = "center"
 
                 ax.text(0.5, 0.5, title,
-                        va="center", ha="center",
+                        va=va, ha="center",
                         fontweight="bold",
                         fontsize="x-large",
                         rotation=rot)
@@ -156,7 +159,7 @@ def process(config, script_paths, logger, data):
             idx = idx0 & (perf.TASK_OPT_nreaches == nreaches)
             logger.info(f"Plot reaches={nreaches}/{metric}", ntab=1)
 
-            pat = f"{metric}"
+            pat = f"{metric}.*(ref|diff1|diff2)"
             cc = [cn for cn in perf.columns if re.search(pat, cn)]
             is_log = bool(re.search("log10", cc[0]))
             df = perf.loc[idx, cc]
@@ -189,6 +192,8 @@ def process(config, script_paths, logger, data):
                 vl = violinplot.Violin(df)
             except:
                 continue
+            vl.extremes.hatch = "none"
+
             vl.draw(ax=ax)
 
             if is_log:
@@ -243,7 +248,7 @@ if __name__ == "__main__":
 
     # Config
     version = args.version
-    awidth = 3
+    awidth = 2.8
     aheight = 3
     fdpi = 300
     imgext = "png"
