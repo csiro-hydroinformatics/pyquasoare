@@ -213,7 +213,7 @@ def process(config, script_paths, logger, data):
     if args.zoom == 1:
         start, end = "1990", "2022"
     elif args.zoom == 2:
-        start, end = "2020", "2022"
+        start, end = "2021", "2022"
     elif args.zoom == 3:
         start, end = "2022-02-01", "2022-04-15"
     elif args.zoom == 4:
@@ -233,7 +233,7 @@ def process(config, script_paths, logger, data):
     nrows, ncols = nvars + 1, 1
     mosaic = [["flux", "."]] \
              + [[f"{vn}/ratio", f"{vn}/scatter"]
-                for vn in grads.columns]
+                for vn in grads.columns if not re.search("2", vn)]
     ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig = plt.figure(figsize=figsize,
@@ -242,8 +242,19 @@ def process(config, script_paths, logger, data):
     axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 
     ax = axs["flux"]
-    qobs[start:end].plot(ax=ax, label="Observed $q_o$", color="k", ls="--")
-    qsim[start:end].plot(ax=ax, label="Simulated $Q_3$", lw=2)
+    qo, qs = qobs[start:end], qsim[start:end]
+    qo.plot(ax=ax, label="Observed $q$", color="k", ls="--")
+    qs.plot(ax=ax, label="Simulated $Q$", lw=2)
+
+    # .. residual
+    tax = ax.twinx()
+    kw = {"color": "0.5", "lw": 0.8}
+    (qs - qo).plot(ax=tax, legend=False, **kw)
+    tax.set_yscale("asinh")
+    tax.set(ylim=(-2e3, 2e3))
+    ax.plot([], [], **kw, label="Residual $Q - q$")
+    yt = [-100, 0, 100]
+    tax.set_yticks(yt, minor=False)
 
     eps = qobs.mean() * 1e-2
     sqeps = math.sqrt(eps)
@@ -251,13 +262,16 @@ def process(config, script_paths, logger, data):
     inv = lambda y: np.sign(y) * ((np.abs(y) + sqeps)**2 - eps)
     u = np.linspace(-1, 1, 100)
     assert np.allclose(inv(fwd(u)), u)
-
     ax.set_yscale("function", functions=(fwd, inv))
+
     title = "(a) Streamflow timeseries"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
-    ax.set(ylabel="Streamflow [mm.d$^{-1}$]")
-    ax.legend(loc=3, ncol=2, framealpha=0.)
+    y0, y1 = ax.get_ylim()
+    ax.set(ylabel="Streamflow [mm.d$^{-1}$]",
+           yticks=[0, 10, 100],
+           ylim=(-10, y1))
+    ax.legend(loc=3, ncol=3, framealpha=0.)
 
     # Plotting data
     res = qsim - qobs
@@ -265,10 +279,14 @@ def process(config, script_paths, logger, data):
     idx = np.arange(nsub - 1, mod.ntimesteps + nsub - 1, nsub)
     x = pd.DataFrame(mod.x[idx], index=time)
 
-    for iplot, (vn, dq) in enumerate(grads.items()):
+    iplot = 0
+    for _, (vn, dq) in enumerate(grads.items()):
         logger.info(f"Plot {iplot}", ntab=1)
         # Ts plot
-        ax = axs[f"{vn}/ratio"]
+        aname = f"{vn}/ratio"
+        if aname not in axs:
+            continue
+        ax = axs[aname]
 
         ratio = (res / -dq)
         ratio[start:end].plot(ax=ax)
@@ -277,27 +295,28 @@ def process(config, script_paths, logger, data):
         putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
 
         vtxt = re.sub("\\$", "", vn)
-        title = f"({letters[2 * iplot + 1]}) "\
-                + f"{vn} parameter error $\\frac{{Q_3 - q_o}}{{ {{{vtxt}}}\\ dQ_3/d{{{vtxt}}}}}$"
+        title = f"({letters[2 * iplot + 1]}) ${{{vtxt}}}$ parameter scaling "\
+                + f"$(Q - q) /  {{{vtxt}}}\\ dQ/d{{{vtxt}}}$"
         t = ax.set_title(title, va="top", ha="left",
                          x=0.02, y=0.92)
         t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
 
         ylim = -300, 300
         ax.set(ylim=ylim,
-               yticks=[-10, -1, 0, 1, 10],
-               ylabel="Parameter scaling error [-]")
+               yticks=[-10, 0, 10],
+               ylabel=f"Parameter scaling $\Delta_{{{vtxt}}}$ [-]")
         ax.yaxis.set_minor_locator(mticker.NullLocator())
+        ax.sharex(axs["flux"])
 
         # .. scatter plot
         ax = axs[f"{vn}/scatter"]
 
         if re.search("X_1", vn):
             ires = 1
-            store_name = "Production store level"
+            store_name = "Production store filling level"
         else:
             ires = x.shape[1] - 1
-            store_name = "Routing store level"
+            store_name = "Routing store filling level"
 
         store = x.iloc[:, ires]
         ax.plot(store, ratio, ".", alpha=0.05)
@@ -321,10 +340,11 @@ def process(config, script_paths, logger, data):
         x1 = min(1.1, int(store.max() * 10 + 1) / 10)
         ax.set(ylim=ylim,
                xlim=[x0, x1],
-               yticks=[-10, -1, 0, 1, 10],
+               yticks=[-10, 0, 10],
                xlabel=store_name,
                yticklabels=[])
 
+        iplot += 1
 
     fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
     fig.savefig(fp, dpi=config.fdpi)
@@ -358,7 +378,7 @@ if __name__ == "__main__":
     end = "2022"
 
     stationid = args.stationid
-    awidth = 4.5
+    awidth = 5
     aheight = 2.5
     fdpi = 300
     imgext = "png"

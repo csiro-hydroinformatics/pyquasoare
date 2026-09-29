@@ -33,10 +33,7 @@ from hydrodiy.io import csv, iutils
 from hydrodiy.plot import putils
 from hydrodiy.stat import metrics
 
-from pygme.models.gr4j import GR4J
-
 from pyquasoare import gradients
-import c_pyquasoare_grad
 
 from figC_grad_diag_structure import get_data, configure_model, set_parameters
 from utils import get_parameters
