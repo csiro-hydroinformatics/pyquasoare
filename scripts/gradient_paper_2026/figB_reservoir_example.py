@@ -482,10 +482,11 @@ def process(config, script_paths, logger, data):
 
     title = "(a) Linear approximation of discharge flux function"
     ax.set(title=title, xticks=alphas,
-           xlabel="Reservoir level $x$ [-]",
+           xlabel="Reservoir filling level $x$ [-]",
            ylabel="Flux function $f_3(x)$ [-]")
     ax.legend(fontsize="large", framealpha=1.)
     ax.grid(axis="x", ls=":")
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # Potential inflows
     ax = axs[1, 0]
@@ -496,6 +497,7 @@ def process(config, script_paths, logger, data):
     ax.set(title=title,
            ylabel="Flux [mm.d$^{-1}$]")
     format_time_xaxis(ax)
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # reservoir level timeseries
     ax = axs[0, 1]
@@ -508,10 +510,11 @@ def process(config, script_paths, logger, data):
     ax.plot([], [], ":", color="0.5", label="Interpolation bands")
     title = "(b) Reservoir filling level ($x$)"
     ax.set(title=title, yticks=alphas,
-           ylabel="Reservoir level $x$ [-]")
+           ylabel="$x$ [-]")
     format_time_xaxis(ax, True)
     ax.legend(loc=4, fontsize="large", framealpha=1.)
     ax.grid(axis="y", ls=":")
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # derivative of reservoir level timeseries
     ax = axs[0, 2]
@@ -523,8 +526,9 @@ def process(config, script_paths, logger, data):
                     col1, col2, True)
     title = "(c) Gradient of reservoir filling level ($dx/d\\Gamma$)"
     ax.set(title=title,
-           ylabel="Reservoir level gradient $dx/d\\Gamma$ [mm$^{-1}$]")
+           ylabel="$dx/d\\Gamma$ [mm$^{-1}$]")
     format_time_xaxis(ax, True)
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # Flux timeseries
     ax = axs[1, 1]
@@ -538,6 +542,7 @@ def process(config, script_paths, logger, data):
     ax.set(title=title,
            ylim=(y1, y0),
            ylabel="Flux [mm.d$^{-1}$]")
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # Flux derivative timeseries
     ax = axs[1, 2]
@@ -550,6 +555,7 @@ def process(config, script_paths, logger, data):
     ax.set(title=title,
            ylim=(y1, y0),
            ylabel="Flux gradient [d$^{-1}$]")
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(5))
 
     # Save file
     fp = script_paths.fimg / \

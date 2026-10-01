@@ -81,7 +81,7 @@ def get_logger(config, script_paths):
 
 def format_y(ax, y0, y1, tk=None, ylabel=None):
     if ylabel is None:
-        ylabel = "Elasticity $\\epsilon_P$ [-]"
+        ylabel = "Elasticity $\\epsilon_{Q/P}$ [-]"
 
     ax.set(ylabel=ylabel,
            ylim=(y0, y1))
@@ -120,18 +120,22 @@ def process(config, script_paths, logger, data):
 
     p_interan = data.hydroclim.P.mean() * 365.25
     e_interan = data.hydroclim.PET.mean() * 365.25
+    arid_interan = p_interan / e_interan
 
     p_an = data.hydroclim.P.resample("YS").sum()
     e_an = data.hydroclim.PET.resample("YS").sum()
+    arid_an = p_an / e_an
 
     p_mthly = data.hydroclim.P.resample("MS").sum()
     e_mthly = data.hydroclim.PET.resample("MS").sum()
+    arid_mthly = p_mthly / e_mthly
 
     # Gradients
     nuh = config.nuh
+    # .. inversing sign because qsim is neg
     grads = pd.Series(-mod.dfluxes_agg[:, 0, -1, 5], index=time)
 
-    # .. inversing sign because qsim is neg
+    # Compute data at longer timesteps
     q_mthly = q.resample("MS").mean()
     q_an = q.resample("YS").mean()
 
@@ -157,51 +161,48 @@ def process(config, script_paths, logger, data):
     col_interan = "royalblue"
 
     col_tm = "tab:orange"
+    ylim = (-0.3, 5.3)
+    tk = np.arange(0, 6, 2)
 
     logger.info("Plot elast")
     plt.close("all")
 
     nrows, ncols = 2, 2
-    mosaic = [["monthly", "adim"], ["annual", "interan"]]
+    mosaic = [["interan", "annual"], ["adim", "monthly"]]
     ncols, nrows = len(mosaic[0]), len(mosaic)
     figsize = (config.awidth * ncols, config.aheight * nrows)
     fig = plt.figure(figsize=figsize,
                      layout="constrained")
-    kw = dict(width_ratios=[1.6, 1])
+    kw = dict(width_ratios=[1, 1.6])
     axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 
     # Scatter data
     ax = axs["adim"]
 
-    arid_mthly = p_mthly / e_mthly
-    ax.plot(arid_mthly, elast_mthly, "o", ms=5,
-            label="GQ Monthly", mec="0.8",
+    ax.plot(arid_mthly, elast_mthly, "o", ms=4,
+            label="GR4J Monthly", mec="0.8",
             color=col_mthly)
 
-    arid_an = p_an / e_an
-    ax.plot(arid_an, elast_an, "o", ms=8,
-            label="GQ Annual", mec="0.5",
+    ax.plot(arid_an, elast_an, "o", ms=6,
+            label="GR4J Annual", mec="0.5",
             color=col_an)
 
-    arid_interan = p_interan / e_interan
-    ax.plot(arid_interan, elast_interan, "o", ms=12,
-            label="GQ Interan", markeredgewidth=2,
+    ax.plot(arid_interan, elast_interan, "o", ms=8,
+            label="GR4J Interan.", markeredgewidth=2,
             mec="k", mfc=col_interan)
 
     x = np.linspace(0.1, 10., 200)
     y = tm_eP(x, np.ones_like(x))
     ax.plot(x, y, "-", label="TM",
-            color=col_tm, lw=2)
+            color=col_tm, lw=3)
 
     ax.legend(loc=1)
-    ax.set(xlabel="Aridity P/PET [-]",
+    ax.set(xlabel="Humidity $P/E_0$ [-]",
            xlim=(-0.3, 6.3))
 
-    ylim_mthly = (-0.3, 6.3)
-    tk_mthly = np.arange(0, 8, 2)
-    format_y(ax, ylim_mthly[0], ylim_mthly[1], tk_mthly, "")
+    format_y(ax, ylim[0], ylim[1], tk)
 
-    title = "(b) Adimensional\nplot"
+    title = "(c) Dimensionless\n      plot"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
 
@@ -213,12 +214,12 @@ def process(config, script_paths, logger, data):
     ax.plot(t, v, label="GR4J QuaSoARe", color=col_mthly,
             lw=2)
 
-    title = "(a) Monthly streamflow elasticity to rainfall"
+    title = "(d) Monthly streamflow elasticity to rainfall"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
 
     format_x(ax, config.start, config.end)
-    format_y(ax, ylim_mthly[0], ylim_mthly[1], tk_mthly)
+    format_y(ax, ylim[0], ylim[1], tk, "")
     ax.legend(loc=3, ncol=2, framealpha=0.)
 
     # ... annual data
@@ -237,14 +238,12 @@ def process(config, script_paths, logger, data):
 
     #putils.line(ax, 1, 0, 0, v.mean(), ls="--", color=col_tm)
 
-    title = "(c) Annual streamflow elasticity to rainfall"
+    title = "(b) Annual streamflow elasticity to rainfall"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
     ax.legend(loc=3, ncol=2, framealpha=0.)
     format_x(ax, config.start, config.end)
-    ylim_an = (0.7, 4.3)
-    tk_an = np.arange(1, 5)
-    format_y(ax, ylim_an[0], ylim_an[1], tk_an)
+    format_y(ax, ylim[0], ylim[1], tk, "")
 
     # ... inter-annual data
     ax = axs["interan"]
@@ -257,17 +256,16 @@ def process(config, script_paths, logger, data):
             color=[col_interan, col_tm])
 
     for ivn, (nm, v) in enumerate(se.items()):
-        vv = ylim_an[0] + (v - ylim_an[0]) / 2
+        vv = ylim[0] + (v - ylim[0]) / 2
         ax.text(ivn, vv, f"{v:0.1f}",
                 va="center", ha="center",
                 fontweight="bold",
                 color="w")
 
-    title = "(d) Inter-annual elasticity"
+    title = "(a) Interannual elasticity"
     ax.set_title(title, va="top", ha="left",
                  x=0.02, y=0.94)
-    format_y(ax, ylim_an[0], ylim_an[1], tk_an)
-    ax.set(ylabel="")
+    format_y(ax, ylim[0], ylim[1], tk)
 
     fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
     fig.savefig(fp, dpi=config.fdpi)
