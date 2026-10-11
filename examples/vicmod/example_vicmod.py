@@ -1,12 +1,13 @@
-from pathlib import Path
-import time
 import math
+import time
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from pyquasoare import approx, models
 from hydrodiy.io import csv
 
+from pyquasoare import approx, models
 
 #
 # Code to solve the reservoir equation associated

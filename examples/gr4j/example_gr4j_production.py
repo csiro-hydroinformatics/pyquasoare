@@ -1,8 +1,11 @@
 from pathlib import Path
-import numpy as np
+
 import matplotlib.pyplot as plt
-from pyquasoare import approx, models
+import numpy as np
 from hydrodiy.io import csv
+
+from pyquasoare import approx, models
+
 #
 # Code to solve the reservoir equation associated
 # with the GR4J production reservoir per Perring
