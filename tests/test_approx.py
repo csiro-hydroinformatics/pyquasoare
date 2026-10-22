@@ -1,5 +1,6 @@
 from pathlib import Path
 from itertools import product as prod
+import warnings
 import math
 import re
 import pytest
@@ -12,14 +13,16 @@ from hydrodiy.io import iutils
 from pyquasoare import approx, slow
 import c_pyquasoare
 
+from loggers import get_logger
+
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-NCASES = 13
+NCASES = 16
 
-LOGGER = iutils.get_logger("approx", flog=FTEST / "test_approx.log")
+LOGGER = get_logger(False, "approx")
 
 # ----- FIXTURES ---------------------------------------------------
 @pytest.fixture(scope="module", \
@@ -148,20 +151,22 @@ def reservoir_function(request, selfun):
 def generate_samples(ntry, selcase, request):
     case = request.param
     assert case in list(range(1, NCASES+1))
-    if selcase>0 and case!=selcase:
+
+    if selcase > 0 and case != selcase:
         pytest.skip("Configuration skipped")
 
     Tmax = 20
 
     # Parameters
-    v0, v1 = -5*np.ones(3), 5*np.ones(3)
+    v0, v1 = -5 * np.ones(3), np.ones(3)
 
     if case == 1:
-        name = "a and b are zero"
+        name = "a=0 & b=0"
         v0[:-1] = 0
         v1[:-1] = 0
+
     elif case == 2:
-        name = "a is zero"
+        name = "a=0"
         v0[0] = 0
         v1[0] = 0
 
@@ -170,11 +175,11 @@ def generate_samples(ntry, selcase, request):
 
     # Refine cases
     if case == 3:
-        name = "Determinant is null"
+        name = "Delta=0"
         params[:, 2] = params[:, 1]**2/4/params[:, 0]
 
     elif case == 4:
-        name = "Determinant is negative"
+        name = "Dlt<0"
         a, b, c = params.T
         Delta = -np.abs(b**2-4*a*c)
         qD = np.sqrt(-Delta)/2
@@ -182,65 +187,89 @@ def generate_samples(ntry, selcase, request):
         params[:, 2] = c
 
     elif case in [5, 12]:
-        name = "Determinant is positive" if case==5 \
-                        else "edge case for atanh"
+        name = "Dlt>0" if case==5 \
+                        else "atanh edge"
         a, b, c = params.T
-        Delta = np.abs(b**2-4*a*c)
-        c = (b**2-Delta)/4./a
+        Delta = np.abs(b**2 - 4 * a * c)
+        c = (b**2 - Delta) / 4. / a
         params[:, 2] = c
 
         if case == 12:
-            ssr = b/2./a
-            qD = np.sqrt(Delta)/2.
-            s0s = -ssr+np.abs(qD/a)*np.random.uniform(0., 1., len(qD))
+            ssr = b / 2. / a
+            qD = np.sqrt(Delta) / 2.
+            s0s = -ssr + np.abs(qD / a) \
+                * np.random.uniform(0., 1., len(qD))
 
     elif case == 6:
-        name = "General"
+        name = "Gen"
 
     elif case == 7:
-        name = "General+large scale"
-        params *= 1000
+        name = "Gen+large"
+        # Do not increase positive values to avoid explosion
+        # of solutions
+        for icol in [0, 1]:
+            ineg = params[:, icol] < 0
+            params[:, icol] *= 1000
+
+        params[:, 2] *= 1000
 
     elif case == 8:
-        name = "General+low scale"
+        name = "Gen+low"
         params /= 1000
 
     elif case == 9:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a and b close to zero"
+        name = "a~0 & b~0"
         eps = 1e-9
         params[:, :2] = np.random.uniform(eps, 5*eps, size=(len(params), 2))
 
     elif case == 10:
         s0s = np.random.uniform(-5, 5, ntry)
-        name = "a close to zero"
+        name = "a~0"
         eps = 1e-9
         params[:, 0] = np.random.uniform(eps, 5*eps, size=len(params))
 
     elif case == 11:
-        name = "equality s0 = -b/2a"
+        name = "s0=-b/2a"
         a, b, c = params.T
         s0s = -b/2./a
 
     elif case == 13:
-        name = "a zero and b close to zero"
+        name = "a=0 & b~0"
         params[:, 0] = 0
         eps = 1e-9
         params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
 
+    elif case == 14:
+        s0s = np.random.uniform(-5, 5, ntry)
+        name = "a<<1"
+        eps = 1e-6
+        params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
+
+    if case == 15:
+        name = "Dlt=0 & a<<1"
+        eps = 1e-6
+        params[:, 0] = np.random.uniform(eps, 5 * eps, size=len(params))
+        params[:, 2] = params[:, 1]**2/4/params[:, 0]
+
+    elif case == 16:
+        name = "a=0 & b<<1"
+        params[:, 0] = 0
+        eps = 1e-6
+        params[:, 1] = np.random.uniform(eps, 5*eps, size=len(params))
 
     if not case in [9, 10, 11, 12]:
         s0s = np.random.uniform(-5, 5, ntry)
         a, b, c = params.T
         idx = np.abs(a)>0
         if idx.sum()>0:
-            Delta = np.abs(b**2-4*a*c)
+            Delta = np.abs(b**2 - 4*a*c)
             qD = np.sqrt(Delta)/2
             qD[np.abs(Delta)==0] = 3.
             ssr = b/2/a
             s0s[idx] = -ssr+qD/a*np.random.uniform(-2, 2, idx.sum())
 
-    return f"{name:20}", case, params, s0s, Tmax
+    return f"{name:>10}", case, params, s0s, Tmax
 
 
 # ----- TESTS --------------------------------------------
@@ -302,6 +331,32 @@ def test_function_runtime():
         rx2 = rt/runtimes[0]*100
         mess = f"Runtime of fun {fun:4s} : {rt:2.2e}ms ({rx2:0.0f}% of x2)"
         LOGGER.info(mess)
+
+
+def test_quad_constants(allclose, generate_samples):
+    cname, case, params, s0s, Tmax = generate_samples
+    ntry = len(params)
+    if ntry==0:
+        pytest.skip("Skip param config")
+
+    cst = approx.quad_constants(params)
+    a, b, c = params.T
+
+    if case in [3, 15]:
+        assert allclose(cst[:, 0], 0.)
+        assert allclose(cst[:, 1], 0., atol=5e-8)
+    else:
+        delta = b**2 - 4 * a * c
+        assert allclose(cst[:, 0], delta)
+
+        qD = np.sqrt(np.abs(delta)) / 2
+        assert allclose(cst[:, 1], qD)
+
+    if case not in [1, 2, 13, 16]:
+        sbar = -b / 2 / a
+        assert allclose(cst[:, 2], sbar)
+    else:
+        assert np.all(np.invert(np.isfinite(cst[:, 2])))
 
 
 def test_quad_fun(allclose, generate_samples):

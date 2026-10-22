@@ -8,6 +8,9 @@ cdef extern from 'c_quasoare_utils.h':
     cdef double QUASOARE_EPS
     cdef double QUASOARE_ATOL
     cdef double QUASOARE_RTOL
+    cdef double QUASOARE_FLUX_TERM_RTOL1
+    cdef double QUASOARE_FLUX_TERM_RTOL2
+    cdef double QUASOARE_DELTA_ATOL
     cdef double QUASOARE_PI
     cdef int QUASOARE_NFLUXES_MAX
 
@@ -25,6 +28,7 @@ cdef extern from 'c_quasoare_utils.h':
 
 
 cdef extern from 'c_quasoare_core.h':
+    double c_quad_expmxy(double x, double y)
     double c_quad_fun(double a, double b, double c, double s)
     double c_quad_grad(double a, double b, double c, double s)
     double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
@@ -51,7 +55,7 @@ cdef extern from 'c_quasoare_core.h':
 
     # The interface is changed to avoid the problem with
     # fixed length aj_vector, bj_vector, cj_vector
-    int c_quad_fluxes(int nfluxes,
+    int c_quad_fluxes_increment(int nfluxes,
                       double *aj_vector,
                       double *bj_vector,
                       double *cj_vector,
@@ -89,52 +93,75 @@ cdef extern from 'c_quasoare_steady.h':
                                double * buff,
                                double * steady);
 
-
-cdef extern from 'c_nonlinrouting.h':
-    int c_quadrouting(int nval, double timestep,
-                        double theta, double q0,
-                        double s0, double *inflows, double * outflows)
-
-    int c_nonlinrouting(int nval, int nsubdiv, double timestep,
-                        double theta, double nu, double q0,
-                        double s0, double *inflows, double * outflows)
-
-cdef extern from 'c_gr4jprod.h':
-    int c_gr4jprod(int nval, int nsubdiv, double X1, double s0,
-                        double *inputs,
-                        double * outputs)
-
 def __cinit__(self):
     pass
 
 C_QUASOARE_EPS = QUASOARE_EPS
 C_QUASOARE_ATOL = QUASOARE_ATOL
 C_QUASOARE_RTOL = QUASOARE_RTOL
+C_QUASOARE_FLUX_TERM_RTOL1 = QUASOARE_FLUX_TERM_RTOL1
+C_QUASOARE_FLUX_TERM_RTOL2 = QUASOARE_FLUX_TERM_RTOL2
+C_QUASOARE_DELTA_ATOL = QUASOARE_DELTA_ATOL
 C_QUASOARE_PI = QUASOARE_PI
 C_QUASOARE_NFLUXES_MAX = QUASOARE_NFLUXES_MAX
+
 
 def get_nan():
     return c_get_nan()
 
+
 def get_inf():
     return c_get_inf()
+
 
 def compiler_accuracy_kahan():
     return c_compiler_accuracy_kahan()
 
+
 def eta_fun(double x, double Delta):
     return c_eta_fun(x, Delta)
-
-def quad_constants(double a, double b, double c, \
-                np.ndarray[double, ndim=1, mode='c'] values not None):
-    assert values.shape[0] == 3
-    return c_quad_constants(a, b, c, <double*> np.PyArray_DATA(values))
 
 
 def get_error_message(int err_code):
     cdef char message[100]
     c_get_error_message(err_code, message)
     return message
+
+
+def quad_expmxy(double x, double y):
+    return c_quad_expmxy(x, y)
+
+
+def quad_constants(double a, double b, double c,
+                   np.ndarray[double, ndim=1, mode='c'] values not None):
+    if values.shape[0] != 3:
+        raise ValueError("Expected values.shape[0] == 3")
+    return c_quad_constants(a, b, c, <double*> np.PyArray_DATA(values))
+
+
+def quad_constants_vect(np.ndarray[double, ndim=2, mode='c'] coefs not None,
+                        np.ndarray[double, ndim=2, mode='c'] values not None):
+    cdef int ierr = 0
+    cdef int nval = coefs.shape[0]
+    cdef double vals[3]
+
+    if coefs.shape[1] != 3:
+        raise ValueError("Expected coefs.shape[1] == 3")
+    if values.shape[1] != 3:
+        raise ValueError("Expected values.shape[1] == 3")
+    if values.shape[0] != nval:
+        raise ValueError("Expected values.shape[0] == coefs.shape[0]")
+
+    for i in range(nval):
+        ierr = c_quad_constants(coefs[i, 0], coefs[i, 1], coefs[i, 2], vals)
+        if ierr > 0:
+            return ierr
+
+        values[i, 0] = vals[0]
+        values[i, 1] = vals[1]
+        values[i, 2] = vals[2]
+
+    return ierr
 
 
 def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
@@ -151,9 +178,9 @@ def quad_fun(np.ndarray[double, ndim=1, mode='c'] coefs not None,
 
 
 def quad_fun_tangent(double sref,
-                           np.ndarray[double, ndim=1, mode='c'] coefs not None,
-                           np.ndarray[double, ndim=1, mode='c'] s not None,
-                           np.ndarray[double, ndim=1, mode='c'] o not None):
+                     np.ndarray[double, ndim=1, mode='c'] coefs not None,
+                     np.ndarray[double, ndim=1, mode='c'] s not None,
+                     np.ndarray[double, ndim=1, mode='c'] o not None):
     cdef int nval = s.shape[0]
     assert o.shape[0] == nval
     assert coefs.shape[0] == 3
@@ -253,7 +280,7 @@ def quad_coefficients_smooth(np.ndarray[double, ndim=1, mode='c'] betas not None
     return 0
 
 
-def quad_steady(np.ndarray[double, ndim=2, mode='c'] coefs not None, \
+def quad_steady(np.ndarray[double, ndim=2, mode='c'] coefs not None,
                 np.ndarray[double, ndim=2, mode='c'] steady not None):
     cdef int k
     cdef int nval = coefs.shape[0]
@@ -296,16 +323,16 @@ def quad_steady_flux_scalings(np.ndarray[double, ndim=1, mode='c'] alphas not No
     return ierr
 
 
-def quad_forward(double a, double b, double c, \
-                        double Delta, double qD, double ssr, \
-                        double t0, double s0, double t):
+def quad_forward(double a, double b, double c,
+                 double Delta, double qD, double ssr,
+                 double t0, double s0, double t):
     return c_quad_forward(a, b, c, Delta, qD, ssr, t0, s0, t)
 
 
-def quad_forward_vect(double a, double b, double c, \
-                        double Delta, double qD, double ssr, \
-                        double t0, double s0, \
-                        np.ndarray[double, ndim=1, mode='c'] t not None,\
+def quad_forward_vect(double a, double b, double c,
+                      double Delta, double qD, double ssr,
+                      double t0, double s0,
+                        np.ndarray[double, ndim=1, mode='c'] t not None,
                         np.ndarray[double, ndim=1, mode='c'] s not None):
     cdef int nval = t.shape[0]
     cdef int i
@@ -315,20 +342,20 @@ def quad_forward_vect(double a, double b, double c, \
     return 0
 
 
-def quad_delta_t_max(double a, double b, double c, \
+def quad_delta_t_max(double a, double b, double c,
                         double Delta, double qD, double ssr, double s0):
     return c_quad_delta_t_max(a, b, c, Delta, qD, ssr, s0)
 
 
-def quad_inverse(double a, double b, double c, \
-                        double Delta, double qD, double ssr, \
+def quad_inverse(double a, double b, double c,
+                        double Delta, double qD, double ssr,
                         double s0, double s1):
     return c_quad_inverse(a, b, c, Delta, qD, ssr, s0, s1)
 
 
-def quad_inverse_vect(double a, double b, double c, \
-                        double Delta, double qD, double ssr, double s0, \
-                            np.ndarray[double, ndim=1, mode='c'] s1 not None,\
+def quad_inverse_vect(double a, double b, double c,
+                        double Delta, double qD, double ssr, double s0,
+                            np.ndarray[double, ndim=1, mode='c'] s1 not None,
                             np.ndarray[double, ndim=1, mode='c'] t not None):
     cdef int nval = s1.shape[0]
     cdef int i
@@ -338,20 +365,20 @@ def quad_inverse_vect(double a, double b, double c, \
     return 0
 
 
-def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
+def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,
                 double s0):
     cdef int nalphas = alphas.shape[0]
     return c_find_alpha(nalphas, <double*> np.PyArray_DATA(alphas), s0)
 
 
-def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
-                    np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
-                    np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
-                    double Aj, double Bj, double Cj, \
-                    double Delta, double qD, double ssr,
-                    double t0, double t1, \
-                    double s0, double s1, \
-                    np.ndarray[double, ndim=1, mode='c'] fluxes not None):
+def quad_fluxes_increment(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
+                np.ndarray[double, ndim=1, mode='c'] bj_vector not None,
+                np.ndarray[double, ndim=1, mode='c'] cj_vector not None,
+                double Aj, double Bj, double Cj,
+                double Delta, double qD, double ssr,
+                double t0, double t1,
+                double s0, double s1,
+                np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
     cdef int i
     cdef int nfluxes = aj_vector.shape[0]
@@ -365,22 +392,22 @@ def quad_fluxes(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
         raise ValueError("cj_vector.shape[0] != nfluxes")
 
     # Run C code
-    return c_quad_fluxes(nfluxes,
-                            <double*> np.PyArray_DATA(aj_vector),
-                            <double*> np.PyArray_DATA(bj_vector),
-                            <double*> np.PyArray_DATA(cj_vector),
-                            Aj, Bj, Cj, Delta, qD, ssr, \
-                            t0, t1, s0, s1, \
-                            <double*> np.PyArray_DATA(fluxes))
+    return c_quad_fluxes_increment(nfluxes,
+                                   <double*> np.PyArray_DATA(aj_vector),
+                                   <double*> np.PyArray_DATA(bj_vector),
+                                   <double*> np.PyArray_DATA(cj_vector),
+                                   Aj, Bj, Cj, Delta, qD, ssr,
+                                   t0, t1, s0, s1,
+                                   <double*> np.PyArray_DATA(fluxes))
 
 
-def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,\
-                        np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
-                        np.ndarray[double, ndim=3, mode='c'] coefs_noscaling not None,
-                        double t0, double s0, double timestep, \
-                        np.ndarray[int, ndim=1, mode='c'] niter not None,\
-                        np.ndarray[double, ndim=1, mode='c'] s1 not None,\
-                        np.ndarray[double, ndim=1, mode='c'] fluxes not None):
+def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
+                   np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
+                   np.ndarray[double, ndim=3, mode='c'] coefs_noscaling not None,
+                   double t0, double s0, double timestep,
+                   np.ndarray[int, ndim=1, mode='c'] niter not None,
+                   np.ndarray[double, ndim=1, mode='c'] s1 not None,
+                   np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
     cdef int nfluxes = coefs_noscaling.shape[0]
@@ -462,49 +489,3 @@ def quad_model(int errors, np.ndarray[double, ndim=1, mode='c'] alphas not None,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))
-
-
-def quadrouting(double timestep, double theta, \
-                    double q0, double s0,
-                    np.ndarray[double, ndim=1, mode='c'] inflows not None,
-                    np.ndarray[double, ndim=1, mode='c'] outflows not None):
-
-    cdef int nval = inflows.shape[0]
-    if nval!=outflows.shape[0]:
-        raise ValueError("inflows.shape[0]!=outflows.shape[0]")
-
-    return c_quadrouting(nval, timestep, theta, q0, s0,
-                                <double*> np.PyArray_DATA(inflows),
-                                <double*> np.PyArray_DATA(outflows))
-
-
-def nonlinrouting(int nsubdiv, double timestep, double theta, double nu, \
-                    double q0, double s0,
-                    np.ndarray[double, ndim=1, mode='c'] inflows not None,
-                    np.ndarray[double, ndim=1, mode='c'] outflows not None):
-
-    cdef int nval = inflows.shape[0]
-    if nval!=outflows.shape[0]:
-        raise ValueError("inflows.shape[0]!=outflows.shape[0]")
-
-    return c_nonlinrouting(nval, nsubdiv, timestep, theta, nu, q0, s0,
-                                <double*> np.PyArray_DATA(inflows),
-                                <double*> np.PyArray_DATA(outflows))
-
-
-def gr4jprod(int nsubdiv, double X1, double s0,
-                    np.ndarray[double, ndim=2, mode='c'] inputs not None,
-                    np.ndarray[double, ndim=2, mode='c'] outputs not None):
-
-    cdef int nval = inputs.shape[0]
-    if inputs.shape[1]!=2:
-        raise ValueError("inputs.shape[1]!=2")
-    if nval!=outputs.shape[0]:
-        raise ValueError("rain.shape[0]!=outputs.shape[0]")
-    if outputs.shape[1]!=6:
-        raise ValueError("outputs.shape[1]!=6")
-
-    return c_gr4jprod(nval, nsubdiv, X1, s0,
-                                <double*> np.PyArray_DATA(inputs),
-                                <double*> np.PyArray_DATA(outputs))
-

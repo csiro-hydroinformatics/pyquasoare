@@ -1,7 +1,9 @@
 import warnings
+
 import numpy as np
 
 from pyquasoare import has_c_module
+
 if has_c_module():
     import c_pyquasoare
 else:
@@ -9,6 +11,28 @@ else:
                       + " Please compile C code")
 
 ERRORS = ["ignore", "raise", "warn"]
+
+
+def errors_check(errors):
+    if errors not in ERRORS:
+        txt = "/".join(ERRORS)
+        errmsg = f"Expected errors in {txt}, got {errors}."
+        raise ValueError(errmsg)
+
+
+def get_errorsid(errors):
+    return np.int32(ERRORS.index(errors))
+
+
+def error_management(errors, ierr, name):
+    mess = c_pyquasoare.get_error_message(ierr).decode()
+    if errors == "raise" and ierr > 0:
+        raise ValueError(f"{name} returns {ierr} ({mess}).")
+
+    if errors == "warn":
+        mess = f"{name} raises warning {ierr} ({mess})."
+        warnings.warn(mess)
+
 
 
 def quad_model(alphas, flux_scalings, coefs_noscaling,
@@ -19,9 +43,18 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
                errors="ignore",
                fluxes=None, niter=None, s1=None):
     """ Integrate the approximate reservoir equation with initial initial
-    condition s0 over a series of P timesteps.
+    condition s0 over a series of P timesteps. The reservoir is
+    characterised by the following differential equation:
 
-    The piecewise quadratic approximations of flux functions are defined by
+    ds/dt = ∑i Q[i] * fi(s)
+
+    where Q[i] are scaling factors and fi are flux functions.
+    The output integrated fluxes are defined as
+
+    F[i] = Q[i] × integral( fi(x), t=0 .. Δ)
+
+    The flux functions fi are approximated by quadratic approximations
+    that are defined by
     - interpolation nodes alphas
     - interpolation coefficients a_matrix_noscaling, b_matrix_noscaling,
         c_matrix_noscaling.
@@ -102,7 +135,7 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     >>> # Run the model
     >>> s0 = 0.
     >>> timestep = 1.
-    >>> niter, s1, fx = quad_model(alphas, sc, coefs, s0, timestep)
+    >>> niter, s1, fx = models.quad_model(alphas, sc, coefs, s0, timestep)
     >>> # ODE solution
     >>> s1
     array([ 0.        ,  0.        , 14.63001824,  0.92614791,  0.75904346,
@@ -120,14 +153,10 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
            [ 0.00000000e+00, -2.37258597e-02],
            [ 0.00000000e+00, -1.89470944e-02]])
     >>> # Check mass balance
-    >>> fx.sum(axis=0)[1]+s0-s1[-1]
+    >>> (fx.sum(axis=0)[1] + s0 - s1[-1]).round(10)
     np.float64(-100.0)
     """
-    if errors not in ERRORS:
-        txt = "/".join(ERRORS)
-        errmsg = f"Expected errors in {txt}, got {errors}."
-        raise ValueError(errmsg)
-
+    errors_check(errors)
     nval = flux_scalings.shape[0]
 
     if fluxes is None:
@@ -141,21 +170,12 @@ def quad_model(alphas, flux_scalings, coefs_noscaling,
     else:
         perturb = perturb.astype(np.float64)
 
-    ierrors = np.int32(ERRORS.index(errors))
-
+    ierrors = get_errorsid(errors)
     ierr = c_pyquasoare.quad_model(ierrors, alphas, flux_scalings,
                                    perturb, coefs_noscaling,
                                    s0, smin, smax,
                                    timestep, niter, s1, fluxes)
-
-    if errors == "raise" and ierr > 0:
-        mess = c_pyquasoare.get_error_message(ierr).decode()
-        raise ValueError(f"c_pyquasoare.quad_model returns {ierr} ({mess})")
-
-    if errors == "warn":
-        if np.any(niter < 0):
-            nerr = (niter < 0).sum()
-            mess = f"{nerr} errors when running c_pyquasoare.quad_model"
-            warnings.warn(mess)
+    name = "c_pyquasoare.quad_model"
+    error_management(errors, ierr, name)
 
     return niter, s1, fluxes

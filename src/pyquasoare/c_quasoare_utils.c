@@ -43,11 +43,11 @@ int isnull(double x){
 }
 
 int isequal(double x, double y, double atol, double rtol){
-    return fabs(x-y)<atol+rtol*fabs(x) ? 1 : 0;
+    return fabs(x - y) < atol + rtol * fabs(x) ? 1 : 0;
 }
 
 int notequal(double x, double y, double atol, double rtol){
-    return 1-isequal(x, y, atol, rtol);
+    return 1 - isequal(x, y, atol, rtol);
 }
 
 /* Code copied from
@@ -71,23 +71,24 @@ double diff_of_products(double a, double b, double c, double d)
 
 int c_quad_constants(double a, double b, double c, double values[3]){
     double Delta = isnull(b * b - 4. * a * c) ? 0. : diff_of_products(b, b, 4. * a, c);
-    double qD = sqrt(fabs(Delta))/2;
+    double qD = sqrt(fabs(Delta)) / 2;
     values[0] = Delta;
     values[1] = qD;
     values[2] = -b / 2. / a;
-    return qD>=0. ? 0. : QUASOARE_UTILS_QD_NEGATIVE;
+    /* TODO : Why negative ? it cannot be */
+    return qD >= 0. ? 0 : QUASOARE_UTILS_QD_NEGATIVE;
 }
 
 double c_eta_fun(double x, double Delta){
     if(Delta<0.)
         return atan(x);
     else
-        if(fabs(x)<1.)
+        if(fabs(x) < 1.)
             return -atanh(x);
-        else if (fabs(x)>1.)
-            return -atanh(1./x);
+        else if (fabs(x) > 1.)
+            return -atanh(1. / x);
         else
-            return x<0 ? c_get_inf() : -1.*c_get_inf();
+            return x<0 ? c_get_inf() : -1. * c_get_inf();
 }
 
 double c_omega_fun(double x, double Delta){
@@ -148,6 +149,51 @@ int c_get_error_message(int err_code, char message[100]){
 
     else if(err_code == QUASOARE_NO_CONVERGENCE)
         strncpy(message, "Algorithm did not converge", len);
+
+    else if(err_code == QUASOARE_STORE_LEVEL_INFINITE)
+        strncpy(message, "Store level becomes infinite", len);
+
+    else if(err_code == QUASOARE_NAN_FLUX)
+        strncpy(message, "Flux is nan", len);
+
+    else if(err_code == QUASOARE_NAN_INTEGX)
+        strncpy(message, "Integral of x is nan", len);
+
+    else if(err_code == QUASOARE_NAN_INTEGX2)
+        strncpy(message, "Integral of x^2 is nan", len);
+
+    else if(err_code == QUASOARE_NEGATIVE_FLUX_FUNCTION)
+        strncpy(message, "Negative flux function", len);
+
+    else if(err_code == QUASOARE_NEGATIVE_POTENTIAL_INFLOW_FLUX)
+        strncpy(message, "Negative value of potential inflow flux", len);
+
+    else if(err_code == QUASOARE_CAPACITY_IS_NEGATIVE_OR_NULL)
+        strncpy(message, "Reservoir capacity is negative or null", len);
+
+    else if(err_code == QUASOARE_GRAD_ONLY_ONE_VARIABLE_ALLOWED)
+        strncpy(message, "Only one gradient variable allowed", len);
+
+    else if(err_code == QUASOARE_GRAD_IS_NAN)
+        strncpy(message, "Gradient is nan", len);
+
+    else if(err_code == QUASOARE_GRAD_IS_INFINITE)
+        strncpy(message, "Gradient is infinite", len);
+
+    else if(err_code == QUASOARE_GRAD_ZERO_FLUX_SCALING)
+        strncpy(message, "Variable scaling parameter is <=0", len);
+
+    else if(err_code == QUASOARE_GRAD_TYPEID_NOT_FOUND)
+        strncpy(message, "Variable type ID not found", len);
+
+    else if(err_code == QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS)
+        strncpy(message, "Reservoir ID is out of bounds", len);
+
+    else if(err_code == QUASOARE_GRAD_FLUXID_OUTOFBOUNDS)
+        strncpy(message, "Flux ID is out of bounds", len);
+
+    else if(err_code == QUASOARE_GRAD_NRESERVOIRS_TOOLARGE)
+        strncpy(message, "Number of reservoirs is too large", len);
 
     else if(err_code == QUASOARE_UTILS_QD_NEGATIVE)
         strncpy(message, "qD value is negative", len);

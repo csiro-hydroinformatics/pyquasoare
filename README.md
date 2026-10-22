@@ -22,7 +22,9 @@ Lerat, J. (2025), Technical note: Quadratic Solution of the Approximate Reservoi
 ## Approximation of a function with a piecewise quadratic function:
 ```python
 import numpy as np
+
 from pyquasoare import approx
+
 
 # We want to approximate a 6th order polynomial
 def fun(x):
@@ -67,6 +69,7 @@ yyd = approx.quad_fun_from_matrix(new, coefs[None, :, :], xx)
 
 ```python
 import numpy as np
+
 from pyquasoare import approx, models
 
 # The production store of the GR4J model is characterised by

@@ -1,0 +1,409 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+## -- Script Meta Data --
+## Author  : ler015
+## Created : 2026-08-18 15:33:46.478450
+## Comment : Figure presenting gradient benchmarking
+##
+## ------------------------------
+
+import sys
+import os
+import re
+import json
+import math
+import argparse
+from datetime import datetime
+from pathlib import Path
+from collections import namedtuple
+from string import ascii_lowercase as letters
+
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize
+
+import matplotlib as mpl
+
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib import ticker as mticker
+from matplotlib.patches import Rectangle
+
+from hydrodiy.io import csv, iutils
+from hydrodiy.plot import putils
+
+from pygme.models.gr4j import GR4J
+
+from pyquasoare import gradients
+import c_pyquasoare_grad
+from gradbench import data_reader
+
+import importlib
+import utils
+importlib.reload(utils)
+
+from utils import smooth_nodes, smooth_X, smooth_reg, perf, get_parameters
+
+def get_script_paths(config):
+    source_file = Path(__file__).resolve()
+    froot = source_file.parent.parent.parent
+    fimg = froot / "images" / "manuscript" / source_file.stem
+    ScriptPaths = namedtuple("ScriptPaths",
+                             ["source_file", "basename",
+                              "froot", "fimg"])
+    script_paths = ScriptPaths(source_file, source_file.stem,
+                               froot, fimg)
+    fimg.mkdir(exist_ok=True, parents=True)
+    for f in fimg.glob("*.png"):
+        f.unlink()
+
+    return script_paths
+
+
+def get_logger(config, script_paths):
+    basename = script_paths.basename
+    logger = iutils.get_logger(basename, console=True)
+    logger.log_dict(config._asdict(), "Configuration")
+    logger.info("", nret=1)
+    return logger
+
+
+def get_data(config, script_paths, logger):
+    stationid = config.stationid
+    logger.info(f"Load data for stations {stationid}")
+    stations = data_reader.get_stations()
+    area = stations.loc[stationid, "CATCHMENTAREA[km2]"]
+
+    timestep = config.timestep
+    hydroclim = data_reader.get_data(stationid, timestep, nval=None)
+    hydroclim = hydroclim.loc[config.start:config.end]
+    hydroclim = hydroclim.rename(columns={
+        "RAINFALL[mm_day-1]": "P",
+        "PET[mm_day-1]": "PET",
+        "STREAMFLOW[mm_day-1]": "Q"
+        })
+    hydroclim = hydroclim.loc[:, ["P", "PET", "Q"]]
+
+    data = namedtuple("Data", ["hydroclim", "area"])(hydroclim, area)
+    logger.info(".. done")
+
+    return data
+
+
+def configure_model(logger, config, data):
+    logger.info(f"Create and configure model")
+    nalphas = config.nalphas
+    nuh = config.nuh
+    nres = 3 + nuh
+    nsubsteps = config.nsubsteps
+
+    # Create model
+    mod = gradients.MultiReservoirModel(nres, nalphas,
+                                        nsubsteps=nsubsteps,
+                                        errors="raise")
+    # Links
+    # .. Interception -> prod
+    mod.add_link_bypass_shortfall(0, 1)
+
+    # .. prod -> UH
+    for iuh in range(nuh):
+        mod.add_link_outflow(iuh + 1, iuh + 2)
+
+    # .. UH -> Route
+    mod.add_link_outflow(nres - 2, nres - 1)
+
+    # Coefs
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
+    for iuh in range(nuh):
+        mod.set_coefs_linear(2 + iuh, "linrouting")
+    mod.set_coefs_linear(nres - 1, "gr4jroute")
+
+    # Allocate
+    # .. indep var = prod / route capacity + exchange
+    #                + scaling of inputs
+    hclim = data.hydroclim.loc[:, ["P", "PET"]]
+    vspecs = [[0, 1], [0, 2]] \
+        + [[1, 0], [nres - 1, 1], [nres - 1, 0]] \
+        + [[2 + iuh, 3] for iuh in range(nuh)]
+
+    ntimesteps_agg = len(hclim)
+    mod.allocate(ntimesteps_agg,
+                 variables_specs=vspecs,
+                 timestep_agg=1.)
+
+    # Set inputs
+    inputs = hclim.values
+    inputs[:, 1] *= -1
+    mod.set_Qstars_one_reservoir(0, inputs)
+
+    # Set demand
+    inputs = np.ones((ntimesteps_agg, 2)) * np.nan
+    inputs[:, 1] = 1.
+    mod.set_Qstars_one_reservoir(nres - 1, inputs)
+
+    return mod
+
+
+def configure_gr4j(logger, config, data):
+    gr = GR4J()
+    hclim = data.hydroclim.loc[:, ["P", "PET"]]
+    gr.allocate(hclim, noutputs=gr.noutputsmax)
+    return gr
+
+
+def set_parameters(mod, nsubsteps, X0, X1, X2, X3, X4, eta_P=1., eta_E=1.):
+    nres = mod.nreservoirs
+    nuh = nres - 3
+    mod.gammas = [X0, X1] + [1] * nuh + [X3]
+
+    # See Santos (2018), Eq. 6
+    for iuh in range(nuh):
+        mod.coefs_linear[2 + iuh, 2, :, 0] = 1.25 * nuh / X4
+
+    mod.flux_scalings[nres - 1, 1] = X2
+    mod.flux_scalings[0, 0] = eta_P
+    mod.flux_scalings[0, 1] = eta_E
+
+def process(config, script_paths, logger, data):
+    logger.info("Run model")
+    # Prepare model
+    mod = configure_model(logger, config, data)
+    gr = configure_gr4j(logger, config, data)
+
+    # Good parameters
+    X0, X1, X2, X3, X4 = get_parameters()
+    set_parameters(mod, config.nsubsteps, X0, X1, X2, X3, X4)
+    logger.info(f"X1={X1:0.0f} X2={X2:0.1f} X3={X3:0.0f} X4={X4:0.1f}")
+
+    gr.params.values = [X1, X2, X3, X4]
+
+    # Run model
+    mod.run()
+    mod.aggregate()
+
+    gr.run()
+
+    # Timeseries data
+    qobs = data.hydroclim.Q
+
+    time = qobs.index
+    qsim = pd.Series(-mod.fluxes_agg[:, -1, 5], index=time)
+
+    grsim = gr.to_dataframe(index=time)
+
+    # Gradients
+    nuh = config.nuh
+    grads = pd.DataFrame(mod.dfluxes_agg[:, :-nuh, -1, 5], index=time)
+    grads.columns = [r"$\eta_1^f$", r"$\eta_2^f$",
+                     r"$X_1$", r"$X_2$", r"$X_3$"]
+
+    # Ok, but not used to commented out
+    #grads.loc[:, r"$X_4$"] = -mod.dfluxes_agg[:, -nuh:, -1, 5].sum(axis=1) * nuh * 1.25
+
+    grads.loc[:, r"$X_1$"] *= X1
+    grads.loc[:, r"$X_2$"] *= X2
+    grads.loc[:, r"$X_3$"] *= X3
+
+    grads = grads.filter(regex="X_\d", axis=1)
+
+
+    # Plot
+    if args.zoom == 1:
+        start, end = "1990", "2022"
+    elif args.zoom == 2:
+        start, end = "2021", "2022"
+    elif args.zoom == 3:
+        start, end = "2022-02-01", "2022-04-15"
+    elif args.zoom == 4:
+        start, end = "2022-02-22", "2022-03-10"
+
+    # Metrics
+    iok = qobs.notnull()
+    qo, qs = qobs[iok][start:end], qsim[iok][start:end]
+    perf_df = perf(qo, qs)
+    logger.info(f"\n{perf_df}")
+
+    # --------------------------------------------------
+    logger.info("Plot grad ts")
+    plt.close("all")
+
+    nvars = grads.shape[1]
+    nrows, ncols = nvars + 1, 1
+    mosaic = [["flux", "."]] \
+             + [[f"{vn}/ratio", f"{vn}/scatter"]
+                for vn in grads.columns if not re.search("2", vn)]
+    ncols, nrows = len(mosaic[0]), len(mosaic)
+    figsize = (config.awidth * ncols, config.aheight * nrows)
+    fig = plt.figure(figsize=figsize,
+                     layout="constrained")
+    kw = dict(width_ratios=[3, 2])
+    axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
+
+    ax = axs["flux"]
+    qo, qs = qobs[start:end], qsim[start:end]
+    qo.plot(ax=ax, label="Observed $q$", color="k", ls="--")
+    qs.plot(ax=ax, label="Simulated $Q$", lw=2)
+
+    # .. residual
+    tax = ax.twinx()
+    kw = {"color": "0.5", "lw": 0.8}
+    (qs - qo).plot(ax=tax, legend=False, **kw)
+    tax.set_yscale("asinh")
+    tax.set(ylim=(-2e3, 2e3))
+    ax.plot([], [], **kw, label="Residual $Q - q$")
+    yt = [-100, 0, 100]
+    tax.set_yticks(yt, minor=False)
+
+    eps = qobs.mean() * 1e-2
+    sqeps = math.sqrt(eps)
+    fwd = lambda x: (np.sqrt(eps + np.abs(x)) - sqeps) * np.sign(x)
+    inv = lambda y: np.sign(y) * ((np.abs(y) + sqeps)**2 - eps)
+    u = np.linspace(-1, 1, 100)
+    assert np.allclose(inv(fwd(u)), u)
+    ax.set_yscale("function", functions=(fwd, inv))
+
+    title = "(a) Streamflow timeseries"
+    ax.set_title(title, va="top", ha="left",
+                 x=0.02, y=0.94)
+    y0, y1 = ax.get_ylim()
+    ax.set(ylabel="Streamflow [mm.d$^{-1}$]",
+           yticks=[0, 10, 100],
+           ylim=(-10, y1))
+    ax.legend(loc=3, ncol=3, framealpha=0.)
+
+    # Plotting data
+    res = qsim - qobs
+    nsub = mod.nsubsteps
+    idx = np.arange(nsub - 1, mod.ntimesteps + nsub - 1, nsub)
+    x = pd.DataFrame(mod.x[idx], index=time)
+
+    iplot = 0
+    for _, (vn, dq) in enumerate(grads.items()):
+        logger.info(f"Plot {iplot}", ntab=1)
+        # Ts plot
+        aname = f"{vn}/ratio"
+        if aname not in axs:
+            continue
+        ax = axs[aname]
+
+        ratio = (res / -dq)
+        ratio[start:end].plot(ax=ax)
+
+        ax.set_yscale("asinh")
+        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+
+        vtxt = re.sub("\\$", "", vn)
+        title = f"({letters[2 * iplot + 1]}) ${{{vtxt}}}$ parameter scaling "\
+                + f"$(Q - q) /  {{{vtxt}}}\\ dQ/d{{{vtxt}}}$"
+        t = ax.set_title(title, va="top", ha="left",
+                         x=0.02, y=0.92)
+        t.set_bbox(dict(alpha=1.0, ec="none", fc="w"))
+
+        ylim = -300, 300
+        ax.set(ylim=ylim,
+               yticks=[-10, 0, 10],
+               ylabel=f"Parameter scaling $\Delta_{{{vtxt}}}$ [-]")
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        ax.sharex(axs["flux"])
+
+        # .. scatter plot
+        ax = axs[f"{vn}/scatter"]
+
+        if re.search("X_1", vn):
+            ires = 1
+            store_name = "Production store filling level"
+        else:
+            ires = x.shape[1] - 1
+            store_name = "Routing store filling level"
+
+        store = x.iloc[:, ires]
+        ax.plot(store, ratio, ".", alpha=0.05)
+
+        iok = store < 1
+        xx, yy = smooth_reg(store[iok], ratio[iok])
+        ax.plot(xx, yy, "--", color="k", lw=2)
+
+        s, e = store.index[[0, -1]]
+        txt = f"Data from {s.year} to {e.year}"
+        ax.text(0.98, 0.02, txt, va="bottom", ha="right",
+                transform=ax.transAxes)
+
+        title = f"({letters[2 * iplot + 2]})"
+        ax.set_title(title, va="top", ha="left",
+                     x=0.02, y=0.94)
+        ax.set_yscale("asinh", linear_threshold=1e-3)
+        putils.line(ax, 1, 0, 0, 0, "k-", lw=0.8)
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        x0 = int(store.min() * 10) / 10
+        x1 = min(1.1, int(store.max() * 10 + 1) / 10)
+        ax.set(ylim=ylim,
+               xlim=[x0, x1],
+               yticks=[-10, 0, 10],
+               xlabel=store_name,
+               yticklabels=[])
+
+        iplot += 1
+
+    fp = script_paths.fimg / f"{script_paths.source_file.stem}.png"
+    fig.savefig(fp, dpi=config.fdpi)
+
+    logger.completed()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Table presenting gradient benchmarking",
+                                     formatter_class=
+                                     argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-s", "--stationid",
+                        help="StationID",
+                        type=str, default="203014")
+    parser.add_argument("-n", "--nuh",
+                        help="Number of UH reservoirs",
+                        type=int, default=5)
+    parser.add_argument("-z", "--zoom",
+                        help="Time zoom level",
+                        type=int, default=2)
+    args = parser.parse_args()
+
+    # Config
+    timestep = "daily"
+
+    nalphas = 50
+    nuh = args.nuh
+    zoom = args.zoom
+    nsubsteps = 1
+    start = "1980"
+    end = "2022"
+
+    stationid = args.stationid
+    awidth = 5
+    aheight = 2.5
+    fdpi = 300
+    imgext = "png"
+    ftransparent = False
+
+    Config = namedtuple("Config", ["awidth",
+                                   "aheight", "fdpi",
+                                   "ftransparent", "imgext",
+                                   "timestep", "stationid",
+                                   "nalphas", "nuh", "zoom",
+                                   "nsubsteps", "start", "end"])
+    config = Config(awidth, aheight, fdpi,
+                    ftransparent, imgext,
+                    timestep, stationid,
+                    nalphas, nuh, zoom,
+                    nsubsteps, start, end)
+
+    # Baseline
+    script_paths = get_script_paths(config)
+    logger = get_logger(config, script_paths)
+
+    # Data
+    data = get_data(config, script_paths, logger)
+
+    # Process
+    process(config, script_paths, logger, data)
+
+    logger.completed()

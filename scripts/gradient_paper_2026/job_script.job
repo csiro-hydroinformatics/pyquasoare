@@ -1,0 +1,68 @@
+#!/bin/bash -l
+
+#SBATCH --account=OD-228777
+#SBATCH --time=09:59:00
+#SBATCH --ntasks=1
+#SBATCH --mem=50gb
+#SBATCH --output=logs/%x/%x_TASK%a_JOB%A.out
+#SBATCH --error=logs/%x/%x_TASK%a_JOB%A.err
+#SBATCH --mail-type=end # send email when job ends
+#SBATCH --mail-user=julien.lerat@csiro.au
+
+set -a
+
+module load uv
+
+#export CMDSTAN=$RFWORK/cmdstan/cmdstan-2.39.0
+
+#export UV_CACHE_DIR=/scratch3/ler015/uv_cache  # same FS as your .venv
+#export UV_LINK_MODE=hardlink                   # or 'copy' if hardlinks aren't supported there
+
+FROOT=$QUAS
+
+jobname=$SLURM_JOB_NAME
+jobid=$SLURM_ARRAY_JOB_ID
+taskid=$SLURM_ARRAY_TASK_ID
+
+BASE=$jobname
+PYSCRIPT=$FROOT/scripts/gradient_paper_2026/$BASE.py
+
+FLOG=$FROOT/logs/$jobname
+# .. check if log folder exists
+if [ ! -d "$FLOG" ]; then
+    echo "ERROR - log folder $FLOG does not exists"
+    exit 1
+fi
+
+echo -------------------
+echo Running script $BASE 
+echo Script file : $PYSCRIPT
+echo 
+echo --- System info ---
+echo whoami  : `whoami`
+echo date    : `date -u`
+echo hostname: `hostname -f`
+echo uname   : `uname -a`
+#echo issue   : `cat /etc/issue`
+echo release : `lsb_release -a` 
+echo python  : `uv run which python`
+
+## WARNING !
+## Don't forget to export ALL as well otherwise the script won't load the
+## the python env
+## e.g. sbatch --export=ALL,VERSION=1 calmodel.job
+
+# Run job
+echo
+echo --- hconc Job info ---
+echo JOBNAME = $jobname
+echo
+echo VERSION = $VERSION
+echo JOBID = $jobid
+echo TASKID = $taskid
+echo 
+
+# .. run with overwrite option
+ferr=$FLOG/${jobname}_TASK${taskid}_JOB${jobid}.err
+srun --ntasks=1 --error=$ferr uv run --frozen python $PYSCRIPT -t $taskid -v $VERSION
+

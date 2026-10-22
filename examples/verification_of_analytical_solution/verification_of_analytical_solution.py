@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 # -- Script Meta Data --
 # Author  : ler015
@@ -12,8 +11,8 @@ import math
 from pathlib import Path
 from string import ascii_letters as letters
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from pyquasoare import integrate, steady
 
@@ -69,7 +68,7 @@ mosaic = [list(m) + ["."] * (ncols - len(m)) for m in mosaic]
 plt.close("all")
 fig = plt.figure(figsize=(ncols * awidth, nrows * aheight),
                  layout="constrained")
-kw = dict(wspace=0.05, hspace=0.05)
+kw = {"wspace": 0.05, "hspace": 0.05}
 axs = fig.subplot_mosaic(mosaic, gridspec_kw=kw)
 
 # Repeat

@@ -9,9 +9,14 @@
 
 #include "c_quasoare_utils.h"
 
+double c_quad_expmxy(double x, double y);
+
 double c_quad_fun(double a, double b, double c, double s);
+
 double c_quad_grad(double a, double b, double c, double s);
+
 int c_quad_coefficients_tangent(double a, double b, double c, double sref, double coefs[3]);
+
 double c_quad_fun_tangent(double a, double b, double c, double sref, double s);
 
 int c_quad_coefficients(int approx_opt, double a0, double a1,
@@ -34,14 +39,14 @@ double c_quad_inverse(double a, double b, double c,
                             double Delta, double qD, double sbar,
                             double s0, double s1);
 
-int c_quad_fluxes(int nfluxes,
-                        double *aj_vector,
-                        double *bj_vector,
-                        double *cj_vector,
-                        double Aj, double Bj, double Cj,
-                        double Delta, double qD, double sbar,
-                        double t0, double t1, double s0, double s1,
-                        double * fluxes);
+int c_quad_fluxes_increment(int nfluxes,
+                            double *aj_vector,
+                            double *bj_vector,
+                            double *cj_vector,
+                            double Aj, double Bj, double Cj,
+                            double Delta, double qD, double sbar,
+                            double t0, double t1, double s0, double s1,
+                            double * fluxes);
 
 int c_quad_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,

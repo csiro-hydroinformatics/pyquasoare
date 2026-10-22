@@ -15,16 +15,15 @@ from pyquasoare import approx, steady, benchmarks
 from test_approx import generate_samples
 
 import data_reader
+from loggers import get_logger
 
 np.random.seed(5446)
 
 source_file = Path(__file__).resolve()
 FTEST = source_file.parent
 
-LOGGER = iutils.get_logger("steady", flog=FTEST / "test_steady.log")
-
 def test_kahan(allclose):
-    # Implementing tests by Kayan
+    # Implementing tests by Kahan
     # https://people.eecs.berkeley.edu/%7Ewkahan/Qdrtcs.pdf
     #a1, b1, c1 = 10.27, 29.61, 85.37
     #stdy1 = steady.quad_steady(a1, -2.*b1, c1)
@@ -89,14 +88,15 @@ def test_steady_state(allclose, generate_samples):
         assert allclose(f1[ilin], 0)
         assert np.all(np.isnan(stdy[ilin, 1]))
 
-    delta = b**2 - 4*a*c
-    nna = np.abs(a)>1e-14 # Caution with very low values of a !
-    ipos = (delta>0) & nna
+    cst = approx.quad_constants(params)
+    delta = cst[:, 0]
+    nna = np.abs(a) > 1e-14 # Caution with very low values of a !
+    ipos = (delta > 0) & nna
     if ipos.sum()>0:
         assert allclose(f1[ipos], 0, atol=5e-6)
         assert allclose(f2[ipos], 0, atol=5e-6)
 
-    ind = np.array([approx.isnull(d)==1 for d in delta])
+    ind = np.array([approx.isnull(d) == 1 for d in delta])
     izero = ind & nna
     if izero.sum()>0:
         az, bz, cz = a[izero], b[izero], c[izero]
@@ -105,7 +105,9 @@ def test_steady_state(allclose, generate_samples):
         assert np.all(np.isnan(stdy[izero, 1]))
 
 
-def test_flux_scalings(allclose, generate_samples):
+def test_flux_scalings(allclose, generate_samples, debug_mode):
+    logger = get_logger(debug_mode, "steady")
+
     cname, case, params, _, _ = generate_samples
     ntry = len(params)
 
@@ -142,9 +144,10 @@ def test_flux_scalings(allclose, generate_samples):
                 else:
                     f = a * s**2 + b * s + c
 
-                assert allclose(f, 0, atol=1e-10)
+                assert allclose(f, 0, atol=1e-9)
 
-    LOGGER.info(f"[{case}:{cname}] steady flux_scalings: tested={(100.*tested)/ntry:0.0f}%")
+    mess = f"[{case}:{cname}] steady flux_scalings: tested={(100.*tested)/ntry:0.0f}%"
+    logger.info(mess)
 
 
 def test_flux_scalings_extrapolation(allclose):

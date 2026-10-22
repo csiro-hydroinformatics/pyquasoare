@@ -1,12 +1,22 @@
-import warnings
 import math
-import numpy as np
+import warnings
 
+import numpy as np
 from scipy.integrate import solve_ivp
 
-from pyquasoare.approx import QUASOARE_EPS, QUASOARE_PI, \
-                                QUASOARE_ATOL, QUASOARE_RTOL
-from pyquasoare.approx import isequal, notequal, isnull, notnull
+from pyquasoare.approx import (
+    QUASOARE_ATOL,
+    QUASOARE_DELTA_ATOL,
+    QUASOARE_EPS,
+    QUASOARE_FLUX_TERM_RTOL1,
+    QUASOARE_FLUX_TERM_RTOL2,
+    QUASOARE_PI,
+    QUASOARE_RTOL,
+    isequal,
+    isnull,
+    notequal,
+    notnull,
+)
 from pyquasoare.integrate import quad_constants
 from pyquasoare.models import ERRORS
 
@@ -89,7 +99,7 @@ def numerical_model(fluxes, dfluxes, scalings, s0, timestep,
 
     for t in range(nval):
         # integrate
-        tn, send, nev, njac = integrate_numerical(fluxes,
+        _, send, nev, njac = integrate_numerical(fluxes,
                                                   dfluxes,
                                                   0, s0, [timestep],
                                                   scaling=scalings[t],
@@ -118,6 +128,20 @@ def eta_fun(x, Delta):
 
 def omega_fun(x, Delta):
     return math.tan(x) if Delta < 0. else math.tanh(x)
+
+
+def quad_expmxy(x, y):
+    z = x * y
+    if x == 0 or y == 0:
+        return x
+    return x * (math.expm1(z) / z)
+
+
+def quad_logpxy(x, y):
+    z = x * y
+    if x == 0 or y == 0:
+        return x
+    return x * (math.log1p(-z) / z)
 
 
 def quad_fun(a, b, c, s):
@@ -156,16 +180,17 @@ def quad_forward(a, b, c, Delta, qD, sbar, t0, s0, t):
         return s0
 
     if isnull(a) and isnull(b):
-        s1 = s0+c*tau
+        s1 = s0 + c * tau
 
     elif isnull(a) and notnull(b):
-        s1 = -c/b+(s0+c/b)*math.exp(b*tau) \
+        expmb = quad_expmxy(tau, b)
+        s1 = s0 * math.exp(b*tau) + expmb * c \
                     if abs(b*tau) > QUASOARE_EPS \
                     else s0*(1+b*tau)+c*tau
 
     else:
         if isnull(Delta):
-            s1 = sbar+(s0-sbar)/(1-a*tau*(s0-sbar))
+            s1 = sbar + (s0-sbar)/(1-a*tau*(s0-sbar))
         else:
             omega = omega_fun(qD*tau, Delta)
             signD = -1. if Delta < 0. else 1.
@@ -188,7 +213,7 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
     return np.nan
 
 
-def quad_fluxes(aj_vector, bj_vector, cj_vector,
+def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
                 Aj, Bj, Cj, Delta, qD, sbar,
                 t0, t1, s0, s1, fluxes):
     tau = t1-t0
@@ -201,27 +226,45 @@ def quad_fluxes(aj_vector, bj_vector, cj_vector,
     if isnull(tau):
         return
 
+    smax = max(abs(s0), abs(s1))
+    term0 = abs(c)
+    term1 = abs(b * smax)
+    term2 = abs(a * smax * smax)
+    term12 = max(term1, term2)
+
     # Integrate S and S2
-    if isnull(a) and isnull(b):
-        integS = s0*tau+c*tau2/2
-        integS2 = s0*s0*tau+s0*c*tau2+c*c*tau3/3.
+    if term0 * QUASOARE_FLUX_TERM_RTOL1 > term12 or term12 == 0:
+        integS = s0 * tau + c * tau2 / 2
+        integS2 = s0 * s0 * tau + s0 * c * tau2 + c * c * tau3 / 3.
 
-    elif isnull(a) and notnull(b):
-        integS = (s1-s0-Cj*tau)/Bj
-        integS2 = ((s1**2-s0**2)/2-Cj*integS)/Bj
+    elif term1 * QUASOARE_FLUX_TERM_RTOL2 > term2:
+        c_b_ratio = c / b
+        expmb = quad_expmxy(tau, b)
+        integS = s0 * expmb + (expmb - tau) * c_b_ratio
 
-    elif notnull(a):
-        if isnull(Delta):
-            integS = sbar*tau-math.log(1-a*tau*(s0-sbar))/a
+        expm2b = quad_expmxy(tau, 2 * b)
+        integS2 = s0 * s0 * expm2b \
+            + c_b_ratio * c_b_ratio * (tau + expm2b - 2 * expmb) \
+            + 2 * s0 * c_b_ratio * (expm2b - expmb)
+
+    else:
+        if abs(Delta) < QUASOARE_DELTA_ATOL:
+            integS = sbar * tau - quad_logpxy(tau * (s0 - sbar), a)
+            integS2 = (s1 - s0 - b * integS - c * tau) / a
+
         else:
-            omega = omega_fun(qD*tau, Delta)
-            signD = -1 if Delta < 0. else 1.
-            if qD*tau > 10. and Delta > 0:
-                term1 = (math.log(2)-qD*tau)/Aj
+            omega = omega_fun(qD * tau, Delta)
+            signD = -1 if Delta < 0 else 1
+
+            if qD * tau > 10 and Delta > 0:
+                part1 = (math.log(2) - qD * tau) / a
             else:
-                term1 = math.log(1-signD*omega*omega)/2./a
-            term2 = -math.log(1-a*(s0-sbar)/qD*omega)/a
-            integS = sbar*tau+term1+term2
+                part1 = math.log1p(-signD * omega * omega) / 2. / a
+
+            part2 = -quad_logpxy((s0 - sbar) / qD * omega, a)
+
+            integS = sbar * tau + part1 + part2
+            integS2 = (s1 - s0 - b * integS - c * tau) / a
 
     # increment fluxes
     if isnull(a):
@@ -341,11 +384,10 @@ def quad_integrate(alphas, scalings, coefs,
         funval = quad_fun(Aj, Bj, Cj, s_start)
 
         # Check continuity
-        if nit > 1:
-            if notequal(funval_prev, funval):
-                errmess = f"continuity problem: prev({funval_prev:3.3e})"\
-                        + f"!=new({funval:3.3e})"
-                raise ValueError(errmess)
+        if nit > 1 and notequal(funval_prev, funval):
+            errmess = f"continuity problem: prev({funval_prev:3.3e})"\
+                    + f"!=new({funval:3.3e})"
+            raise ValueError(errmess)
 
         # Try integrating up to the end of the time step
         if isnull(funval):
@@ -395,7 +437,7 @@ def quad_integrate(alphas, scalings, coefs,
                   + f" / s={s_start:3.3e} > {s_end:3.3e}")
 
         # Increment fluxes during the last interval
-        quad_fluxes(a_vect, b_vect, c_vect,
+        quad_fluxes_increment(a_vect, b_vect, c_vect,
                     Aj, Bj, Cj, Delta, qD, sbar,
                     t_start, t_end, s_start, s_end, fluxes)
 
@@ -438,10 +480,10 @@ def quad_model(alphas, scalings, coefs,
                                                         coefs, t0, s0,
                                                         timestep,
                                                         debug=debug)
-        except Exception as err:
+        except ValueError as err:
             niter[t] = -1
             if errors == "raise":
-                raise err
+                raise ValueError(str(err))
             elif errors == "warn":
                 warnings.warn(str(err))
 

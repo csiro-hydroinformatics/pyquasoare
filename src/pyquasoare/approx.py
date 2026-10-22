@@ -7,11 +7,15 @@ if has_c_module():
     QUASOARE_EPS = c_pyquasoare.C_QUASOARE_EPS
     QUASOARE_ATOL = c_pyquasoare.C_QUASOARE_ATOL
     QUASOARE_RTOL = c_pyquasoare.C_QUASOARE_RTOL
+    QUASOARE_FLUX_TERM_RTOL1 = c_pyquasoare.C_QUASOARE_FLUX_TERM_RTOL1
+    QUASOARE_FLUX_TERM_RTOL2 = c_pyquasoare.C_QUASOARE_FLUX_TERM_RTOL2
+    QUASOARE_DELTA_ATOL = c_pyquasoare.C_QUASOARE_DELTA_ATOL
     QUASOARE_PI = c_pyquasoare.C_QUASOARE_PI
     QUASOARE_NFLUXES_MAX = c_pyquasoare.C_QUASOARE_NFLUXES_MAX
     QUASOARE_ACCURACY = c_pyquasoare.compiler_accuracy_kahan()
+
 else:
-    raise ImportError("Cannot run rezeq without C code."
+    raise ImportError("Cannot run pyquasoare without C code."
                       + " Please compile C code.")
 
 
@@ -27,7 +31,7 @@ def notequal(f1, f2, atol=QUASOARE_ATOL, rtol=QUASOARE_RTOL):
     """ Check if two values are not equal given absolute
     and relative tolerance.
     """
-    return 1-isequal(f1, f2, atol, rtol)
+    return 1 - isequal(f1, f2, atol, rtol)
 
 
 def notnull(x):
@@ -37,12 +41,12 @@ def notnull(x):
 
 def isnull(x):
     """ Check if value is null. """
-    return 1-notnull(x)
+    return 1 - notnull(x)
 
 
 def all_scalar(*args):
     """ Check if all arguments are scalar """
-    return all([np.isscalar(x) for x in args])
+    return all(np.isscalar(x) for x in args)
 
 
 def get_vectors(*args, dtype=np.float64):
@@ -69,6 +73,37 @@ def get_vectors(*args, dtype=np.float64):
     return [x[0]*ones if len(x) == 1 else x for x in v]
 
 
+def quad_constants(coefs, out=None):
+    """ Compute constants used in the quadratic approximation algorithm.
+
+     Parameters
+    -----------
+    coefs : numpy.ndarray
+        2D array containing 3 coefficients corresponding to ax^2 + bx +c
+        (a in first column, b in second and c in third).
+    out : numpy.ndarray
+        Array used to store output values to avoid memory
+        allocation in the function.
+
+    Returns
+    -----------
+    out : np.ndarray
+        The 3 following constants stored columnwise:
+        - D = b^2 - 4ac
+        - qD = sqrt(D) / 2
+        - sbar = -b / 2a
+    """
+    if out is None:
+        out = np.empty(coefs.shape)
+
+    ierr = c_pyquasoare.quad_constants_vect(coefs, out)
+    if ierr > 0:
+        mess = c_pyquasoare.get_error_message(ierr).decode()
+        raise ValueError("c_pyquasoare.quad_constants_vect"
+                         + f" returns {ierr} ({mess})")
+    return out
+
+
 def quad_fun(coefs, s, out=None):
     """ Quadratic approximation function f(s) = a * s^2 + b * s + c
 
@@ -78,6 +113,9 @@ def quad_fun(coefs, s, out=None):
         3 coefficients.
     s : numpy.ndarray
         Values where quadratic function is computed.
+    out : numpy.ndarray
+        Array used to store output values to avoid memory
+        allocation in the function.
 
     Returns
     -----------

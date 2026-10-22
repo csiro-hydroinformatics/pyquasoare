@@ -191,10 +191,10 @@ def quad_inverse(a, b, c, Delta, qD, sbar, s0, s1):
         return t
 
 
-def quad_fluxes(a_vector, b_vector, c_vector,
-                Aj, Bj, Cj,
-                Delta, qD, sbar,
-                t0, t1, s0, s1, fluxes):
+def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
+                          Aj, Bj, Cj,
+                          Delta, qD, sbar,
+                          t0, t1, s0, s1, fluxes):
     """ Increment flux totals during integration of the approximate reservoir
     equation
     dS/dt = Aj.S^2+Bj.S+Cj
@@ -204,8 +204,8 @@ def quad_fluxes(a_vector, b_vector, c_vector,
 
     The fluxes are defined as quadratic functions
     fi(S) = aij.S^2+bij.S+cij
-    aij are stored in the vector a_vector, bij in b_vector and
-    cij in c_vector.
+    aij are stored in the vector aj_vector, bij in bj_vector and
+    cij in cj_vector.
 
     The coefficients Aj, Bj, Cj are coefficients sums:
     Aj = sum(aij, i)
@@ -217,7 +217,7 @@ def quad_fluxes(a_vector, b_vector, c_vector,
 
     Parameters
     ----------
-    a_vector, b_vector, c_vector : float
+    aj_vector, bj_vector, cj_vector : float
         Flux interpolation coefficients
     Delta, qD, sbar : float
         Constants derived from parameters:
@@ -237,9 +237,9 @@ def quad_fluxes(a_vector, b_vector, c_vector,
     quad_forward : Integrate ODE forward.
     """
 
-    ierr = c_pyquasoare.quad_fluxes(a_vector, b_vector, c_vector,
-                                    Aj, Bj, Cj, Delta, qD, sbar,
-                                    t0, t1, s0, s1, fluxes)
+    ierr = c_pyquasoare.quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
+                                              Aj, Bj, Cj, Delta, qD, sbar,
+                                              t0, t1, s0, s1, fluxes)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError(f"c_pyquasoare.quad_fluxes returns {ierr} ({mess})")
