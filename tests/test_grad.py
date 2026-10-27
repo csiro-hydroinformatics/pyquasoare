@@ -14,6 +14,7 @@ import scipy.integrate as sci_integrate
 import matplotlib.pyplot as plt
 
 from hydrodiy.io import iutils, csv
+from pygme.models import gr2m
 
 from pyquasoare import integrate, models, gradients, approx, steady
 from pyquasoare.benchmarks import benchmarks
@@ -989,6 +990,45 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     assert allclose(qout, mod.fluxes[:, -1, 5])
 
 
+def test_grad_model_neg_fluxes():
+    mod = gradients.MultiReservoirModel(1, errors="raise")
+
+    # Flux functions are ok
+    funs = [
+        lambda x: np.maximum(x, 0),
+        lambda x: np.maximum(x, 0),
+        lambda x: np.maximum(x, 0),
+        ]
+    mod.set_coefs_linear(0, funs)
+    mod.check_positive_fluxes()
+
+    # f2 is negative -> problem
+    funs = [
+        lambda x: np.maximum(x, 0),
+        lambda x: x - 0.5,
+        lambda x: np.maximum(x, 0),
+        ]
+    mod.set_coefs_linear(0, funs)
+    err = "Negative flux values in reservoir #0 - flux 1"
+    with pytest.raises(ValueError, match=err):
+        mod.check_positive_fluxes()
+
+    # Should ok after fix
+    mod.fix_negative_fluxes()
+    mod.check_positive_fluxes()
+
+    # Check we can run the model
+    siteid = "203014"
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2].values
+    mod.gammas = 100
+    mod.allocate(ntimesteps_agg=len(hclim))
+    mod.x0 = 1.1
+    Qst0 = hclim
+    Qst0[:, 1] *= -1
+    mod.set_Qstars_one_reservoir(0, Qst0)
+    mod.run()
+
+
 @pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("timestep_agg", TIMESTEPS_AGG)
 @pytest.mark.parametrize("nsubsteps", [1, 4])
@@ -1522,4 +1562,69 @@ def test_openwater(siteid, timestep_agg, nsubsteps, allclose):
     Ei = mod.fluxes_agg[:, 0, 4]
     expected = np.maximum(-hclim.sum(axis=1), 0)
     assert allclose(Ei, expected, atol=atol)
+
+
+@pytest.mark.parametrize("siteid", SITEIDS)
+@pytest.mark.parametrize("X1", [10, 100, 10000])
+def test_gr2m_prod(siteid, X1, allclose):
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim.iloc[:, 1] *= -1
+    hclim = hclim.resample("MS").sum()
+    ntimesteps = len(hclim)
+
+    nalphas = 500
+    mod = gradients.MultiReservoirModel(1, nalphas,
+                                        nsubsteps=1,
+                                        errors="raise")
+    mod.allocate(ntimesteps)
+    funs = gradients.FLUX_FUNCTIONS["gr2mprod"]
+    mod.set_coefs_linear(0, funs)
+    mod.set_Qstars_one_reservoir(0, hclim)
+    mod.gammas = X1
+    mod.x0 = 0.5
+    mod.run()
+    mod.aggregate()
+
+    nval = len(hclim)
+    S = X1 / 2
+    out = []
+    nsub = 1000
+    delta = 1. / nsub
+    for i in range(nval):
+        P, E = hclim.iloc[i]
+
+        # Substepping of original GR2M
+        # (i.e. operator splitting)
+        P1, AE, P2, P3 = 0, 0, 0, 0
+        for k in range(nsub):
+            PHI = math.tanh(delta * P / X1)
+            S1 = (S + X1 * PHI) / (1 + PHI * S / X1)
+            iP1 = P * delta + S - S1
+            P1 += iP1
+
+            PSI = math.tanh(delta * -E / X1)
+            S2 = S1 * (1 - PSI) / (1 + PSI * (1 - S1 / X1))
+            AE += S1 - S2
+
+            Sr = S2 / X1
+            S = S2 / math.cbrt(1 + delta * Sr*Sr*Sr)
+            iP2 = S2 - S
+            P2 += iP2
+            P3 += iP1 + iP2
+
+        out.append({"S": S, "AE": AE, "P1": P1, "P2":P2, "P3": P3})
+
+    df = pd.DataFrame(out)
+    if nsub == 1:
+        gm0 = gr2m.GR2M()
+        gm0.allocate(np.abs(hclim), noutputs=gm0.noutputsmax)
+        gm0.X1 = X1
+        gm0.initialise([X1 / 2, 30])
+        gm0.run()
+        df0 = gm0.to_dataframe()
+        assert allclose(df, df0.loc[:, df.columns], atol=5e-3)
+
+    assert allclose(mod.x[:, 0], df.S / X1, atol=5e-2)
+    assert allclose(-mod.fluxes[:, 0, 5], df.P3, atol=5e-2)
+
 

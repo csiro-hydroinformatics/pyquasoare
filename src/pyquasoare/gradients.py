@@ -932,6 +932,41 @@ class MultiReservoirModel:
 
         return mcl
 
+    def check_positive_fluxes(self):
+        for res in range(self.nreservoirs):
+            alphas = self.alphas[res]
+
+            for iflux in range(3):
+                coefs = self.coefs_linear[res, iflux]
+                y = coefs[:, 0] * alphas[:-1] + coefs[:, 1]
+                if y.min() < 0:
+                    errmsg = f"Negative flux values in reservoir #{res} - flux {iflux}"
+                    raise ValueError(errmsg)
+
+    def fix_negative_fluxes(self):
+        nalphas = self.nalphas
+        y = np.empty(nalphas)
+        dy = np.empty(nalphas - 1)
+        da = np.empty(nalphas - 1)
+
+        for res in range(self.nreservoirs):
+            alphas = self.alphas[res]
+            da[:] = np.diff(alphas)
+
+            for iflux in range(3):
+                coefs = self.coefs_linear[res, iflux]
+                y[:-1] = coefs[:, 0] * alphas[:-1] + coefs[:, 1]
+                y[-1] = coefs[-1, 0] * alphas[-1] + coefs[-1, 1]
+
+                if y.min() < 0:
+                    # Set negative points to 0
+                    y[y < 0] = 0.
+
+                    # Recomputes coefficients
+                    dy[:] = np.diff(y)
+                    coefs[:, 0] = dy / da
+                    coefs[:, 1] = y[:-1] - coefs[:, 0] * alphas[:-1]
+
     def run(self):
         self.check_allocated()
 
