@@ -466,14 +466,14 @@ def test_grad_integrate_error():
                                             vrid, vtid, niter, x, dx, fx, dfx)
     assert ierr == 113
 
-    # .. error due to zero flux scaling
+    # .. no error due to zero flux scaling
     gamma = 100.
     vtid = np.array([1] * nvars, dtype=np.int32)
     fxs = np.zeros(gradients.NFLUXES_INPUTS)
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                             vrid, vtid, niter, x, dx, fx, dfx)
-    assert ierr == 604
+    assert ierr == 0
 
 
 @pytest.mark.parametrize("siteid", SITEIDS)
@@ -1626,5 +1626,71 @@ def test_gr2m_prod(siteid, X1, allclose):
 
     assert allclose(mod.x[:, 0], df.S / X1, atol=5e-2)
     assert allclose(-mod.fluxes[:, 0, 5], df.P3, atol=5e-2)
+
+
+@pytest.mark.parametrize("siteid", SITEIDS)
+@pytest.mark.parametrize("timestep_agg", [1.])
+@pytest.mark.parametrize("nsubsteps", [20])
+def test_openwater_grad(siteid, timestep_agg, nsubsteps, allclose):
+    # Exploring bug suggested by Francois Bourgin
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim.iloc[:, 1] *= -1
+    ntimesteps = len(hclim)
+
+    nalphas = 10
+    mod = gradients.MultiReservoirModel(1, nalphas,
+                                        nsubsteps,
+                                        errors="raise")
+    vspecs = [[0, 0], [0, 1], [0, 2], [0, 3]]
+    mod.allocate(ntimesteps,
+                 timestep_agg=timestep_agg,
+                 variables_specs=vspecs)
+    mod.x0 = 0.5
+    mod.set_coefs_linear(0, "openwater")
+
+    mod.set_Qstars_one_reservoir(0, hclim)
+    mod.gammas = [0.5]
+    mod.run()
+
+    nval = len(hclim)
+    time = np.linspace(0, nval, nval * nsubsteps)
+
+    # Finite diff
+    modp = mod.clone()
+    modm = mod.clone()
+    eps = 1e-8
+    for ivar in range(len(vspecs)):
+        vtype = vspecs[ivar][1]
+        if vtype == 0:
+            modp.gammas = mod.gammas * (1 + eps)
+            modm.gammas = mod.gammas * (1 - eps)
+            delta = mod.gammas[0] * 2 * eps
+        else:
+            ifx = vtype - 1
+            modp.flux_scalings[0, ifx] = mod.flux_scalings[0, ifx] * (1 + eps)
+            modm.flux_scalings[0, ifx] = mod.flux_scalings[0, ifx] * (1 - eps)
+            delta = mod.flux_scalings[0, ifx] * 2 * eps
+
+        modp.run()
+        modm.run()
+        dfx = (modp.fluxes - modm.fluxes) / delta
+
+        diff = np.abs(dfx - mod.dfluxes[:, ivar, :, :])
+        assert np.all(diff < 1e-5)
+
+        #ierr = np.where(diff > 1e-1)[0][0]
+        #ii = np.arange(ierr - 10, ierr + 100)
+        #ifx = 0
+
+        #fig, axs = plt.subplots(nrows=2, sharex=True)
+        #ax = axs[0]
+        #ax.plot(time[ii], mod.fluxes[ii, 0, ifx])
+
+        #ax = axs[1]
+        #ax.plot(time[ii], dfx[ii, 0, ifx])
+        #ax.plot(time[ii], mod.dfluxes[ii, 0, 0, ifx])
+        #plt.show()
+
+        #import pdb; pdb.set_trace()
 
 
