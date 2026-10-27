@@ -67,8 +67,10 @@ def get_vectors(*args, dtype=np.float64):
     v = [np.atleast_1d(x).astype(dtype) for x in args]
     lengths = [len(x) for x in v]
     nval = max(lengths)
-    errmess = f"Expected vectors of length 1 or {nval}."
-    assert np.all(np.isin(lengths, [1, nval])), errmess
+    if not np.all(np.isin(lengths, [1, nval])):
+        errmsg = f"Expected vectors of length 1 or {nval}."
+        raise ValueError(errmsg)
+
     ones = np.ones(nval)
     return [x[0]*ones if len(x) == 1 else x for x in v]
 
@@ -412,8 +414,14 @@ def quad_fun_from_matrix(alphas, coefs, x, out=None):
     """
     nalphas = len(alphas)
     nfluxes = coefs.shape[0]
-    assert np.all(np.diff(alphas) > 0)
-    assert coefs.shape == (nfluxes, nalphas-1, 3)
+    if not np.all(np.diff(alphas) > 0):
+        errmsg = "Expected strictly increasing alphas."
+        raise ValueError(errmsg)
+
+    if coefs.shape != (nfluxes, nalphas-1, 3):
+        errmsg = f"Expected coefs of shape ({nfluxes}, {nalphas-1}, 3),"\
+                 + f" got {coefs.shape}."
+        raise ValueError(errmsg)
 
     x = np.atleast_1d(x)
     outputs = np.empty((len(x), nfluxes)) if out is None else out
