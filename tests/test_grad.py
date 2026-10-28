@@ -1049,7 +1049,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     assert hclim.shape == (noriginal, 2)
     hclim = np.tile(hclim, (nrepeat, 1))
 
-    hclim = hclim[:30]
+    #hclim = hclim[:30]
 
     # Basic gr4j model
     mod = gradients.MultiReservoirModel(3,
@@ -1213,8 +1213,9 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
 
         # Perf
         em, _ = gradients.compare(dfx_n, dfx_c)
-        atol = 1e-5
+        atol = 1e-6
         errmsg = f"dfx em={em[50]:0.2e} > {atol:0.1e}"
+        print(f"dfx em={em[50]:0.2e}")
         assert em[50] < atol, errmsg
 
     #if not debug_mode and min(dtq, dtn) > 0.:
@@ -1630,7 +1631,7 @@ def test_gr2m_prod(siteid, X1, allclose):
 
 @pytest.mark.parametrize("siteid", SITEIDS)
 @pytest.mark.parametrize("timestep_agg", [1.])
-@pytest.mark.parametrize("nsubsteps", [20])
+@pytest.mark.parametrize("nsubsteps", [1, 5, 20])
 def test_openwater_grad(siteid, timestep_agg, nsubsteps, allclose):
     # Exploring bug suggested by Francois Bourgin
     hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
@@ -1649,11 +1650,13 @@ def test_openwater_grad(siteid, timestep_agg, nsubsteps, allclose):
     mod.set_coefs_linear(0, "openwater")
 
     mod.set_Qstars_one_reservoir(0, hclim)
-    mod.gammas = [0.5]
+    mod.gammas = [0.1]
     mod.run()
 
     nval = len(hclim)
-    time = np.linspace(0, nval, nval * nsubsteps)
+    d = np.arange(nsubsteps)[None, :] / nsubsteps
+    time = np.arange(nval)[:, None] + d
+    time = time.ravel()
 
     # Finite diff
     modp = mod.clone()
@@ -1661,6 +1664,12 @@ def test_openwater_grad(siteid, timestep_agg, nsubsteps, allclose):
     eps = 1e-8
     for ivar in range(len(vspecs)):
         vtype = vspecs[ivar][1]
+        # Reset
+        modp.gammas = mod.gammas
+        modm.gammas = mod.gammas
+        modp.flux_scalings[:] = 1
+        modm.flux_scalings[:] = 1
+
         if vtype == 0:
             modp.gammas = mod.gammas * (1 + eps)
             modm.gammas = mod.gammas * (1 - eps)
@@ -1674,23 +1683,72 @@ def test_openwater_grad(siteid, timestep_agg, nsubsteps, allclose):
         modp.run()
         modm.run()
         dfx = (modp.fluxes - modm.fluxes) / delta
-
-        diff = np.abs(dfx - mod.dfluxes[:, ivar, :, :])
-        assert np.all(diff < 1e-5)
-
-        #ierr = np.where(diff > 1e-1)[0][0]
-        #ii = np.arange(ierr - 10, ierr + 100)
-        #ifx = 0
-
-        #fig, axs = plt.subplots(nrows=2, sharex=True)
-        #ax = axs[0]
-        #ax.plot(time[ii], mod.fluxes[ii, 0, ifx])
-
-        #ax = axs[1]
-        #ax.plot(time[ii], dfx[ii, 0, ifx])
-        #ax.plot(time[ii], mod.dfluxes[ii, 0, 0, ifx])
-        #plt.show()
-
-        #import pdb; pdb.set_trace()
+        dfx_m = mod.dfluxes[:, ivar, :, :]
 
 
+@pytest.mark.parametrize("nsubsteps", [1, 5, 20])
+@pytest.mark.parametrize("ifun", [1, 2, 3])
+def test_steady_grad(nsubsteps, ifun, allclose):
+    nalphas = 8
+    mod = gradients.MultiReservoirModel(1, nalphas,
+                                        nsubsteps,
+                                        errors="raise")
+    vspecs = [[0, 0], [0, 1], [0, 2], [0, 3]]
+    nval = 50
+    mod.allocate(nval,
+                 timestep_agg=1,
+                 variables_specs=vspecs)
+    mod.x0 = 0.6
+
+    # Test different smoothing variables
+    if ifun == 1:
+        fun = lambda x: np.where(x > 0, 1., 0.)
+    elif ifun == 2:
+        fun = lambda x: x / np.sqrt(x**2 + 1e-4)
+    else:
+        b = 1e-2
+        fun = lambda x: np.where(x < 0, 0,
+                            np.where(x < b, x**2/2/b**2,
+                                np.where(x < 2 * b, 1 - (x - 2*b)**2/2/b**2,
+                                    1)))
+    funs = [
+        lambda x: fun(1 - x),
+        lambda x: fun(x),
+        lambda x: np.zeros_like(x)
+        ]
+    mod.set_coefs_linear(0, funs)
+
+    inputs = np.ones((nval, 2))
+    inputs[:, -1] *= -1.1
+    mod.set_Qstars_one_reservoir(0, inputs)
+    mod.gammas = [10]
+    mod.run()
+
+    # Finite diff
+    modp = mod.clone()
+    modm = mod.clone()
+    eps = 1e-8
+    for ivar in range(len(vspecs)):
+        vtype = vspecs[ivar][1]
+
+        # Reset
+        modp.gammas = mod.gammas
+        modm.gammas = mod.gammas
+        modp.flux_scalings[:] = 1
+        modm.flux_scalings[:] = 1
+
+        if vtype == 0:
+            delta = mod.gammas * eps
+            modp.gammas = mod.gammas + delta
+            modm.gammas = mod.gammas - delta
+        else:
+            ifx = vtype - 1
+            delta = mod.flux_scalings[0, ifx] * eps
+            modp.flux_scalings[0, ifx] = mod.flux_scalings[0, ifx]  + delta
+            modm.flux_scalings[0, ifx] = mod.flux_scalings[0, ifx]  - delta
+
+        modp.run()
+        modm.run()
+        dfx = (modp.fluxes[:, 0] - modm.fluxes[:, 0]) / delta / 2
+        dfx_m = mod.dfluxes[:, ivar, 0]
+        assert allclose(dfx, dfx_m, atol=5e-8)

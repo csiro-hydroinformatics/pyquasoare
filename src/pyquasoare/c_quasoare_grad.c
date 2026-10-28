@@ -515,9 +515,8 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
             } else {
                 /* Compute dx_end and integ_dx assuming S=0 */
-                dx_end = dx_start + dM * tau + dS * integ_x;
-                integ_dx = dx_start * tau + dM * tau * tau / 2 +
-                    dS * tau * tau * (x_start / 2  + M * tau / 6);
+                dx_end = dx_start + dM * tau;
+                integ_dx = dx_start * tau + dM * tau * tau / 2;
             }
 
             for(inp = 0; inp < nfxi; inp++)
@@ -535,7 +534,6 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
                 if(out < nfxi) {
                     /* Inflow, demand and drainage fluxes */
-                    idx_dq = idx_dq0 + out;
                     G = drescaled_Qstars_ext[out] / timestep * integ_fx[out];
                     H = rescaled_Qstars_ext[out] * integ_dfx[out] / timestep;
 
