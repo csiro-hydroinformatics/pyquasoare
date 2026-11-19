@@ -483,6 +483,12 @@ class GradNetwork:
     def freeze(self):
         self._frozen = True
 
+    def __str__(self):
+        txt = ""
+        for i, link in enumerate(self.links):
+            txt += f"\nLink #{i}: {link}"
+        return txt[1:]
+
     def clone(self):
         netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
