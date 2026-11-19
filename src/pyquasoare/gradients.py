@@ -468,6 +468,7 @@ class GradNetwork:
         self.links = []
         self._input_mapping = None
         self._input_mapping_weights = None
+        self._frozen = False
 
     def __str__(self):
         txt = ""
@@ -475,10 +476,18 @@ class GradNetwork:
             txt += f"\nLink #{i}: {link}"
         return txt[1:]
 
+    @property
+    def frozen(self):
+        return self._frozen
+
+    def freeze(self):
+        self._frozen = True
+
     def clone(self):
         netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
             netw.links.append(lk.clone())
+        netw._frozen = self.frozen
         return netw
 
     def get_input_mapping(self):
@@ -546,6 +555,10 @@ class GradNetwork:
     def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
                  downstream_reservoir_id, downstream_potential_flux_id,
                  weight):
+        if self.frozen:
+            errmsg = "Network is frozen. Cannot add link."
+            raise ValueError(errmsg)
+
         nres = self.nreservoirs
         lk = GradNetworkLink(upstream_reservoir_id,
                          upstream_output_flux_id,
@@ -873,6 +886,9 @@ class MultiReservoirModel:
 
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
+        # Freeze network. Cannot change network after allocation
+        self.network.freeze()
+
         timestep_agg = float(timestep_agg)
         self.timestep_agg = timestep_agg
         self.timestep = timestep_agg / self.nsubsteps

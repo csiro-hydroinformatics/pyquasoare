@@ -375,6 +375,14 @@ def test_network(linktype, allclose):
                 assert np.all(ws[:2] == -1.)
 
 
+def test_network_freeze():
+    netw = gradients.GradNetwork(3)
+    netw.add_link_outflow(0, 1)
+    netw.freeze()
+    with pytest.raises(ValueError, match="Network is frozen"):
+        netw.add_link_outflow(1, 2)
+
+
 def test_network_cyclical():
     netw = gradients.GradNetwork(3)
     netw.add_link_outflow(0, 1)
@@ -830,6 +838,22 @@ def test_grad_model_setters(allclose):
     assert allclose(mod.flux_scalings, fxs)
 
 
+def test_grad_model_freeze_network(allclose):
+    mod = gradients.MultiReservoirModel(2, errors="raise")
+    mod.set_coefs_linear(0, "openwater")
+    mod.set_coefs_linear(1, "gr4jprod")
+    mod.gammas = [5., 400.]
+
+    siteid = "203014"
+    timestep_agg = 1.
+    df = data_reader.get_data(siteid, "daily")
+    mod.allocate(len(df), timestep_agg=timestep_agg,
+                 variables_specs=[[0, 0], [1, 0]])
+
+    with pytest.raises(ValueError, match="Network is frozen"):
+        mod.add_link_bypass_shortfall(0, 1)
+
+
 @pytest.mark.parametrize("nsub", [1, 10])
 def test_grad_model_clone(nsub, allclose):
     mod = gradients.MultiReservoirModel(2,
@@ -845,12 +869,17 @@ def test_grad_model_clone(nsub, allclose):
     df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep_agg=timestep_agg,
                  variables_specs=[[0, 0], [1, 0]])
+
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
     Qst1 = np.ascontiguousarray(Qst1)
     mod.set_Qstars_one_reservoir(0, Qst1)
 
     modc = mod.clone()
+
+    # Check clone network is also frozen
+    with pytest.raises(ValueError, match="Network is frozen"):
+        modc.add_link_bypass_shortfall(0, 1)
 
     # Check clone is independent from source
     attrns = [
