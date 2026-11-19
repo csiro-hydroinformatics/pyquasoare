@@ -977,3 +977,57 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 
     return 0;
 }
+
+
+int c_grad_model_parallel(int nalphas,
+                          unsigned int nmodels,
+                          unsigned int nreservoirs,
+                          unsigned int nvariables, unsigned int nval,
+                          unsigned int errors,
+                          unsigned int enforce_potential_inflow_pos,
+                          double * alphas,
+                          double timestep,
+                          double * gammas,
+                          unsigned int *input_mapping,
+                          double *input_mapping_weights,
+                          double * flux_scalings,
+                          double * x0,
+                          unsigned int *variables_reservoir_id,
+                          unsigned int *variables_type_id,
+                          double *Qstars,
+                          double *dQstars_ext,
+                          double *coefs_linear,
+                          double *x,
+                          double *dx,
+                          double *fluxes,
+                          double *dfluxes) {
+    unsigned int model;
+    unsigned long idx_reservoir;
+    unsigned long idx_Qstars;
+    unsigned long idx_x, idx_dx, idx_flx, idx_dflx;
+
+
+    for(model = 0; model < nmodels; model ++) {
+        idx_reservoir = model * nreservoirs;
+        idx_Qstars = TODO
+
+        ierr = c_grad_model(nalphas, nreservoirs, nvariables,
+                            nval, errors, enforce_potential_inflow_pos,
+                            alphas,
+                            timestep,
+                            &gammas[idx_reservoir],
+                            input_mapping,
+                            input_mapping_weights,
+                            flux_scalings,
+                            &x0[idx_reservoir],
+                            variables_reservoir_id,
+                            variables_type_id,
+                            &Qstars[idx_Qstars],
+                            dQstars_ext,
+                            coefs_linear,
+                            &x[idx_x],
+                            &dx[idx_dx],
+                            &fluxes[idx_flx],
+                            &dfluxes[idx_dflx]);
+    }
+}
