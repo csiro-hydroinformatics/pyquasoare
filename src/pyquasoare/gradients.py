@@ -440,6 +440,16 @@ class GradNetworkLink:
         self.downstream_potential_flux_id = downiid
         self.weight = float(weight)
 
+    def __str__(self):
+        upid = self.upstream_reservoir_id
+        upoid = self.upstream_output_flux_id
+        downid = self.downstream_reservoir_id
+        downiid = self.downstream_potential_flux_id
+        txt = f"Res{upid:03d}-Out{upoid} -> " \
+            + f"Res{downid:03d}-Pot{downiid}" \
+            + f" / weight={self.weight:0.2e}"
+        return txt
+
     def clone(self):
         return GradNetworkLink(self.upstream_reservoir_id,
                            self.upstream_output_flux_id,
@@ -458,6 +468,12 @@ class GradNetwork:
         self.links = []
         self._input_mapping = None
         self._input_mapping_weights = None
+
+    def __str__(self):
+        txt = ""
+        for i, link in enumerate(self.links):
+            txt += f"\nLink #{i}: {link}"
+        return txt[1:]
 
     def clone(self):
         netw = GradNetwork(self.nreservoirs)

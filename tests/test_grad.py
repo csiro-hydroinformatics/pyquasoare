@@ -336,6 +336,7 @@ def test_network(linktype, allclose):
         netw.add_link_bypass_shortfall(0, 1)
         netw.add_link_bypass_shortfall(1, 2)
 
+    txt = str(netw)
     assert netw.upstream_reservoirs(2) == {0, 1}
 
     ipm, ipmw = netw.get_input_mapping()
