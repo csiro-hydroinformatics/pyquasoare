@@ -1245,7 +1245,6 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         em, _ = gradients.compare(dfx_n, dfx_c)
         atol = 1e-6
         errmsg = f"dfx em={em[50]:0.2e} > {atol:0.1e}"
-        print(f"dfx em={em[50]:0.2e}")
         assert em[50] < atol, errmsg
 
     #if not debug_mode and min(dtq, dtn) > 0.:
@@ -1782,3 +1781,50 @@ def test_steady_grad(nsubsteps, ifun, allclose):
         dfx = (modp.fluxes[:, 0] - modm.fluxes[:, 0]) / delta / 2
         dfx_m = mod.dfluxes[:, ivar, 0]
         assert allclose(dfx, dfx_m, atol=5e-8)
+
+
+@pytest.mark.parametrize("siteid", SITEIDS)
+@pytest.mark.parametrize("X1", [10, 100, 10000])
+@pytest.mark.parametrize("X3", [5, 20, 100])
+def test_elasticity(siteid, X1, X3, allclose):
+    hclim = data_reader.get_data(siteid, "daily", 0).iloc[:, :2]
+    hclim.iloc[:, 1] *= -1
+    ntimesteps = len(hclim)
+
+    mod = gradients.MultiReservoirModel(2, nalphas=10,
+                                        nsubsteps=1,
+                                        errors="raise")
+    mod.add_link_outflow(0, 1)
+    vspecs = [[0, 1], [0, 2]]
+    mod.allocate(ntimesteps, variables_specs=vspecs)
+    mod.set_coefs_linear(0, "gr4jprod")
+    mod.set_coefs_linear(1, "gr4jroute")
+    mod.set_Qstars_one_reservoir(0, hclim)
+    inputs = np.ones_like(hclim)
+    inputs[:, 0] = np.nan
+    mod.set_Qstars_one_reservoir(1, inputs)
+    mod.flux_scalings[1, 1] = -2
+
+    mod.gammas = [X1, X3]
+    mod.x0 = 0.5
+    mod.run()
+    mod.aggregate()
+
+    q = -mod.fluxes_agg[:, -1, 5]
+    grads = -mod.dfluxes_agg[:, :, -1, 5]
+    elast = grads.mean(axis=0) / q[:, None].mean(axis=0)
+
+    qmeans = np.zeros((2, 2))
+    eps = 1e-7
+    for ieps, fx in prod([0, 1], [0, 1]):
+        mod.flux_scalings[0, fx] = 1 + (2 * ieps - 1) * eps
+        mod.run()
+        mod.aggregate()
+        qmeans[ieps, fx] = -mod.fluxes_agg[:, -1, 5].mean()
+        # reset scaling
+        mod.flux_scalings[0, fx] = 1.
+
+    expected = (qmeans[1] - qmeans[0]) / 2 / eps / q.mean()
+    assert allclose(elast, expected)
+
+
