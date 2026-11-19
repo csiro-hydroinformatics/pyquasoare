@@ -490,6 +490,10 @@ class GradNetwork:
         netw._frozen = self.frozen
         return netw
 
+    def reset_input_mapping(self):
+        self._input_mapping = None
+        self._input_mapping_weights = None
+
     def get_input_mapping(self):
         nout = NFLUXES_OUTPUTS
         nres = self.nreservoirs
@@ -570,6 +574,8 @@ class GradNetwork:
         # check non-cyclic
         self.upstream_reservoirs(downstream_reservoir_id)
 
+        # Reser input mapping data to avoid inconsistencies
+        self.reset_input_mapping()
 
     def add_link_outflow(self, upstream_reservoir_id,
                          downstream_reservoir_id,
