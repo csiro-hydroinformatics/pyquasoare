@@ -489,6 +489,13 @@ class GradNetwork:
             txt += f"\nLink #{i}: {link}"
         return txt[1:]
 
+    @property
+    def frozen(self):
+        return self._frozen
+
+    def freeze(self):
+        self._frozen = True
+
     def clone(self):
         netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
