@@ -22,16 +22,29 @@ cdef extern from 'c_quasoare_grad.h':
     cdef unsigned int QUASOARE_GRAD_IFLUX_SHORTFALL
     cdef unsigned int QUASOARE_GRAD_IFLUX_OUTFLOW
 
-    int c_grad_aggregate_fluxes(unsigned int ntimesteps,
-                                unsigned int nreservoirs,
-                                unsigned int nsubsteps,
-                                double * fluxes, double * fluxes_agg);
+    unsigned int c_grad_aggregate_fluxes(unsigned int ntimesteps,
+                                         unsigned int nreservoirs,
+                                         unsigned int nsubsteps,
+                                         double * fluxes, double * fluxes_agg);
 
-    int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
-                                 unsigned int nvariables,
-                                 unsigned int nreservoirs,
-                                 unsigned int nsubsteps,
-                                 double * dfluxes, double * dfluxes_agg);
+    unsigned int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
+                                          unsigned int nvariables,
+                                          unsigned int nreservoirs,
+                                          unsigned int nsubsteps,
+                                          double * dfluxes, double * dfluxes_agg);
+
+    unsigned int c_grad_aggregate_fluxes_parallel(unsigned int nmodels,
+                                                  unsigned int ntimesteps,
+                                                  unsigned int nreservoirs,
+                                                  unsigned int nsubsteps,
+                                                  double * fluxes, double * fluxes_agg);
+
+    unsigned int c_grad_aggregate_dfluxes_parallel(unsigned int nmodels,
+                                                   unsigned int ntimesteps,
+                                                   unsigned int nvariables,
+                                                   unsigned int nreservoirs,
+                                                   unsigned int nsubsteps,
+                                                   double * dfluxes, double * dfluxes_agg);
 
     unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                          unsigned int enforce_potential_inflow_pos,
@@ -69,25 +82,50 @@ cdef extern from 'c_quasoare_grad.h':
                          double *fluxes,
                          double *dfluxes);
 
-    unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
-                     unsigned int errors,
-                     unsigned int enforce_potential_inflow_pos,
-                     double *alphas,
-                     double timestep,
-                     double *gammas,
-                     unsigned int *input_mapping,
-                     double *input_mapping_weights,
-                     double *flux_scalings,
-                     double *x0,
-                     unsigned int *variables_reservoir_id,
-                     unsigned int *variables_type_id,
-                     double *Qstars,
-                     double *dQstars_ext,
-                     double *coefs_linear,
-                     double *x,
-                     double *dx,
-                     double *fluxes,
-                     double *dfluxes);
+    unsigned int c_grad_model(int nalphas, unsigned int nreservoirs,
+                              unsigned int nvariables, unsigned int nval,
+                              unsigned int errors,
+                              unsigned int enforce_potential_inflow_pos,
+                              double *alphas,
+                              double timestep,
+                              double *gammas,
+                              unsigned int *input_mapping,
+                              double *input_mapping_weights,
+                              double *flux_scalings,
+                              double *x0,
+                              unsigned int *variables_reservoir_id,
+                              unsigned int *variables_type_id,
+                              double *Qstars,
+                              double *dQstars_ext,
+                              double *coefs_linear,
+                              double *x,
+                              double *dx,
+                              double *fluxes,
+                              double *dfluxes);
+
+    unsigned int c_grad_model_parallel(int nalphas,
+                                       unsigned int nmodels,
+                                       unsigned int nreservoirs,
+                                       unsigned int nvariables,
+                                       unsigned int nval,
+                                       unsigned int errors,
+                                       unsigned int enforce_potential_inflow_pos,
+                                       double * alphas,
+                                       double timestep,
+                                       double * gammas,
+                                       unsigned int *input_mapping,
+                                       double *input_mapping_weights,
+                                       double * flux_scalings,
+                                       double * x0,
+                                       unsigned int *variables_reservoir_id,
+                                       unsigned int *variables_type_id,
+                                       double *Qstars,
+                                       double *dQstars_ext,
+                                       double *coefs_linear,
+                                       double *x,
+                                       double *dx,
+                                       double *fluxes,
+                                       double *dfluxes);
 
 # Flux sizes
 NFLUXES_POTENTIAL = QUASOARE_GRAD_NFLUXES_POTENTIAL
@@ -192,6 +230,66 @@ def grad_aggregate_dfluxes(unsigned int nsubsteps,
     return c_grad_aggregate_dfluxes(ntimesteps, nvariables, nreservoirs, nsubsteps,
                                     <double*> np.PyArray_DATA(dfluxes),
                                     <double*> np.PyArray_DATA(dfluxes_agg));
+
+
+def grad_aggregate_fluxes_parallel(unsigned int nsubsteps,
+                                   np.ndarray[double, ndim=4, mode='c'] fluxes not None,
+                                   np.ndarray[double, ndim=4, mode='c'] fluxes_agg not None):
+    cdef unsigned int nmodels = fluxes.shape[0];
+    cdef unsigned int ntimesteps = fluxes.shape[1];
+    cdef unsigned int nreservoirs = fluxes.shape[2];
+
+    if fluxes.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes.shape[3] != NFLUXES_OUTPUTS")
+
+    if fluxes_agg.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes_agg.shape[3] != NFLUXES_OUTPUTS")
+
+    if fluxes_agg.shape[0] != nmodels:
+        raise ValueError("fluxes_agg.shape[0] != nmodels")
+
+    if fluxes_agg.shape[1] * nsubsteps != ntimesteps:
+        raise ValueError("Number of timesteps in fluxes and fluxes_agg" \
+                         + " incompatible with nsubsteps")
+
+    if fluxes_agg.shape[2] != nreservoirs:
+        raise ValueError("fluxes_agg.shape[1] != nreservoirs")
+
+    return c_grad_aggregate_fluxes_parallel(nmodels, ntimesteps, nreservoirs, nsubsteps,
+                                            <double*> np.PyArray_DATA(fluxes),
+                                            <double*> np.PyArray_DATA(fluxes_agg));
+
+def grad_aggregate_dfluxes_parallel(unsigned int nsubsteps,
+                          np.ndarray[double, ndim=5, mode='c'] dfluxes not None,
+                          np.ndarray[double, ndim=5, mode='c'] dfluxes_agg not None):
+    cdef unsigned int nmodels = dfluxes.shape[0];
+    cdef unsigned int ntimesteps = dfluxes.shape[1];
+    cdef unsigned int nvariables = dfluxes.shape[2];
+    cdef unsigned int nreservoirs = dfluxes.shape[3];
+
+    if dfluxes.shape[4] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes.shape[4] != NFLUXES_OUTPUTS")
+
+    if dfluxes_agg.shape[4] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes_agg.shape[4] != NFLUXES_OUTPUTS")
+
+    if dfluxes_agg.shape[0] != nmodels:
+        raise ValueError("dfluxes_agg.shape[0] != nmodels")
+
+    if dfluxes_agg.shape[1] * nsubsteps != ntimesteps:
+        raise ValueError("Number of timesteps in dfluxes and dfluxes_agg" \
+                         + " incompatible with nsubsteps")
+
+    if dfluxes_agg.shape[2] != nvariables:
+        raise ValueError("dfluxes_agg.shape[2] != nvariables")
+
+    if dfluxes_agg.shape[3] != nreservoirs:
+        raise ValueError("dfluxes_agg.shape[3] != nreservoirs")
+
+    return c_grad_aggregate_dfluxes_parallel(nmodels, ntimesteps, nvariables,
+                                             nreservoirs, nsubsteps,
+                                             <double*> np.PyArray_DATA(dfluxes),
+                                             <double*> np.PyArray_DATA(dfluxes_agg));
 
 
 def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
@@ -426,10 +524,10 @@ def grad_model(int errors,
         raise ValueError("fluxes.shape[0] != nval")
 
     if fluxes.shape[1] != nreservoirs:
-        raise ValueError("fluxes.shape[0] != nreservoirs")
+        raise ValueError("fluxes.shape[1] != nreservoirs")
 
     if fluxes.shape[2] != NFLUXES_OUTPUTS:
-        raise ValueError("fluxes.shape[1] != NFLUXES_OUTPUTS")
+        raise ValueError("fluxes.shape[2] != NFLUXES_OUTPUTS")
 
     if dfluxes.shape[0] != nval:
         raise ValueError("dfluxes.shape[0] != nval")
@@ -462,3 +560,138 @@ def grad_model(int errors,
                         <double*> np.PyArray_DATA(dx),
                         <double*> np.PyArray_DATA(fluxes),
                         <double*> np.PyArray_DATA(dfluxes))
+
+def grad_model_parallel(int errors,
+               unsigned int enforce_potential_inflow_pos,
+               np.ndarray[double, ndim=2, mode='c'] alphas not None,
+               double timestep,
+               np.ndarray[double, ndim=1, mode='c'] gammas not None,
+               np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
+               np.ndarray[double, ndim=2, mode='c'] input_mapping_weights not None,
+               np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
+               np.ndarray[double, ndim=1, mode='c'] x0 not None,
+               np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
+               np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
+               np.ndarray[double, ndim=4, mode='c'] Qstars not None,
+               np.ndarray[double, ndim=2, mode='c'] dQstars_ext not None,
+               np.ndarray[double, ndim=4, mode='c'] coefs_linear not None,
+               np.ndarray[double, ndim=3, mode='c'] x not None,
+               np.ndarray[double, ndim=4, mode='c'] dx not None,
+               np.ndarray[double, ndim=4, mode='c'] fluxes not None,
+               np.ndarray[double, ndim=5, mode='c'] dfluxes not None):
+
+    # Parallel models all share the same
+    # - alphas
+    # - input_mapping, input_mapping_weights
+    # - flux_scalings
+    # - variables_reservoir_id, variables_type_id
+    # - coefs_linear
+    #
+    # other variables depend on the model
+
+    # Check dimensions
+    cdef unsigned int nmodels = Qstars.shape[0]
+    cdef unsigned int nreservoirs = alphas.shape[0]
+    cdef unsigned int nalphas = alphas.shape[1]
+    cdef unsigned int nval = Qstars.shape[1]
+    cdef unsigned int nvariables = dQstars_ext.shape[0]
+
+    check_dim_input_mapping(input_mapping, input_mapping_weights,
+                            nreservoirs)
+    check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, True)
+
+    if gammas.shape[0] != nreservoirs * nmodels:
+        raise ValueError("gammas.shape[0] != nreservoirs * nmodels")
+
+    if x0.shape[0] != nreservoirs * nmodels:
+        raise ValueError("x0.shape[0] != nreservoirs * nmodels")
+
+    if flux_scalings.shape[0] != nreservoirs:
+        raise ValueError("flux_scalings.shape[0] != nreservoirs")
+
+    if flux_scalings.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("flux_scalings.shape[1] != NFLUXES_INPUTS")
+
+    if variables_reservoir_id.shape[0] != nvariables:
+        raise ValueError("variables_reservoir_id.shape[0] != nvariables")
+
+    if variables_type_id.shape[0] != nvariables:
+        raise ValueError("variables_type_id.shape[0] != nvariables")
+
+    if Qstars.shape[2] != nreservoirs:
+        raise ValueError("Qstars.shape[2] != nreservoirs")
+
+    if Qstars.shape[3] != NFLUXES_POTENTIAL:
+        raise ValueError("Qstars.shape[3] != NFLUXES_POTENTIAL")
+
+    if dQstars_ext.shape[1] != NFLUXES_INPUTS:
+        raise ValueError("dQstars_ext.shape[1] != NFLUXES_INPUTS")
+
+    if x.shape[0] != nmodels:
+        raise ValueError("x.shape[0] != nmodels")
+
+    if x.shape[1] != nval:
+        raise ValueError("x.shape[1] != nval")
+
+    if x.shape[2] != nreservoirs:
+        raise ValueError("x.shape[2] != nreservoirs")
+
+    if dx.shape[0] != nmodels:
+        raise ValueError("dx.shape[0] != nmodels")
+
+    if dx.shape[1] != nval:
+        raise ValueError("dx.shape[1] != nval")
+
+    if dx.shape[2] != nreservoirs:
+        raise ValueError("dx.shape[2] != nreservoirs")
+
+    if dx.shape[3] != nvariables:
+        raise ValueError("dx.shape[3] != nvariables")
+
+    if fluxes.shape[0] != nmodels:
+        raise ValueError("fluxes.shape[0] != nmodels")
+
+    if fluxes.shape[1] != nval:
+        raise ValueError("fluxes.shape[1] != nval")
+
+    if fluxes.shape[2] != nreservoirs:
+        raise ValueError("fluxes.shape[2] != nreservoirs")
+
+    if fluxes.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes.shape[3] != NFLUXES_OUTPUTS")
+
+    if dfluxes.shape[0] != nmodels:
+        raise ValueError("dfluxes.shape[0] != nmodels")
+
+    if dfluxes.shape[1] != nval:
+        raise ValueError("dfluxes.shape[1] != nval")
+
+    if dfluxes.shape[2] != nvariables:
+        raise ValueError("dfluxes.shape[2] != nvariables")
+
+    if dfluxes.shape[3] != nreservoirs:
+        raise ValueError("dfluxes.shape[3] != nreservoirs")
+
+    if dfluxes.shape[4] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes.shape[4] != NFLUXES_OUTPUTS")
+
+    # Run C code
+    return c_grad_model_parallel(nalphas, nmodels, nreservoirs,
+                                 nvariables, nval, errors,
+                                 enforce_potential_inflow_pos,
+                                 <double*> np.PyArray_DATA(alphas),
+                                 timestep,
+                                 <double*> np.PyArray_DATA(gammas),
+                                 <unsigned int*> np.PyArray_DATA(input_mapping),
+                                 <double*> np.PyArray_DATA(input_mapping_weights),
+                                 <double*> np.PyArray_DATA(flux_scalings),
+                                 <double*> np.PyArray_DATA(x0),
+                                 <unsigned int*> np.PyArray_DATA(variables_reservoir_id),
+                                 <unsigned int*> np.PyArray_DATA(variables_type_id),
+                                 <double*> np.PyArray_DATA(Qstars),
+                                 <double*> np.PyArray_DATA(dQstars_ext),
+                                 <double*> np.PyArray_DATA(coefs_linear),
+                                 <double*> np.PyArray_DATA(x),
+                                 <double*> np.PyArray_DATA(dx),
+                                 <double*> np.PyArray_DATA(fluxes),
+                                 <double*> np.PyArray_DATA(dfluxes))
