@@ -52,11 +52,11 @@ double c_grad_inverse(double M, double S, double x0, double x){
     }
 }
 
-int c_grad_aggregate_fluxes(unsigned int ntimesteps,
-                            unsigned int nreservoirs,
-                            unsigned int nsubsteps,
-                            double * fluxes, double * fluxes_agg) {
-    int ierr = 0;
+unsigned int c_grad_aggregate_fluxes(unsigned int ntimesteps,
+                                     unsigned int nreservoirs,
+                                     unsigned int nsubsteps,
+                                     double * fluxes, double * fluxes_agg) {
+    unsigned int ierr = 0;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
     unsigned int t, t_agg, ires, ifx, is_first, idx, idx_agg;
     unsigned int nres_times_t, nres_times_t_agg;
@@ -85,12 +85,12 @@ int c_grad_aggregate_fluxes(unsigned int ntimesteps,
     return ierr;
 }
 
-int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
-                            unsigned int nvariables,
-                            unsigned int nreservoirs,
-                            unsigned int nsubsteps,
-                            double * dfluxes, double * dfluxes_agg) {
-    int ierr = 0;
+unsigned int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
+                                      unsigned int nvariables,
+                                      unsigned int nreservoirs,
+                                      unsigned int nsubsteps,
+                                      double * dfluxes, double * dfluxes_agg) {
+    unsigned int ierr = 0;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
     unsigned int t, t_agg, ivar, ires, ifx, is_first, idx, idx_agg;
     unsigned int nvar_nres_times_t, nvar_nres_times_t_agg;
@@ -121,6 +121,46 @@ int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
     return ierr;
 }
 
+
+unsigned int c_grad_aggregate_fluxes_parallel(unsigned int nmodels,
+                                              unsigned int ntimesteps,
+                                              unsigned int nreservoirs,
+                                              unsigned int nsubsteps,
+                                              double * fluxes, double * fluxes_agg) {
+    unsigned int ierr, model;
+    unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned long idx_fx, idx_fx_agg;
+
+    for(model = 0; model < nmodels; model ++){
+        idx_fx_agg = model * ntimesteps * nreservoirs * nfxo;
+        idx_fx = idx_fx_agg * nsubsteps;
+        ierr = c_grad_aggregate_fluxes(ntimesteps, nreservoirs, nsubsteps,
+                                       &(fluxes[idx_fx]), &(fluxes_agg[idx_fx_agg]));
+    }
+    return ierr;
+}
+
+
+unsigned int c_grad_aggregate_dfluxes_parallel(unsigned int nmodels,
+                                              unsigned int ntimesteps,
+                                              unsigned int nvariables,
+                                              unsigned int nreservoirs,
+                                              unsigned int nsubsteps,
+                                              double * dfluxes, double * dfluxes_agg) {
+    unsigned int ierr, model;
+    unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned long idx_dfx, idx_dfx_agg;
+
+    for(model = 0; model < nmodels; model ++){
+        idx_dfx_agg = model * ntimesteps * nreservoirs * nvariables * nfxo;
+        idx_dfx = idx_dfx_agg * nsubsteps;
+        ierr = c_grad_aggregate_dfluxes(ntimesteps, nvariables, nreservoirs, nsubsteps,
+                                        &(dfluxes[idx_dfx]), &(dfluxes_agg[idx_dfx_agg]));
+    }
+    return ierr;
+}
+
+
 /* Integrate reservoir equation over 1 time step and compute associated fluxes
  * flux_scalings are scaling factors applied to
  * s[0] : f1 (inputs)
@@ -136,28 +176,27 @@ int c_grad_aggregate_dfluxes(unsigned int ntimesteps,
  *
  * dfluxes : vector of nvariables × 6 x nreservoirs
  * */
-int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
-                     unsigned int enforce_potential_inflow_pos,
-                     double * alphas,
-                     double timestep,
-                     double gamma,
-                     unsigned int *input_mapping,
-                     double *input_mapping_weights,
-                     double * Qstars,
-                     double * dQstars_ext,
-                     double * flux_scalings,
-                     double * coefs_linear,
-                     unsigned int current_reservoir_id,
-                     unsigned int *variables_reservoir_id,
-                     unsigned int *variables_type_id,
-                     unsigned int *niter,
-                     double * x,
-                     double * dx,
-                     double * fluxes,
-                     double * dfluxes) {
-    unsigned int ierr;
+unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
+                              unsigned int enforce_potential_inflow_pos,
+                              double * alphas,
+                              double timestep,
+                              double gamma,
+                              unsigned int *input_mapping,
+                              double *input_mapping_weights,
+                              double * Qstars,
+                              double * dQstars_ext,
+                              double * flux_scalings,
+                              double * coefs_linear,
+                              unsigned int current_reservoir_id,
+                              unsigned int *variables_reservoir_id,
+                              unsigned int *variables_type_id,
+                              unsigned int *niter,
+                              double * x,
+                              double * dx,
+                              double * fluxes,
+                              double * dfluxes) {
     unsigned int inp, out, dvar;
-    unsigned long idx_c, idx_dq0, idx_dq;
+    unsigned long idx_c, idx_dq0;
     unsigned long idx_df, idx_df0;
     unsigned int nit=0, jalpha_next=0;
 
@@ -191,7 +230,6 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 
     /* Variables related to potential fluxes */
     double qi;
-    double scaling;
     /* .. extended Qstars including discharge fluxes
      *    + rescaling applied */
     double Qstars_ext[QUASOARE_GRAD_NFLUXES_INPUTS];
@@ -593,7 +631,7 @@ int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariab
 }
 
 
-int c_grad_reservoir(int nalphas, unsigned int nval,
+unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
                      unsigned int errors,
                      unsigned int enforce_potential_inflow_pos,
                      double * alphas,
@@ -608,8 +646,8 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
                      double * dx,
                      double * fluxes,
                      double * dfluxes) {
-    unsigned int ierr, t, dvar, i, inp;
-    unsigned long idx_dx, idx_f, idx_df, idx_dq;
+    unsigned int ierr, i, t, dvar;
+    unsigned long idx_dx, idx_f, idx_df;
 
     unsigned int nfxi = QUASOARE_GRAD_NFLUXES_INPUTS;
     unsigned int nfxp = QUASOARE_GRAD_NFLUXES_POTENTIAL;
@@ -694,7 +732,7 @@ int c_grad_reservoir(int nalphas, unsigned int nval,
 }
 
 
-int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
+unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables, unsigned int nval,
                  unsigned int errors,
                  unsigned int enforce_potential_inflow_pos,
                  double * alphas,
@@ -714,7 +752,7 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                  double *fluxes,
                  double *dfluxes) {
 
-    unsigned int ierr, t, dvar, inp, out, res, resu;
+    unsigned int ierr, t, dvar, inp, out, res;
     unsigned long idx_q, idx_c, idx_x, idx_xn, idx_f, idx_a, idx_dx, idx_dxn;
     unsigned long idx_m, idx_m0, idx_mw, idx_mw0, idx_up_f;
     unsigned long idx_df, idx_up_df, idx_fs, idx_dq;
@@ -747,12 +785,6 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
     double input_weight;
 
     /* Variables related to gradients */
-    double w, R, dR, dS, dM, tau;
-    double dx_start, dx_end;
-    double dQstars_timestep_ext[QUASOARE_GRAD_NFLUXES_INPUTS];
-    double integ_x;
-    double integ_fx[QUASOARE_GRAD_NFLUXES_INPUTS];
-    double integ_dfx[QUASOARE_GRAD_NFLUXES_INPUTS];
     unsigned int dvar_res_id;
     unsigned int dvar_type_id;
 
@@ -979,10 +1011,11 @@ int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
 }
 
 
-int c_grad_model_parallel(int nalphas,
+unsigned int c_grad_model_parallel(int nalphas,
                           unsigned int nmodels,
                           unsigned int nreservoirs,
-                          unsigned int nvariables, unsigned int nval,
+                          unsigned int nvariables,
+                          unsigned int nval,
                           unsigned int errors,
                           unsigned int enforce_potential_inflow_pos,
                           double * alphas,
@@ -1001,15 +1034,20 @@ int c_grad_model_parallel(int nalphas,
                           double *dx,
                           double *fluxes,
                           double *dfluxes) {
+    unsigned int ierr;
     unsigned int model;
     unsigned long idx_reservoir;
     unsigned long idx_Qstars;
     unsigned long idx_x, idx_dx, idx_flx, idx_dflx;
 
-
     for(model = 0; model < nmodels; model ++) {
         idx_reservoir = model * nreservoirs;
-        idx_Qstars = TODO
+
+        idx_x = idx_reservoir * nval;
+        idx_Qstars = idx_x * QUASOARE_GRAD_NFLUXES_POTENTIAL;
+        idx_dx = idx_x * nvariables;
+        idx_flx = idx_x * QUASOARE_GRAD_NFLUXES_OUTPUTS;
+        idx_dflx = idx_x * QUASOARE_GRAD_NFLUXES_OUTPUTS * nvariables;
 
         ierr = c_grad_model(nalphas, nreservoirs, nvariables,
                             nval, errors, enforce_potential_inflow_pos,
@@ -1029,5 +1067,8 @@ int c_grad_model_parallel(int nalphas,
                             &dx[idx_dx],
                             &fluxes[idx_flx],
                             &dfluxes[idx_dflx]);
+
+        if(ierr > 0 && errors == 1)
+            return ierr;
     }
 }
