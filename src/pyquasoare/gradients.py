@@ -440,6 +440,16 @@ class GradNetworkLink:
         self.downstream_potential_flux_id = downiid
         self.weight = float(weight)
 
+    def __str__(self):
+        upid = self.upstream_reservoir_id
+        upoid = self.upstream_output_flux_id
+        downid = self.downstream_reservoir_id
+        downiid = self.downstream_potential_flux_id
+        txt = f"Res{upid:03d}-Out{upoid} -> " \
+            + f"Res{downid:03d}-Pot{downiid}" \
+            + f" / weight={self.weight:0.2e}"
+        return txt
+
     def clone(self):
         return GradNetworkLink(self.upstream_reservoir_id,
                            self.upstream_output_flux_id,
@@ -458,12 +468,31 @@ class GradNetwork:
         self.links = []
         self._input_mapping = None
         self._input_mapping_weights = None
+        self._frozen = False
+
+    def __str__(self):
+        txt = ""
+        for i, link in enumerate(self.links):
+            txt += f"\nLink #{i}: {link}"
+        return txt[1:]
+
+    @property
+    def frozen(self):
+        return self._frozen
+
+    def freeze(self):
+        self._frozen = True
 
     def clone(self):
         netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
             netw.links.append(lk.clone())
+        netw._frozen = self.frozen
         return netw
+
+    def reset_input_mapping(self):
+        self._input_mapping = None
+        self._input_mapping_weights = None
 
     def get_input_mapping(self):
         nout = NFLUXES_OUTPUTS
@@ -530,6 +559,10 @@ class GradNetwork:
     def add_link(self, upstream_reservoir_id, upstream_output_flux_id,
                  downstream_reservoir_id, downstream_potential_flux_id,
                  weight):
+        if self.frozen:
+            errmsg = "Network is frozen. Cannot add link."
+            raise ValueError(errmsg)
+
         nres = self.nreservoirs
         lk = GradNetworkLink(upstream_reservoir_id,
                          upstream_output_flux_id,
@@ -541,6 +574,8 @@ class GradNetwork:
         # check non-cyclic
         self.upstream_reservoirs(downstream_reservoir_id)
 
+        # Reser input mapping data to avoid inconsistencies
+        self.reset_input_mapping()
 
     def add_link_outflow(self, upstream_reservoir_id,
                          downstream_reservoir_id,
@@ -857,6 +892,9 @@ class MultiReservoirModel:
 
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
+        # Freeze network. Cannot change network after allocation
+        self.network.freeze()
+
         timestep_agg = float(timestep_agg)
         self.timestep_agg = timestep_agg
         self.timestep = timestep_agg / self.nsubsteps
