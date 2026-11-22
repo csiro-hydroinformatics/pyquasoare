@@ -726,7 +726,6 @@ class MultiReservoirModel:
         self._nalphas = nalphas
         self._alphas = get_alphas(nalphas,
                                   nreservoirs=nreservoirs)
-
         self._gammas = None
         self._coefs_linear = None
         self.variables_reservoir_id = None
@@ -752,7 +751,7 @@ class MultiReservoirModel:
         txt += f"\nnalphas        : {self.nalphas}"
         txt += f"\nnsubsteps      : {self.nsubsteps}"
         txt += f"\nntimesteps_agg : {self.ntimesteps_agg}"
-        txt += f"\nnvars          : {len(self.variables_reservoir_id)}"
+        txt += f"\nnvars          : {self.nvariables}"
         txt += f"\ntimestep_agg   : {self.timestep_agg:0.3f}"
         return txt
 
@@ -789,6 +788,11 @@ class MultiReservoirModel:
     @property
     def coefs_linear(self):
         return self._coefs_linear
+
+    @property
+    def nvariables(self):
+        return isnone(len(self.variables_reservoir_id),
+                      "variables_reservoir_id")
 
     @property
     def variables_specs(self):
@@ -1011,6 +1015,7 @@ class MultiReservoirModel:
         self._Qstars = Qst
         self._dQstars_ext = np.zeros((nvariables, nfxi))
         self._x0 = 0.5 * np.ones(nres)
+        self._gammas = np.ones(nres)
         self._x = np.zeros((ntimesteps, nres))
         self._dx = np.zeros((ntimesteps, nres, nvariables))
         self._fluxes = np.zeros((ntimesteps, nres, nfxo))
@@ -1135,6 +1140,7 @@ class MultiReservoirModel:
             errmsg = "fluxes and dfluxes are none. Please allocate."
             raise ValueError(errmsg)
 
+        nvar = self.nvariables
         nsub = self.nsubsteps
         fx = self._fluxes
         fx_agg = self._fluxes_agg
@@ -1143,10 +1149,12 @@ class MultiReservoirModel:
 
         if nsub > 1:
             c_pyquasoare_grad.grad_aggregate_fluxes(nsub, fx, fx_agg)
-            c_pyquasoare_grad.grad_aggregate_dfluxes(nsub, dfx, dfx_agg)
+            if nvar > 0:
+                c_pyquasoare_grad.grad_aggregate_dfluxes(nsub, dfx, dfx_agg)
         else:
             np.copyto(fx_agg, fx)
-            np.copyto(dfx_agg, dfx)
+            if nvar > 0:
+                np.copyto(dfx_agg, dfx)
 
 
 class MultiReservoirModelParallel:
@@ -1155,10 +1163,16 @@ class MultiReservoirModelParallel:
                  nsubsteps=1,
                  errors="ignore",
                  enforce_potential_inflow_pos=True):
-        self.nmodels = int(nmodels)
+        nmodels = int(nmodels)
+        self.nmodels = nmodels
         self._mresmod = MultiReservoirModel(nreservoirs, nalphas,
                                             nsubsteps, errors,
                                             enforce_potential_inflow_pos)
+        self._flux_scalings = np.ones((nmodels, nreservoirs,
+                                       NFLUXES_INPUTS))
+        self._flux_scalings_substeps = np.ones((nmodels, nreservoirs,
+                                                NFLUXES_INPUTS))
+
         self._gammas = None
         self._Qstars = None
         self._dQstars_ext = None
@@ -1177,9 +1191,20 @@ class MultiReservoirModelParallel:
         txt += f"\nnalphas        : {self.nalphas}"
         txt += f"\nnsubsteps      : {self.nsubsteps}"
         txt += f"\nntimesteps_agg : {self.ntimesteps_agg}"
-        txt += f"\nnvars          : {len(self.variables_reservoir_id)}"
+        txt += f"\nnvars          : {self.nvariables}"
         txt += f"\ntimestep_agg   : {self.timestep_agg:0.3f}"
-    return txt
+        return txt
+
+    def check_allocated(self):
+        return self._mresmod.check_allocated()
+
+    @property
+    def nreservoirs(self):
+        return self._mresmod.nreservoirs
+
+    @property
+    def nvariables(self):
+        return self._mresmod.nvariables
 
     @property
     def nsubsteps(self):
@@ -1190,8 +1215,12 @@ class MultiReservoirModelParallel:
         return self._mresmod.nalphas
 
     @property
-    def nsubsteps(self):
-        return self._mresmod.nsubsteps
+    def timestep(self):
+        return self._mresmod.timestep
+
+    @property
+    def timestep_agg(self):
+        return self._mresmod.timestep_agg
 
     @property
     def errors(self):
@@ -1200,10 +1229,6 @@ class MultiReservoirModelParallel:
     @property
     def network(self):
         return self._mresmod.network
-
-    @property
-    def nreservoirs(self):
-        return self._mresmod.nreservoirs
 
     @property
     def coefs_linear(self):
@@ -1295,11 +1320,23 @@ class MultiReservoirModelParallel:
 
     @property
     def flux_scalings(self):
-        return self._mresmod.flux_scalings
+        return isnone(self._flux_scalings, "flux_scalings")
 
     @flux_scalings.setter
     def flux_scalings(self, value):
-        self._mresmod.flux_scalings = value
+        nmod = self.nmodels
+        nres = self.nreservoirs
+        nfxi = NFLUXES_INPUTS
+        if isinstance(value, (float, int)):
+            self._flux_scalings = value * np.ones((nmod, nres, nfxi))
+        else:
+            value = np.array(value)
+            if value.shape != (nmod, nres, nfxi):
+                errmsg = f"Expected flux_scalings of dim ({nmod}, {nres},{nfxi})."\
+                         + f" Got {value.shape}."
+                raise ValueError(errmsg)
+
+            self._flux_scalings = value.astype(np.float64)
 
     def get_input_mapping(self):
         return self._mresmod.get_input_mapping()
@@ -1335,7 +1372,7 @@ class MultiReservoirModelParallel:
         self._mresmod.set_coefs_linear(reservoir_id, flux_functions)
 
     def set_Qstars(self, Qstars):
-        self._mresmod.check_allocated()
+        self.check_allocated()
         nmod = self.nmodels
         nres = self.nreservoirs
         if Qstars.shape != (nmod, self.ntimesteps_agg, nres, NFLUXES_POTENTIAL):
@@ -1347,7 +1384,7 @@ class MultiReservoirModelParallel:
         self._Qstars[:] = np.repeat(Qstars, self.nsubsteps, axis=1)
 
     def set_Qstars_one_reservoir(self, model_id, reservoir_id, Qstars):
-        self._mresmod.check_allocated()
+        self.check_allocated()
         if model_id < 0 or model_id >= self.nmodels:
             errmsg = f"Expected model_id in [0, {self.nmodels}[."
             raise ValueError(errmsg)
@@ -1365,11 +1402,11 @@ class MultiReservoirModelParallel:
         self._Qstars[model_id, :, reservoir_id, :] = np.repeat(Qstars,
                                                                self.nsubsteps,
                                                                axis=0)
-
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
         # Dummy allocation of mresmod with a single time step
-        self._mresmod.allocate(1, variable_specs, timestep_agg)
+        mresmod = self._mresmod
+        mresmod.allocate(1, variables_specs, timestep_agg)
 
         nmod = self.nmodels
         nres = self.nreservoirs
@@ -1377,11 +1414,19 @@ class MultiReservoirModelParallel:
         nfxp = NFLUXES_POTENTIAL
         nfxo = NFLUXES_OUTPUTS
 
+        ntimesteps_agg = int(ntimesteps_agg)
+        self.ntimesteps_agg = ntimesteps_agg
+        ntimesteps = ntimesteps_agg * self.nsubsteps
+        self.ntimesteps = ntimesteps
+
+        nvariables = mresmod.nvariables
+
         Qst = np.zeros((nmod, ntimesteps, nres, nfxp))
         Qst.fill(np.nan)
         self._Qstars = Qst
         self._dQstars_ext = np.zeros((nvariables, nfxi))
-        self._x0 = 0.5 * np.ones(nmod * nres)
+        self._x0 = 0.5 * np.ones((nmod, nres))
+        self._gammas = np.ones((nmod, nres))
         self._x = np.zeros((nmod, ntimesteps, nres))
         self._dx = np.zeros((nmod, ntimesteps, nres, nvariables))
         self._fluxes = np.zeros((nmod, ntimesteps, nres, nfxo))
@@ -1419,7 +1464,8 @@ class MultiReservoirModelParallel:
         return mclp
 
     def run(self):
-        self._mresmod.check_allocated()
+        self.check_allocated()
+        mresmod = self._mresmod
 
         # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
@@ -1431,11 +1477,11 @@ class MultiReservoirModelParallel:
         # dx/dt = Qst1/Γ f1(x) + Qst2/Γ f2(x) -1/Δ f3(x)
         nsub = self.nsubsteps
         if nsub == 1:
-            fxs = self._mresmod.flux_scalings
+            fxs = self._flux_scalings
         else:
-            fxs = self._mresmod._flux_scalings_substeps
-            fxs[:] = self._mresmod.flux_scalings[:]
-            fxs[:, 2] *= 1. / self.nsubsteps
+            fxs = self._flux_scalings_substeps
+            fxs[:] = self._flux_scalings[:]
+            fxs[:, :, 2] *= 1. / self.nsubsteps
 
         # Run model
         grad_model_parallel(alphas=self.alphas,
@@ -1443,10 +1489,10 @@ class MultiReservoirModelParallel:
                             input_mapping=inpm,
                             input_mapping_weights=inpmw,
                             x0=self.x0,
-                            variables_reservoir_id=self.variables_reservoir_id,
-                            variables_type_id=self.variables_type_id,
+                            variables_reservoir_id=mresmod.variables_reservoir_id,
+                            variables_type_id=mresmod.variables_type_id,
                             Qstars=self._Qstars,
-                            coefs_linear=self._coefs_linear,
+                            coefs_linear=mresmod._coefs_linear,
                             timestep=self.timestep,
                             flux_scalings=fxs,
                             x=self._x,
@@ -1456,23 +1502,26 @@ class MultiReservoirModelParallel:
                             niter=self._niter,
                             dQstars_ext=self._dQstars_ext,
                             errors=self.errors,
-                            enforce_potential_inflow_pos=self._enforce_potential_inflow_pos)
+                            enforce_potential_inflow_pos=mresmod._enforce_potential_inflow_pos)
 
     def aggregate(self):
         self._mresmod.check_allocated()
 
         nmod = self.nmodels
         nsub = self.nsubsteps
+        nvar = self.nvariables
+
         fx = self._fluxes
         fx_agg = self._fluxes_agg
         dfx = self._dfluxes
         dfx_agg = self._dfluxes_agg
 
         if nsub > 1:
-            c_pyquasoare_grad.grad_aggregate_fluxes_parallel(nmod, nsub, fx, fx_agg)
-            c_pyquasoare_grad.grad_aggregate_dfluxes_parallel(nmod, nsub, dfx, dfx_agg)
+            c_pyquasoare_grad.grad_aggregate_fluxes_parallel(nsub, fx, fx_agg)
+            if nvar > 0:
+                c_pyquasoare_grad.grad_aggregate_dfluxes_parallel(nsub, dfx, dfx_agg)
         else:
             np.copyto(fx_agg, fx)
-            np.copyto(dfx_agg, dfx)
-
+            if nvar > 0:
+                np.copyto(dfx_agg, dfx)
 

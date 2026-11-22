@@ -129,33 +129,37 @@ unsigned int c_grad_aggregate_fluxes_parallel(unsigned int nmodels,
                                               double * fluxes, double * fluxes_agg) {
     unsigned int ierr, model;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned int ntimesteps_agg = ntimesteps / nsubsteps;
     unsigned long idx_fx, idx_fx_agg;
 
     for(model = 0; model < nmodels; model ++){
-        idx_fx_agg = model * ntimesteps * nreservoirs * nfxo;
+        idx_fx_agg = model * ntimesteps_agg * nreservoirs * nfxo;
         idx_fx = idx_fx_agg * nsubsteps;
         ierr = c_grad_aggregate_fluxes(ntimesteps, nreservoirs, nsubsteps,
-                                       &(fluxes[idx_fx]), &(fluxes_agg[idx_fx_agg]));
+                                       &(fluxes[idx_fx]),
+                                       &(fluxes_agg[idx_fx_agg]));
     }
     return ierr;
 }
 
 
 unsigned int c_grad_aggregate_dfluxes_parallel(unsigned int nmodels,
-                                              unsigned int ntimesteps,
-                                              unsigned int nvariables,
-                                              unsigned int nreservoirs,
-                                              unsigned int nsubsteps,
-                                              double * dfluxes, double * dfluxes_agg) {
+                                               unsigned int ntimesteps,
+                                               unsigned int nvariables,
+                                               unsigned int nreservoirs,
+                                               unsigned int nsubsteps,
+                                               double * dfluxes, double * dfluxes_agg) {
     unsigned int ierr, model;
     unsigned int nfxo = QUASOARE_GRAD_NFLUXES_OUTPUTS;
+    unsigned int ntimesteps_agg = ntimesteps / nsubsteps;
     unsigned long idx_dfx, idx_dfx_agg;
 
     for(model = 0; model < nmodels; model ++){
-        idx_dfx_agg = model * ntimesteps * nreservoirs * nvariables * nfxo;
+        idx_dfx_agg = model * ntimesteps_agg * nreservoirs * nvariables * nfxo;
         idx_dfx = idx_dfx_agg * nsubsteps;
         ierr = c_grad_aggregate_dfluxes(ntimesteps, nvariables, nreservoirs, nsubsteps,
-                                        &(dfluxes[idx_dfx]), &(dfluxes_agg[idx_dfx_agg]));
+                                        &(dfluxes[idx_dfx]),
+                                        &(dfluxes_agg[idx_dfx_agg]));
     }
     return ierr;
 }
@@ -1038,10 +1042,12 @@ unsigned int c_grad_model_parallel(int nalphas,
     unsigned int model;
     unsigned long idx_reservoir;
     unsigned long idx_Qstars;
+    unsigned long idx_flux_scalings;
     unsigned long idx_x, idx_dx, idx_flx, idx_dflx;
 
     for(model = 0; model < nmodels; model ++) {
         idx_reservoir = model * nreservoirs;
+        idx_flux_scalings = idx_reservoir * QUASOARE_GRAD_NFLUXES_INPUTS;
 
         idx_x = idx_reservoir * nval;
         idx_Qstars = idx_x * QUASOARE_GRAD_NFLUXES_POTENTIAL;
@@ -1053,20 +1059,20 @@ unsigned int c_grad_model_parallel(int nalphas,
                             nval, errors, enforce_potential_inflow_pos,
                             alphas,
                             timestep,
-                            &gammas[idx_reservoir],
+                            &(gammas[idx_reservoir]),
                             input_mapping,
                             input_mapping_weights,
-                            flux_scalings,
-                            &x0[idx_reservoir],
+                            &(flux_scalings[idx_flux_scalings]),
+                            &(x0[idx_reservoir]),
                             variables_reservoir_id,
                             variables_type_id,
-                            &Qstars[idx_Qstars],
+                            &(Qstars[idx_Qstars]),
                             dQstars_ext,
                             coefs_linear,
-                            &x[idx_x],
-                            &dx[idx_dx],
-                            &fluxes[idx_flx],
-                            &dfluxes[idx_dflx]);
+                            &(x[idx_x]),
+                            &(dx[idx_dx]),
+                            &(fluxes[idx_flx]),
+                            &(dfluxes[idx_dflx]));
 
         if(ierr > 0 && errors == 1)
             return ierr;

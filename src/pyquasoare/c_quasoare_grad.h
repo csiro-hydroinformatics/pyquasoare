@@ -59,7 +59,6 @@ unsigned int c_grad_aggregate_dfluxes_parallel(unsigned int nmodels,
                                                unsigned int nsubsteps,
                                                double * dfluxes, double * dfluxes_agg);
 
-
 unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned int nvariables,
                               unsigned int enforce_potential_inflow_pos,
                               double *alphas,

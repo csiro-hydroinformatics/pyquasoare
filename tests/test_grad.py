@@ -1828,3 +1828,73 @@ def test_elasticity(siteid, X1, X3, allclose):
     assert allclose(elast, expected)
 
 
+@pytest.mark.parametrize("nsubsteps", [1, 10])
+def test_grad_parallel(nsubsteps, allclose):
+    nval = 10000
+    # Basic GR3J model with no intercept
+    mod0 = gradients.MultiReservoirModel(2,
+                                         nalphas=50,
+                                         nsubsteps=nsubsteps,
+                                         errors="raise")
+    mod0.add_link_outflow(0, 1)
+    mod0.set_coefs_linear(0, "gr4jprod")
+    mod0.set_coefs_linear(1, "gr4jroute")
+    vspecs = [[rid, vid] for rid in [0, 1] for vid in [0, 1, 2]]
+    mod0.allocate(nval,
+                 timestep_agg=1,
+                 variables_specs=vspecs)
+    inputs = np.ones((nval, 2))
+    inputs[:, 0] = np.nan
+    mod0.set_Qstars_one_reservoir(1, inputs)
+
+    # Set two independent models
+    mods = []
+    hclims = []
+    for isite, siteid in enumerate(SITEIDS):
+        hclim = data_reader.get_data(siteid, "daily", 0)
+        hclim = hclim.interpolate().iloc[-nval:, :2].values
+        hclim[:, 1] *= -1
+        hclims.append(hclim)
+        mod = mod0.clone()
+        mod.set_Qstars_one_reservoir(0, hclim)
+
+        # Parameters
+        mod.gammas = [400, 50] if isite == 0 else [200, 10]
+        mod.flux_scalings[1, 1] = -2. if isite == 0 else -5
+
+        # Run and store model outputs
+        mod.run()
+        mod.aggregate()
+        mods.append(mod)
+
+    # Set parallel model
+    modp = gradients.MultiReservoirModelParallel(2, 2,
+                                                 nalphas=50,
+                                                 nsubsteps=nsubsteps,
+                                                 errors="raise")
+    modp.add_link_outflow(0, 1)
+    modp.set_coefs_linear(0, "gr4jprod")
+    modp.set_coefs_linear(1, "gr4jroute")
+    modp.allocate(nval,
+                  timestep_agg=1,
+                  variables_specs=vspecs)
+    nsites = len(SITEIDS)
+    for isite in range(nsites):
+        m = mods[isite]
+        modp.gammas[isite, :] = m.gammas
+        modp.flux_scalings[isite, :] = m.flux_scalings
+        for ires in range(2):
+            modp.set_Qstars_one_reservoir(isite, 0, hclims[isite])
+            modp.set_Qstars_one_reservoir(isite, 1, inputs)
+
+    # Run model
+    modp.run()
+    modp.aggregate()
+
+    # Compare with one-site models
+    for isite in range(nsites):
+        assert allclose(modp.fluxes[isite], mods[isite].fluxes)
+        assert allclose(modp.dfluxes[isite], mods[isite].dfluxes)
+
+        assert allclose(modp.fluxes_agg[isite], mods[isite].fluxes_agg)
+        assert allclose(modp.dfluxes_agg[isite], mods[isite].dfluxes_agg)

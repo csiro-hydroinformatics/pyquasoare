@@ -190,15 +190,15 @@ def grad_aggregate_fluxes(unsigned int nsubsteps,
     if fluxes.shape[2] != NFLUXES_OUTPUTS:
         raise ValueError("fluxes.shape[2] != NFLUXES_OUTPUTS")
 
-    if fluxes_agg.shape[2] != NFLUXES_OUTPUTS:
-        raise ValueError("fluxes_agg.shape[2] != NFLUXES_OUTPUTS")
-
     if fluxes_agg.shape[0] * nsubsteps != ntimesteps:
         raise ValueError("Number of timesteps in fluxes and fluxes_agg" \
                          + " incompatible with nsubsteps")
 
     if fluxes_agg.shape[1] != nreservoirs:
         raise ValueError("fluxes_agg.shape[1] != nreservoirs")
+
+    if fluxes_agg.shape[2] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes_agg.shape[2] != NFLUXES_OUTPUTS")
 
     return c_grad_aggregate_fluxes(ntimesteps, nreservoirs, nsubsteps,
                                    <double*> np.PyArray_DATA(fluxes),
@@ -214,9 +214,6 @@ def grad_aggregate_dfluxes(unsigned int nsubsteps,
     if dfluxes.shape[3] != NFLUXES_OUTPUTS:
         raise ValueError("dfluxes.shape[3] != NFLUXES_OUTPUTS")
 
-    if dfluxes_agg.shape[3] != NFLUXES_OUTPUTS:
-        raise ValueError("dfluxes_agg.shape[3] != NFLUXES_OUTPUTS")
-
     if dfluxes_agg.shape[0] * nsubsteps != ntimesteps:
         raise ValueError("Number of timesteps in dfluxes and dfluxes_agg" \
                          + " incompatible with nsubsteps")
@@ -226,6 +223,9 @@ def grad_aggregate_dfluxes(unsigned int nsubsteps,
 
     if dfluxes_agg.shape[2] != nreservoirs:
         raise ValueError("dfluxes_agg.shape[2] != nreservoirs")
+
+    if dfluxes_agg.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("dfluxes_agg.shape[3] != NFLUXES_OUTPUTS")
 
     return c_grad_aggregate_dfluxes(ntimesteps, nvariables, nreservoirs, nsubsteps,
                                     <double*> np.PyArray_DATA(dfluxes),
@@ -242,9 +242,6 @@ def grad_aggregate_fluxes_parallel(unsigned int nsubsteps,
     if fluxes.shape[3] != NFLUXES_OUTPUTS:
         raise ValueError("fluxes.shape[3] != NFLUXES_OUTPUTS")
 
-    if fluxes_agg.shape[3] != NFLUXES_OUTPUTS:
-        raise ValueError("fluxes_agg.shape[3] != NFLUXES_OUTPUTS")
-
     if fluxes_agg.shape[0] != nmodels:
         raise ValueError("fluxes_agg.shape[0] != nmodels")
 
@@ -254,6 +251,9 @@ def grad_aggregate_fluxes_parallel(unsigned int nsubsteps,
 
     if fluxes_agg.shape[2] != nreservoirs:
         raise ValueError("fluxes_agg.shape[1] != nreservoirs")
+
+    if fluxes_agg.shape[3] != NFLUXES_OUTPUTS:
+        raise ValueError("fluxes_agg.shape[3] != NFLUXES_OUTPUTS")
 
     return c_grad_aggregate_fluxes_parallel(nmodels, ntimesteps, nreservoirs, nsubsteps,
                                             <double*> np.PyArray_DATA(fluxes),
@@ -565,11 +565,11 @@ def grad_model_parallel(int errors,
                unsigned int enforce_potential_inflow_pos,
                np.ndarray[double, ndim=2, mode='c'] alphas not None,
                double timestep,
-               np.ndarray[double, ndim=1, mode='c'] gammas not None,
+               np.ndarray[double, ndim=2, mode='c'] gammas not None,
                np.ndarray[int, ndim=3, mode='c'] input_mapping not None,
                np.ndarray[double, ndim=2, mode='c'] input_mapping_weights not None,
-               np.ndarray[double, ndim=2, mode='c'] flux_scalings not None,
-               np.ndarray[double, ndim=1, mode='c'] x0 not None,
+               np.ndarray[double, ndim=3, mode='c'] flux_scalings not None,
+               np.ndarray[double, ndim=2, mode='c'] x0 not None,
                np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
                np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                np.ndarray[double, ndim=4, mode='c'] Qstars not None,
@@ -600,17 +600,26 @@ def grad_model_parallel(int errors,
                             nreservoirs)
     check_dim_coefs_linear(coefs_linear, nalphas, nreservoirs, True)
 
-    if gammas.shape[0] != nreservoirs * nmodels:
-        raise ValueError("gammas.shape[0] != nreservoirs * nmodels")
+    if gammas.shape[0] != nmodels:
+        raise ValueError("gammas.shape[0] != nmodels")
 
-    if x0.shape[0] != nreservoirs * nmodels:
-        raise ValueError("x0.shape[0] != nreservoirs * nmodels")
+    if gammas.shape[1] != nreservoirs:
+        raise ValueError("gammas.shape[1] != nreservoirs")
 
-    if flux_scalings.shape[0] != nreservoirs:
-        raise ValueError("flux_scalings.shape[0] != nreservoirs")
+    if x0.shape[0] != nmodels:
+        raise ValueError("x0.shape[0] != nmodels")
 
-    if flux_scalings.shape[1] != NFLUXES_INPUTS:
-        raise ValueError("flux_scalings.shape[1] != NFLUXES_INPUTS")
+    if x0.shape[1] != nreservoirs:
+        raise ValueError("x0.shape[1] != nreservoirs")
+
+    if flux_scalings.shape[0] != nmodels:
+        raise ValueError("flux_scalings.shape[0] != nmodels")
+
+    if flux_scalings.shape[1] != nreservoirs:
+        raise ValueError("flux_scalings.shape[1] != nreservoirs")
+
+    if flux_scalings.shape[2] != NFLUXES_INPUTS:
+        raise ValueError("flux_scalings.shape[2] != NFLUXES_INPUTS")
 
     if variables_reservoir_id.shape[0] != nvariables:
         raise ValueError("variables_reservoir_id.shape[0] != nvariables")
