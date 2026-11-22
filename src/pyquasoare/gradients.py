@@ -555,19 +555,6 @@ class GradNetwork:
     def freeze(self):
         self._frozen = True
 
-    def __str__(self):
-        txt = ""
-        for i, link in enumerate(self.links):
-            txt += f"\nLink #{i}: {link}"
-        return txt[1:]
-
-    @property
-    def frozen(self):
-        return self._frozen
-
-    def freeze(self):
-        self._frozen = True
-
     def clone(self):
         netw = GradNetwork(self.nreservoirs)
         for lk in self.links:
@@ -1436,16 +1423,17 @@ class MultiReservoirModelParallel:
         self._niter = np.zeros((nmod, ntimesteps, nres), dtype=np.int32)
 
     def clone(self):
-        mclp = MultiReservoirModel(self.nmodels,
-                                   self.nreservoirs,
-                                   self.nalphas,
-                                   self.nsubsteps,
-                                   self.errors)
-        mlcp._mresmod = self._mresmod.clone()
+        mpc = MultiReservoirModelParallel(self.nmodels,
+                                          self.nreservoirs,
+                                          self.nalphas,
+                                          self.nsubsteps,
+                                          self.errors)
+        mpc._mresmod = self._mresmod.clone()
 
         attrns = [
             "_gammas",
             "_Qstars",
+            "_flux_scalings",
             "_x0",
             "_x",
             "_dx",
@@ -1459,9 +1447,9 @@ class MultiReservoirModelParallel:
             value = getattr(self, attrn)
             if hasattr(value, "copy"):
                 value = value.copy()
-            setattr(mcl, attrn, value)
+            setattr(mpc, attrn, value)
 
-        return mclp
+        return mpc
 
     def run(self):
         self.check_allocated()
@@ -1507,7 +1495,6 @@ class MultiReservoirModelParallel:
     def aggregate(self):
         self._mresmod.check_allocated()
 
-        nmod = self.nmodels
         nsub = self.nsubsteps
         nvar = self.nvariables
 
@@ -1524,4 +1511,3 @@ class MultiReservoirModelParallel:
             np.copyto(fx_agg, fx)
             if nvar > 0:
                 np.copyto(dfx_agg, dfx)
-

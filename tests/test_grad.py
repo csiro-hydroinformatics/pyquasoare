@@ -1887,14 +1887,24 @@ def test_grad_parallel(nsubsteps, allclose):
             modp.set_Qstars_one_reservoir(isite, 0, hclims[isite])
             modp.set_Qstars_one_reservoir(isite, 1, inputs)
 
+    # Clone
+    modpc = modp.clone()
+
     # Run model
     modp.run()
     modp.aggregate()
+
+    modpc.run()
+    modpc.aggregate()
 
     # Compare with one-site models
     for isite in range(nsites):
         assert allclose(modp.fluxes[isite], mods[isite].fluxes)
         assert allclose(modp.dfluxes[isite], mods[isite].dfluxes)
-
         assert allclose(modp.fluxes_agg[isite], mods[isite].fluxes_agg)
         assert allclose(modp.dfluxes_agg[isite], mods[isite].dfluxes_agg)
+
+        assert allclose(modpc.fluxes[isite], mods[isite].fluxes)
+        assert allclose(modpc.dfluxes[isite], mods[isite].dfluxes)
+        assert allclose(modpc.fluxes_agg[isite], mods[isite].fluxes_agg)
+        assert allclose(modpc.dfluxes_agg[isite], mods[isite].dfluxes_agg)
