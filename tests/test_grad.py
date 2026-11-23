@@ -1836,6 +1836,52 @@ def test_elasticity(siteid, X1, X3, allclose):
     assert allclose(elast, expected)
 
 
+def test_grad_parallel_allocate(allclose):
+    nsubsteps = 10
+    ncatch = 3
+    nval = 100
+    nres = 2
+    nalphas = 50
+
+    modp = gradients.MultiReservoirModelParallel(ncatch, nres,
+                                                 nalphas=nalphas,
+                                                 nsubsteps=nsubsteps,
+                                                 errors="raise")
+    modp.add_link_outflow(0, 1)
+    modp.set_coefs_linear(0, "gr4jprod")
+    modp.set_coefs_linear(1, "gr4jroute")
+    vspecs = [[rid, vid] for rid in [0, 1] for vid in [0, 1, 2]]
+    modp.allocate(nval,
+                  timestep_agg=1,
+                  variables_specs=vspecs)
+
+    nfxo = gradients.NFLUXES_OUTPUTS
+    nfxp = gradients.NFLUXES_POTENTIAL
+    nvars = len(vspecs)
+    assert modp.fluxes_agg.shape == (ncatch, nval, nres, nfxo)
+    assert modp.fluxes.shape == (ncatch, nval * nsubsteps, nres, nfxo)
+    assert modp.dfluxes_agg.shape == (ncatch, nval, nvars, nres, nfxo)
+    assert modp.dfluxes.shape == (ncatch, nval * nsubsteps, nvars, nres, nfxo)
+    assert modp.Qstars.shape == (ncatch, nval * nsubsteps, nres, nfxp)
+
+    with pytest.raises(ValueError, match="Expected gammas"):
+        modp.gammas = [400, 50, 3]
+
+    modp.gammas = [400, 50]
+    expected = np.repeat([[400, 50]], ncatch, axis=0)
+    assert allclose(modp.gammas, expected)
+
+    for icatch in range(ncatch):
+        Qst = np.random.uniform(0, 10, size=(nval, 2))
+        Qst[:, 1] *= -1
+        modp.set_Qstars_one_reservoir(icatch, 0, Qst)
+        modp.set_Qstars_one_flux(icatch, 1, 1, 1.)
+
+    modp.check_positive_fluxes()
+    modp.run()
+    modp.aggregate()
+
+
 @pytest.mark.parametrize("nsubsteps", [1, 10])
 def test_grad_parallel(nsubsteps, allclose):
     nval = 10000
@@ -1855,14 +1901,24 @@ def test_grad_parallel(nsubsteps, allclose):
     inputs[:, 0] = np.nan
     mod0.set_Qstars_one_reservoir(1, inputs)
 
+    # Set parallel model
+    modp = gradients.MultiReservoirModelParallel(2, 2,
+                                                 nalphas=50,
+                                                 nsubsteps=nsubsteps,
+                                                 errors="raise")
+    modp.add_link_outflow(0, 1)
+    modp.set_coefs_linear(0, "gr4jprod")
+    modp.set_coefs_linear(1, "gr4jroute")
+    modp.allocate(nval,
+                  timestep_agg=1,
+                  variables_specs=vspecs)
+
     # Set two independent models
     mods = []
-    hclims = []
     for isite, siteid in enumerate(SITEIDS):
         hclim = data_reader.get_data(siteid, "daily", 0)
         hclim = hclim.interpolate().iloc[-nval:, :2].values
         hclim[:, 1] *= -1
-        hclims.append(hclim)
 
         mod = mod0.clone()
         mod.set_Qstars_one_reservoir(0, hclim)
@@ -1876,26 +1932,11 @@ def test_grad_parallel(nsubsteps, allclose):
         mod.aggregate()
         mods.append(mod)
 
-    # Set parallel model
-    modp = gradients.MultiReservoirModelParallel(2, 2,
-                                                 nalphas=50,
-                                                 nsubsteps=nsubsteps,
-                                                 errors="raise")
-    modp.add_link_outflow(0, 1)
-    modp.set_coefs_linear(0, "gr4jprod")
-    modp.set_coefs_linear(1, "gr4jroute")
-    modp.allocate(nval,
-                  timestep_agg=1,
-                  variables_specs=vspecs)
-    modp.check_positive_fluxes()
-
-    nsites = len(SITEIDS)
-    for isite in range(nsites):
-        m = mods[isite]
-        modp.gammas[isite, :] = m.gammas
-        modp.flux_scalings[isite, :] = m.flux_scalings
+        # Configure parallel model
+        modp.gammas[isite, :] = mod.gammas
+        modp.flux_scalings[isite, :] = mod.flux_scalings
         for ires in range(2):
-            modp.set_Qstars_one_reservoir(isite, 0, hclims[isite])
+            modp.set_Qstars_one_reservoir(isite, 0, hclim)
             modp.set_Qstars_one_reservoir(isite, 1, inputs)
 
     # Clone
@@ -1909,7 +1950,7 @@ def test_grad_parallel(nsubsteps, allclose):
     modpc.aggregate()
 
     # Compare with one-site models
-    for isite in range(nsites):
+    for isite in range(len(SITEIDS)):
         assert allclose(modp.fluxes[isite], mods[isite].fluxes)
         assert allclose(modp.dfluxes[isite], mods[isite].dfluxes)
         assert allclose(modp.fluxes_agg[isite], mods[isite].fluxes_agg)

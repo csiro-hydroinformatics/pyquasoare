@@ -759,6 +759,10 @@ class MultiReservoirModel:
             raise ValueError(errmsg)
 
     @property
+    def nreservoirs(self):
+        return self.network.nreservoirs
+
+    @property
     def nalphas(self):
         return self._nalphas
 
@@ -767,25 +771,25 @@ class MultiReservoirModel:
         return self._nsubsteps
 
     @property
+    def nvariables(self):
+        return isnone(len(self.variables_reservoir_id),
+                      "variables_reservoir_id")
+
+    @property
     def errors(self):
         return self._errors
+
+    @property
+    def enforce_potential_inflow_pos(self):
+        return self._enforce_potential_inflow_pos
 
     @property
     def network(self):
         return self._network
 
     @property
-    def nreservoirs(self):
-        return self.network.nreservoirs
-
-    @property
     def coefs_linear(self):
         return self._coefs_linear
-
-    @property
-    def nvariables(self):
-        return isnone(len(self.variables_reservoir_id),
-                      "variables_reservoir_id")
 
     @property
     def variables_specs(self):
@@ -1269,6 +1273,10 @@ class MultiReservoirModelParallel:
         return self._mresmod.timestep_agg
 
     @property
+    def enforce_potential_inflow_pos(self):
+        return self._mresmod.enforce_potential_inflow_pos
+
+    @property
     def errors(self):
         return self._mresmod.errors
 
@@ -1279,6 +1287,14 @@ class MultiReservoirModelParallel:
     @property
     def coefs_linear(self):
         return self._mresmod.coefs_linear
+
+    @property
+    def variables_reservoir_id(self):
+        return self._mresmod.variables_reservoir_id
+
+    @property
+    def variables_type_id(self):
+        return self._mresmod.variables_type_id
 
     @property
     def variables_specs(self):
@@ -1334,17 +1350,18 @@ class MultiReservoirModelParallel:
 
     @gammas.setter
     def gammas(self, value):
-        ngammas = self.nreservoirs * self.nmodels
-        if isinstance(value, (float, int)):
-            self._gammas = value * np.ones(ngammas)
-        else:
-            value = np.array(value)
-            if value.shape != (ngammas, ):
-                errmsg = f"Expected gammas of dim ({ngammas},)."\
-                         + f" Got {value.shape}."
-                raise ValueError(errmsg)
+        nres = self.nreservoirs
+        nmod = self.nmodels
+        value = np.array(value)
+        if value.ndim == 1:
+            value = np.repeat(value[None, :], nmod, axis=0)
 
-            self._gammas = value.astype(np.float64)
+        if value.shape != (nmod, nres):
+            errmsg = f"Expected gammas of dim ({nmod}, {nres})."\
+                     + f" Got {value.shape}."
+            raise ValueError(errmsg)
+
+        self._gammas = value.astype(np.float64)
 
     @property
     def x0(self):
@@ -1530,7 +1547,6 @@ class MultiReservoirModelParallel:
 
     def run(self):
         self.check_allocated()
-        mresmod = self._mresmod
 
         # Get input mapping variables and weights
         inpm, inpmw = self.get_input_mapping()
@@ -1554,10 +1570,10 @@ class MultiReservoirModelParallel:
                             input_mapping=inpm,
                             input_mapping_weights=inpmw,
                             x0=self.x0,
-                            variables_reservoir_id=mresmod.variables_reservoir_id,
-                            variables_type_id=mresmod.variables_type_id,
+                            variables_reservoir_id=self.variables_reservoir_id,
+                            variables_type_id=self.variables_type_id,
                             Qstars=self._Qstars,
-                            coefs_linear=mresmod._coefs_linear,
+                            coefs_linear=self.coefs_linear,
                             timestep=self.timestep,
                             flux_scalings=fxs,
                             x=self._x,
@@ -1567,7 +1583,7 @@ class MultiReservoirModelParallel:
                             niter=self._niter,
                             dQstars_ext=self._dQstars_ext,
                             errors=self.errors,
-                            enforce_potential_inflow_pos=mresmod._enforce_potential_inflow_pos)
+                            enforce_potential_inflow_pos=self.enforce_potential_inflow_pos)
 
     def aggregate(self):
         self._mresmod.check_allocated()
