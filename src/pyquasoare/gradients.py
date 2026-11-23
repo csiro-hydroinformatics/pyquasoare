@@ -939,32 +939,48 @@ class MultiReservoirModel:
         ralphas = self.alphas[rid]
         self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
 
-    def set_Qstars(self, Qstars):
-        self.check_allocated()
-        nres = self.nreservoirs
-        if Qstars.shape != (self.ntimesteps_agg, nres, NFLUXES_POTENTIAL):
-            errmsg = "Expected Qstars.shape to be"\
-                     + f" ({self.ntimesteps_agg}, {nres}, {NFLUXES_POTENTIAL}),"\
-                     + f" got {Qstars.shape}."
+    def set_Qstars_one_reservoir(self, reservoir_id, Qstars):
+        if Qstars.ndim != 2:
+            errmsg = "Expected Qstars of dimension 2."
             raise ValueError(errmsg)
 
-        self._Qstars[:] = np.repeat(Qstars, self.nsubsteps, axis=0)
+        nfxp = NFLUXES_POTENTIAL
+        if Qstars.shape[1] != nfxp:
+            errmsg = f"Expected Qstars.shape[1]={nfxp},"\
+                     + f" got {Qstars.shape[1]}."
+            raise ValueError(errmsg)
 
-    def set_Qstars_one_reservoir(self, reservoir_id, Qstars):
+        for flux_id in range(nfxp):
+            self.set_Qstars_one_flux(reservoir_id, flux_id,
+                                     Qstars[:, flux_id])
+
+    def set_Qstars_one_flux(self, reservoir_id, flux_id, Qstars):
         self.check_allocated()
+
         if reservoir_id < 0 or reservoir_id >= self.nreservoirs:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
             raise ValueError(errmsg)
 
-        if Qstars.shape != (self.ntimesteps_agg, NFLUXES_POTENTIAL):
-            errmsg = "Expected Qstars.shape to be"\
-                     + f" ({self.ntimesteps_agg}, {NFLUXES_POTENTIAL}),"\
-                     + f" got {Qstars.shape}."
+        nfxp = NFLUXES_POTENTIAL
+        if flux_id < 0 or flux_id >= nfxp:
+            errmsg = f"Expected flux_id in [0, {nfxp}[."
             raise ValueError(errmsg)
 
-        self._Qstars[:, reservoir_id, :] = np.repeat(Qstars,
-                                                     self.nsubsteps,
-                                                     axis=0)
+        if np.isscalar(Qstars):
+            self._Qstars[:, reservoir_id, flux_id] = Qstars
+        else:
+            if len(Qstars) != self.ntimesteps_agg:
+                errmsg = f"Expected len(Qstars) to be {nfxp},"\
+                         + f" got {Qstars.shape}."
+                raise ValueError(errmsg)
+
+            if Qstars.ndim == 1:
+                self._Qstars[:, reservoir_id, flux_id] = np.repeat(Qstars,
+                                                                   self.nsubsteps)
+            else:
+                errmsg = "Expected Qstars of dimension 1."
+                raise ValueError(errmsg)
+
 
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
@@ -1142,6 +1158,34 @@ class MultiReservoirModel:
             np.copyto(fx_agg, fx)
             if nvar > 0:
                 np.copyto(dfx_agg, dfx)
+
+    def plot_fluxes(self, reservoir_id, ax, plot_alphas=True,
+                    dx_extrapolation=0.2):
+        alphas = self.alphas[reservoir_id]
+        coefs = np.zeros((3, len(alphas) - 1, 3))
+        coefs[:, :, 1:] = self.coefs_linear[reservoir_id]
+        a0, a1 = alphas[[0, -1]]
+        xx1 = np.linspace(a0, a1, 200)
+        dx = dx_extrapolation
+        xx2 = np.linspace(a0 - dx, a1 + dx, 200)
+        nms = ["Inflow", "Demand", "Drainage"]
+        for fx in range(3):
+            nm = nms[fx]
+            lab = f"Input flux #{fx} ({nm})"
+            yy1 = approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx1)
+            ax.plot(xx1, yy1, label=lab, lw=2)
+            col = ax.get_lines()[-1].get_color()
+
+            if dx > 0:
+                yy2 = approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx2)
+                isin = (xx2 > a0) & (xx2 < a1)
+                yy2[isin] = np.nan
+                ax.plot(xx2, yy2, "--", label=f"{lab} - extrapolation",
+                        color=col)
+
+            if plot_alphas:
+                y = approx.quad_fun_from_matrix(alphas, coefs[[fx]], alphas)
+                ax.plot(alphas, y, "+", color=col)
 
 
 class MultiReservoirModelParallel:
@@ -1358,20 +1402,24 @@ class MultiReservoirModelParallel:
     def set_coefs_linear(self, reservoir_id, flux_functions):
         self._mresmod.set_coefs_linear(reservoir_id, flux_functions)
 
-    def set_Qstars(self, Qstars):
-        self.check_allocated()
-        nmod = self.nmodels
-        nres = self.nreservoirs
-        if Qstars.shape != (nmod, self.ntimesteps_agg, nres, NFLUXES_POTENTIAL):
-            errmsg = "Expected Qstars.shape to be"\
-                     + f" ({nmod}, {self.ntimesteps_agg}, {nres}, {NFLUXES_POTENTIAL}),"\
-                     + f" got {Qstars.shape}."
+    def set_Qstars_one_reservoir(self, model_id, reservoir_id, Qstars):
+        if Qstars.ndim != 2:
+            errmsg = "Expected Qstars of dimension 2."
             raise ValueError(errmsg)
 
-        self._Qstars[:] = np.repeat(Qstars, self.nsubsteps, axis=1)
+        nfxp = NFLUXES_POTENTIAL
+        if Qstars.shape[1] != nfxp:
+            errmsg = f"Expected Qstars.shape[1]={nfxp},"\
+                     + f" got {Qstars.shape[1]}."
+            raise ValueError(errmsg)
 
-    def set_Qstars_one_reservoir(self, model_id, reservoir_id, Qstars):
+        for flux_id in range(nfxp):
+            self.set_Qstars_one_flux(model_id, reservoir_id, flux_id,
+                                     Qstars[:, flux_id])
+
+    def set_Qstars_one_flux(self, model_id, reservoir_id, flux_id, Qstars):
         self.check_allocated()
+
         if model_id < 0 or model_id >= self.nmodels:
             errmsg = f"Expected model_id in [0, {self.nmodels}[."
             raise ValueError(errmsg)
@@ -1380,15 +1428,21 @@ class MultiReservoirModelParallel:
             errmsg = f"Expected reservoir_id in [0, {self.nreservoirs}[."
             raise ValueError(errmsg)
 
-        if Qstars.shape != (self.ntimesteps_agg, NFLUXES_POTENTIAL):
-            errmsg = "Expected Qstars.shape to be"\
-                     + f" ({self.ntimesteps_agg}, {NFLUXES_POTENTIAL}),"\
-                     + f" got {Qstars.shape}."
+        nfxp = NFLUXES_POTENTIAL
+        if flux_id < 0 or flux_id >= nfxp:
+            errmsg = f"Expected flux_id in [0, {nfxp}[."
             raise ValueError(errmsg)
 
-        self._Qstars[model_id, :, reservoir_id, :] = np.repeat(Qstars,
-                                                               self.nsubsteps,
-                                                               axis=0)
+        if np.isscalar(Qstars):
+            self._Qstars[model_id, :, reservoir_id, flux_id] = Qstars
+        else:
+            if Qstars.ndim == 1:
+                self._Qstars[model_id, :, reservoir_id, flux_id] = np.repeat(Qstars,
+                                                                             self.nsubsteps)
+            else:
+                errmsg = "Expected Qstars of dimension 1."
+                raise ValueError(errmsg)
+
     def allocate(self, ntimesteps_agg, variables_specs=None,
                  timestep_agg=1.):
         # Dummy allocation of mresmod with a single time step

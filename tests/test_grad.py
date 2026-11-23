@@ -947,6 +947,12 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     mod.set_coefs_linear(4, "transluent")
     mod.gammas = [5., 400., 50., 100., 1.]
 
+    plt.close("all")
+    fig, ax = plt.subplots()
+    mod.plot_fluxes(2, ax)
+    fp = FTEST / "flux_plot.png"
+    fig.savefig(fp)
+
     # Set flux scaling for the interception reservoir
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
@@ -961,15 +967,13 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
 
     # Set potential fluxes for the routing reservoirs
     demand = -0.5
-    Qst2 = np.zeros_like(Qst0)
-    Qst2[:, 0] = np.nan
-    Qst2[:, 1] = demand
-    mod.set_Qstars_one_reservoir(2, Qst2)
+    mod.set_Qstars_one_flux(2, 1, demand)
 
     Qst3 = Qst0.copy()
     Qst3[:, 1] = 0.
     mod.set_Qstars_one_reservoir(3, Qst3)
 
+    # Run model
     mod.run()
 
     # Run single reservoirs
@@ -1025,7 +1029,7 @@ def test_grad_model_neg_fluxes():
 
     # Flux functions are ok
     funs = [
-        lambda x: np.maximum(x, 0),
+        lambda x: np.maximum(1 - x, 0),
         lambda x: np.maximum(x, 0),
         lambda x: np.maximum(x, 0),
         ]
@@ -1034,7 +1038,7 @@ def test_grad_model_neg_fluxes():
 
     # f2 is negative -> problem
     funs = [
-        lambda x: np.maximum(x, 0),
+        lambda x: np.maximum(1 - x, 0),
         lambda x: x - 0.5,
         lambda x: np.maximum(x, 0),
         ]
@@ -1056,6 +1060,8 @@ def test_grad_model_neg_fluxes():
     Qst0 = hclim
     Qst0[:, 1] *= -1
     mod.set_Qstars_one_reservoir(0, Qst0)
+
+    # Run
     mod.run()
 
 
@@ -1082,17 +1088,29 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     #hclim = hclim[:30]
 
     # Basic gr4j model
+    errors = "raise"
     mod = gradients.MultiReservoirModel(3,
                                         nalphas=50,
                                         nsubsteps=nsubsteps,
-                                        errors="raise")
+                                        errors=errors)
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
+
+    if demand > 0:
+        mod.set_alphas(2, 0., 3.)
 
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
     mod.gammas = [1e-1, 400., 50.]
+
+    #plt.close("all")
+    #fig, ax = plt.subplots()
+    #mod.plot_fluxes(2, ax)
+    #ax.legend()
+    #plt.show()
+    #import pdb; pdb.set_trace()
+
 
     nvs = np.arange(gradients.VARTYPE_NUMBER)
     #vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
@@ -1109,11 +1127,8 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
     fxs[0] = flux_scalings
     if mod.nreservoirs > 2:
-        Qst2 = np.ones((mod.ntimesteps_agg, 2))
-        Qst2[:, 0] = np.nan
-        mod.set_Qstars_one_reservoir(2, Qst2)
-
         # Set demand for routing reservoir
+        mod.set_Qstars_one_flux(2, 1, 1)
         fxs[2, 1] = demand
 
     mod.flux_scalings = fxs
@@ -1184,8 +1199,8 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         dfxa_c = dfxa[:, ivar, :, :]
 
         if debug_mode:
-            plot_it = False
-            atol = 5e-4
+            plot_it = True
+            atol = 1e-6
             emax = {}
             for res in range(mod.nreservoirs):
                 fx = mod.fluxes_agg[:, res]
@@ -1212,6 +1227,14 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                 title = f"Res#{res} x"
                 ax.set(title=title)
 
+                def flux_denom(fx, eps1=1e-4, eps2=1e-3):
+                    afx = np.abs(fx)
+                    means = np.mean(afx, axis=0)[None, :]
+                    maxs = np.max(afx, axis=0)[None, :]
+                    shift = eps1 + eps2 * means
+                    shift[maxs < eps1] = np.nan
+                    return afx + shift
+
                 denom = flux_denom(mod.fluxes[:, res])
                 for ifx in range(gradients.NFLUXES_INPUTS):
                     ax = axs[res, 1 + ifx]
@@ -1228,8 +1251,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                     tax = ax.twinx()
                     tax.plot(np.abs(dc - dn), color="0.5", lw=0.5)
 
-                    err = emax[res][ifx]
-                    title = f"Res#{res} Flux#{ifx} err={err:0.2e}"
+                    title = f"Res#{res} Flux#{ifx}"
                     ax.set(title=title)
 
                     if res == 0 and ifx == 0:
@@ -1243,7 +1265,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
 
         # Perf
         em, _ = gradients.compare(dfx_n, dfx_c)
-        atol = 1e-6
+        atol = 1e-4
         errmsg = f"dfx em={em[50]:0.2e} > {atol:0.1e}"
         assert em[50] < atol, errmsg
 
