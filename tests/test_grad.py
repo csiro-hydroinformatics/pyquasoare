@@ -1040,16 +1040,24 @@ def test_grad_model_neg_fluxes():
     mod.set_coefs_linear(0, funs)
     mod.check_positive_fluxes()
 
-    # f2 is negative -> problem
+    # f1 is negative -> problem
     funs = [
-        lambda x: np.maximum(1 - x, 0),
-        lambda x: x - 0.5,
+        lambda x: np.maximum(1 - x, 0) - 0.5,
+        lambda x: np.maximum(x, 0),
         lambda x: np.maximum(x, 0),
         ]
     mod.set_coefs_linear(0, funs)
-    err = "Negative flux values in reservoir #0 - flux 1"
+    err = "Negative flux values in reservoir #0 - flux 0"
     with pytest.raises(ValueError, match=err):
         mod.check_positive_fluxes()
+
+    # f2 is negative -> not a problem
+    funs = [
+        lambda x: np.maximum(1 - x, 0),
+        lambda x: np.maximum(x, 0) - 0.5,
+        lambda x: np.maximum(x, 0),
+        ]
+    mod.set_coefs_linear(0, funs)
 
     # Should ok after fix
     mod.fix_negative_fluxes()
@@ -1849,6 +1857,7 @@ def test_grad_parallel_allocate(allclose):
                                                  errors="raise")
     modp.add_link_outflow(0, 1)
     modp.set_coefs_linear(0, "gr4jprod")
+    funs = gradients.FLUX_FUNCTIONS["gr4jroute"]
     modp.set_coefs_linear(1, "gr4jroute")
     vspecs = [[rid, vid] for rid in [0, 1] for vid in [0, 1, 2]]
     modp.allocate(nval,
@@ -1878,6 +1887,7 @@ def test_grad_parallel_allocate(allclose):
         modp.set_Qstars_one_flux(icatch, 1, 1, 1.)
 
     modp.check_positive_fluxes()
+    modp.fix_negative_fluxes()
     modp.run()
     modp.aggregate()
 

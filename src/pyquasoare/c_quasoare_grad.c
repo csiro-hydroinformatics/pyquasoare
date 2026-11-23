@@ -326,8 +326,9 @@ unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned in
             sij = coefs_linear[idx_c];        // Slope
             mij = coefs_linear[idx_c + 1];    // Intercept
 
-            /* All flux functions are assumed positive */
-            if(1 - extrapolating &&
+            /* All flux functions are assumed positive except demand
+             * which can oscillate between pos and neg */
+            if(1 - extrapolating && (inp != QUASOARE_GRAD_IFLUX_DEMAND) &&
                     (mij + sij * alpha0 < 0 || mij + sij * alpha1 < 0))
                 return QUASOARE_NEGATIVE_FLUX_FUNCTION;
 

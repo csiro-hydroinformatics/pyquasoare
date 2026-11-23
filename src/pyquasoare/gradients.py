@@ -1079,7 +1079,9 @@ class MultiReservoirModel:
         for res in range(self.nreservoirs):
             alphas = self.alphas[res]
 
-            for iflux in range(3):
+            # Do not check demand flux which
+            # can oscillate between pos and neg
+            for iflux in [0, 2]:
                 coefs = self.coefs_linear[res, iflux]
                 y = coefs[:, 0] * alphas[:-1] + coefs[:, 1]
                 if y.min() < 0:
@@ -1096,7 +1098,9 @@ class MultiReservoirModel:
             alphas = self.alphas[res]
             da[:] = np.diff(alphas)
 
-            for iflux in range(3):
+            # Do not check demand flux which
+            # can oscillate between pos and neg
+            for iflux in [0, 2]:
                 coefs = self.coefs_linear[res, iflux]
                 y[:-1] = coefs[:, 0] * alphas[:-1] + coefs[:, 1]
                 y[-1] = coefs[-1, 0] * alphas[-1] + coefs[-1, 1]
@@ -1543,7 +1547,7 @@ class MultiReservoirModelParallel:
         self._mresmod.check_positive_fluxes()
 
     def fix_negative_fluxes(self):
-        self._mresmod.fix_positive_fluxes()
+        self._mresmod.fix_negative_fluxes()
 
     def run(self):
         self.check_allocated()
