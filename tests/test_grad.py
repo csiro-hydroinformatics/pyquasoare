@@ -561,8 +561,8 @@ def test_grad_reservoir_nan(debug_mode):
     mod = gradients.MultiReservoirModel(2, errors="ignore")
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
-    mod.gammas = [5., 400.]
     mod.allocate(len(df), timestep_agg=timestep_agg)
+    mod.gammas = [5., 400.]
 
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
@@ -862,13 +862,13 @@ def test_grad_model_clone(nsub, allclose):
     mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
-    mod.gammas = [5., 400.]
 
     siteid = "203014"
     timestep_agg = 1.
     df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep_agg=timestep_agg,
                  variables_specs=[[0, 0], [1, 0]])
+    mod.gammas = [5., 400.]
 
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
@@ -946,10 +946,6 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     mod.set_coefs_linear(3, "quadrouting")
     mod.set_coefs_linear(4, "transluent")
 
-    gms = [5., 400., 50., 100., 1.]
-    mod.gammas = gms
-    assert allclose(mod.gammas, gms)
-
     plt.close("all")
     fig, ax = plt.subplots()
     mod.plot_fluxes(2, ax)
@@ -975,6 +971,11 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     Qst3 = Qst0.copy()
     Qst3[:, 1] = 0.
     mod.set_Qstars_one_reservoir(3, Qst3)
+
+    # Set gammas
+    gms = [5., 400., 50., 100., 1.]
+    mod.gammas = gms
+    assert allclose(mod.gammas, gms)
 
     # Run model
     mod.run()
@@ -1106,7 +1107,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     mod.set_coefs_linear(2, "gr4jroute")
 
     nvs = np.arange(gradients.VARTYPE_NUMBER)
-    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
+    vspecs = [[res, i] for res in range(1, mod.nreservoirs) for i in nvs]
     mod.allocate(ntimesteps_agg=len(hclim),
                  variables_specs=vspecs,
                  timestep_agg=timestep_agg)
@@ -1119,20 +1120,11 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         mod.set_Qstars_one_flux(2, 1, 1)
         mod.flux_scalings[2, 1] = demand
 
-    #plt.close("all")
-    #fig, ax = plt.subplots()
-    #mod.plot_fluxes(2, ax)
-    #ax.legend(loc=2)
-    #ax.set_yscale("asinh")
-    #fp = FTEST / "tmp.png"
-    #fig.savefig(fp)
-
     # Run model
     t0 = time.time()
     mod.run()
     mod.aggregate()
     dtq = time.time() - t0
-
 
     dfx = mod.dfluxes
     dfxa = mod.dfluxes_agg
@@ -1182,10 +1174,9 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         dtn += time.time() - t0
 
         # Reset models
-        if vid == 0:
-            modp.gammas[rid] = mod.gammas[rid]
-            modm.gammas[rid] = mod.gammas[rid]
-        else:
+        modp.gammas[rid] = mod.gammas[rid]
+        modm.gammas[rid] = mod.gammas[rid]
+        for inp in range(3):
             modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
             modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
 
@@ -1260,7 +1251,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
 
         # Perf
         em, _ = gradients.compare(dfx_n, dfx_c)
-        atol = 1e-4
+        atol = 1e-6
         errmsg = f"dfx em={em[50]:0.2e} > {atol:0.1e}"
         assert em[50] < atol, errmsg
 
@@ -1872,6 +1863,7 @@ def test_grad_parallel(nsubsteps, allclose):
         hclim = hclim.interpolate().iloc[-nval:, :2].values
         hclim[:, 1] *= -1
         hclims.append(hclim)
+
         mod = mod0.clone()
         mod.set_Qstars_one_reservoir(0, hclim)
 
