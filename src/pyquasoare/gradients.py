@@ -1522,6 +1522,12 @@ class MultiReservoirModelParallel:
 
         return mpc
 
+    def check_positive_fluxes(self):
+        self._mresmod.check_positive_fluxes()
+
+    def fix_negative_fluxes(self):
+        self._mresmod.fix_positive_fluxes()
+
     def run(self):
         self.check_allocated()
         mresmod = self._mresmod

@@ -1887,6 +1887,8 @@ def test_grad_parallel(nsubsteps, allclose):
     modp.allocate(nval,
                   timestep_agg=1,
                   variables_specs=vspecs)
+    modp.check_positive_fluxes()
+
     nsites = len(SITEIDS)
     for isite in range(nsites):
         m = mods[isite]
