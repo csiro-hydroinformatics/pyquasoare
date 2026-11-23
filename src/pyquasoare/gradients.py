@@ -55,6 +55,12 @@ FLUX_FUNCTIONS = {
         #       not the GR4J behaviour.
         #       TODO: add a version of this reservoir with bounded
         #       demand when > 0
+        #
+        #       Could use a cap function such as
+        #       h(x) = (x - sqrt(1e-2 + x^2)) / 2 + 1
+        #       and set demand as
+        #       d(x) = h(d0(x) - 1)
+        #       where d0 is the current demand function
         lambda x: 0.9 * np.ones_like(x),
         lambda x: np.maximum(x, 0.)**3.5,
         lambda x: np.maximum(x, 0.)**5 / 4
@@ -940,6 +946,7 @@ class MultiReservoirModel:
         self._coefs_linear[rid] = lin_coefficient_matrix(flux_functions, ralphas)
 
     def set_Qstars_one_reservoir(self, reservoir_id, Qstars):
+        Qstars = np.array(Qstars)
         if Qstars.ndim != 2:
             errmsg = "Expected Qstars of dimension 2."
             raise ValueError(errmsg)
@@ -969,6 +976,7 @@ class MultiReservoirModel:
         if np.isscalar(Qstars):
             self._Qstars[:, reservoir_id, flux_id] = Qstars
         else:
+            Qstars = np.array(Qstars)
             if len(Qstars) != self.ntimesteps_agg:
                 errmsg = f"Expected len(Qstars) to be {nfxp},"\
                          + f" got {Qstars.shape}."
@@ -1173,18 +1181,25 @@ class MultiReservoirModel:
             nm = nms[fx]
             lab = f"Input flux #{fx} ({nm})"
             yy1 = approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx1)
+            # Multiply by flux scaling
+            sc = self.flux_scalings[reservoir_id, fx]
+            yy1 *= sc
+
+            # plot function
             ax.plot(xx1, yy1, label=lab, lw=2)
             col = ax.get_lines()[-1].get_color()
 
             if dx > 0:
-                yy2 = approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx2)
+                # Add extrapolation
+                yy2 = sc * approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx2)
                 isin = (xx2 > a0) & (xx2 < a1)
                 yy2[isin] = np.nan
                 ax.plot(xx2, yy2, "--", label=f"{lab} - extrapolation",
                         color=col)
 
             if plot_alphas:
-                y = approx.quad_fun_from_matrix(alphas, coefs[[fx]], alphas)
+                # Add interpolation points
+                y = sc * approx.quad_fun_from_matrix(alphas, coefs[[fx]], alphas)
                 ax.plot(alphas, y, "+", color=col)
 
 
@@ -1403,6 +1418,7 @@ class MultiReservoirModelParallel:
         self._mresmod.set_coefs_linear(reservoir_id, flux_functions)
 
     def set_Qstars_one_reservoir(self, model_id, reservoir_id, Qstars):
+        Qstars = np.array(Qstars)
         if Qstars.ndim != 2:
             errmsg = "Expected Qstars of dimension 2."
             raise ValueError(errmsg)
@@ -1436,6 +1452,7 @@ class MultiReservoirModelParallel:
         if np.isscalar(Qstars):
             self._Qstars[model_id, :, reservoir_id, flux_id] = Qstars
         else:
+            Qstars = np.array(Qstars)
             if Qstars.ndim == 1:
                 self._Qstars[model_id, :, reservoir_id, flux_id] = np.repeat(Qstars,
                                                                              self.nsubsteps)

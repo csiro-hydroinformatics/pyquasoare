@@ -945,7 +945,10 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     mod.set_coefs_linear(2, "gr4jroute")
     mod.set_coefs_linear(3, "quadrouting")
     mod.set_coefs_linear(4, "transluent")
-    mod.gammas = [5., 400., 50., 100., 1.]
+
+    gms = [5., 400., 50., 100., 1.]
+    mod.gammas = gms
+    assert allclose(mod.gammas, gms)
 
     plt.close("all")
     fig, ax = plt.subplots()
@@ -1074,7 +1077,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                             demand, flux_scalings,
                             allclose, debug_mode):
     if debug_mode:
-        noriginal = 200
+        noriginal = 5000
         nrepeat = 1
     else:
         noriginal = int(365.25 * 100)
@@ -1084,11 +1087,10 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     hclim = hclim.interpolate().iloc[:, :2]
     assert hclim.shape == (noriginal, 2)
     hclim = np.tile(hclim, (nrepeat, 1))
-
-    #hclim = hclim[:30]
+    hclim[:, -1] *= -1
 
     # Basic gr4j model
-    errors = "raise"
+    errors = "ignore" if debug_mode else "raise"
     mod = gradients.MultiReservoirModel(3,
                                         nalphas=50,
                                         nsubsteps=nsubsteps,
@@ -1097,47 +1099,40 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     mod.add_link_outflow(1, 2)
 
     if demand > 0:
-        mod.set_alphas(2, 0., 3.)
+        mod.set_alphas(2, 0., 2.)
 
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
-    mod.gammas = [1e-1, 400., 50.]
-
-    #plt.close("all")
-    #fig, ax = plt.subplots()
-    #mod.plot_fluxes(2, ax)
-    #ax.legend()
-    #plt.show()
-    #import pdb; pdb.set_trace()
-
 
     nvs = np.arange(gradients.VARTYPE_NUMBER)
-    #vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
-    vspecs = [[res, i] for res in range(1, mod.nreservoirs) for i in nvs]
+    vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
     mod.allocate(ntimesteps_agg=len(hclim),
                  variables_specs=vspecs,
                  timestep_agg=timestep_agg)
     x0 = 0.5
-    mod.x0 = x0
-    Qst0 = hclim
-    Qst0[:, 1] *= -1
-    mod.set_Qstars_one_reservoir(0, Qst0)
+    mod.set_Qstars_one_reservoir(0, hclim)
+    mod.gammas = [1e-1, 400., 50.]
 
-    fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
-    fxs[0] = flux_scalings
     if mod.nreservoirs > 2:
         # Set demand for routing reservoir
         mod.set_Qstars_one_flux(2, 1, 1)
-        fxs[2, 1] = demand
+        mod.flux_scalings[2, 1] = demand
 
-    mod.flux_scalings = fxs
+    #plt.close("all")
+    #fig, ax = plt.subplots()
+    #mod.plot_fluxes(2, ax)
+    #ax.legend(loc=2)
+    #ax.set_yscale("asinh")
+    #fp = FTEST / "tmp.png"
+    #fig.savefig(fp)
 
     # Run model
     t0 = time.time()
     mod.run()
     mod.aggregate()
     dtq = time.time() - t0
+
 
     dfx = mod.dfluxes
     dfxa = mod.dfluxes_agg
