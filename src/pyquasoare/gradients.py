@@ -1608,3 +1608,8 @@ class MultiReservoirModelParallel:
             np.copyto(fx_agg, fx)
             if nvar > 0:
                 np.copyto(dfx_agg, dfx)
+
+    def plot_fluxes(self, reservoir_id, ax, plot_alphas=True,
+                    dx_extrapolation=0.2):
+        self._mresmod.plot_fluxes(reservoir_id, ax, plot_alphas,
+                                  dx_extrapolation)

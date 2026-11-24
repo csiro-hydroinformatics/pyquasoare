@@ -1891,6 +1891,13 @@ def test_grad_parallel_allocate(allclose):
     modp.run()
     modp.aggregate()
 
+    for ires in range(modp.nreservoirs):
+        plt.close("all")
+        fig, ax = plt.subplots()
+        modp.plot_fluxes(ires, ax)
+        fp = FTEST / "flux_plot.png"
+        fig.savefig(fp)
+
 
 @pytest.mark.parametrize("nsubsteps", [1, 10])
 def test_grad_parallel(nsubsteps, allclose):
