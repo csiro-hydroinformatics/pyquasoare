@@ -213,10 +213,10 @@ def process(config, script_paths, logger, data):
                 set_parameters(config, logger, mod)
             else:
                 mod1 = mods[1]
-                mod.set_Qstars(mod1.Qstars)
                 mod.flux_scalings = mod1.flux_scalings.copy()
                 mod.gammas = mod1.gammas.copy()
                 for res in np.arange(mod.nreservoirs):
+                    mod.set_Qstars_one_reservoir(res, mod1.Qstars[:, res])
                     mod.coefs_linear[res] = mod1.coefs_linear[res]
 
             if irepeat == 0 and nsub == 1:

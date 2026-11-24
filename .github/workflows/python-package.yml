@@ -91,3 +91,7 @@ jobs:
           echo "--- Gradient paper scripts ---"
           uv run --locked python scripts/gradient_paper_2026/gradbench.py -v 1 -t 0 -d
           uv run --locked python scripts/gradient_paper_2026/gradaverage.py -v 1 -t 0 -d
+          uv run --locked python scripts/gradient_paper_2026/figB_reservoir_example.py
+          uv run --locked python scripts/gradient_paper_2026/figC_grad_diag_structure.py
+          uv run --locked python scripts/gradient_paper_2026/figD_flux_averaging.py
+          uv run --locked python scripts/gradient_paper_2026/figG_grad_example.py

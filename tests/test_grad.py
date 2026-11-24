@@ -561,8 +561,8 @@ def test_grad_reservoir_nan(debug_mode):
     mod = gradients.MultiReservoirModel(2, errors="ignore")
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
-    mod.gammas = [5., 400.]
     mod.allocate(len(df), timestep_agg=timestep_agg)
+    mod.gammas = [5., 400.]
 
     Qst0 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values.copy()
     Qst0[:, -1] *= -1
@@ -862,13 +862,13 @@ def test_grad_model_clone(nsub, allclose):
     mod.add_link_bypass_shortfall(0, 1)
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
-    mod.gammas = [5., 400.]
 
     siteid = "203014"
     timestep_agg = 1.
     df = data_reader.get_data(siteid, "daily")
     mod.allocate(len(df), timestep_agg=timestep_agg,
                  variables_specs=[[0, 0], [1, 0]])
+    mod.gammas = [5., 400.]
 
     Qst1 = df.loc[:, ["RAINFALL[mm_day-1]", "PET[mm_day-1]"]].values
     Qst1[:, -1] *= -1
@@ -945,7 +945,14 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
     mod.set_coefs_linear(2, "gr4jroute")
     mod.set_coefs_linear(3, "quadrouting")
     mod.set_coefs_linear(4, "transluent")
-    mod.gammas = [5., 400., 50., 100., 1.]
+
+    plt.close("all")
+    fig, ax = plt.subplots()
+    xx, yy = mod.plot_fluxes(2, ax)
+    assert xx.shape[0] == yy.shape[0]
+    assert yy.shape[1] == 3
+    fp = FTEST / "flux_plot.png"
+    fig.savefig(fp)
 
     # Set flux scaling for the interception reservoir
     fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
@@ -961,15 +968,18 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
 
     # Set potential fluxes for the routing reservoirs
     demand = -0.5
-    Qst2 = np.zeros_like(Qst0)
-    Qst2[:, 0] = np.nan
-    Qst2[:, 1] = demand
-    mod.set_Qstars_one_reservoir(2, Qst2)
+    mod.set_Qstars_one_flux(2, 1, demand)
 
     Qst3 = Qst0.copy()
     Qst3[:, 1] = 0.
     mod.set_Qstars_one_reservoir(3, Qst3)
 
+    # Set gammas
+    gms = [5., 400., 50., 100., 1.]
+    mod.gammas = gms
+    assert allclose(mod.gammas, gms)
+
+    # Run model
     mod.run()
 
     # Run single reservoirs
@@ -1025,23 +1035,31 @@ def test_grad_model_neg_fluxes():
 
     # Flux functions are ok
     funs = [
-        lambda x: np.maximum(x, 0),
+        lambda x: np.maximum(1 - x, 0),
         lambda x: np.maximum(x, 0),
         lambda x: np.maximum(x, 0),
         ]
     mod.set_coefs_linear(0, funs)
     mod.check_positive_fluxes()
 
-    # f2 is negative -> problem
+    # f1 is negative -> problem
     funs = [
+        lambda x: np.maximum(1 - x, 0) - 0.5,
         lambda x: np.maximum(x, 0),
-        lambda x: x - 0.5,
         lambda x: np.maximum(x, 0),
         ]
     mod.set_coefs_linear(0, funs)
-    err = "Negative flux values in reservoir #0 - flux 1"
+    err = "Negative flux values in reservoir #0 - flux 0"
     with pytest.raises(ValueError, match=err):
         mod.check_positive_fluxes()
+
+    # f2 is negative -> not a problem
+    funs = [
+        lambda x: np.maximum(1 - x, 0),
+        lambda x: np.maximum(x, 0) - 0.5,
+        lambda x: np.maximum(x, 0),
+        ]
+    mod.set_coefs_linear(0, funs)
 
     # Should ok after fix
     mod.fix_negative_fluxes()
@@ -1056,6 +1074,8 @@ def test_grad_model_neg_fluxes():
     Qst0 = hclim
     Qst0[:, 1] *= -1
     mod.set_Qstars_one_reservoir(0, Qst0)
+
+    # Run
     mod.run()
 
 
@@ -1068,7 +1088,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                             demand, flux_scalings,
                             allclose, debug_mode):
     if debug_mode:
-        noriginal = 200
+        noriginal = 5000
         nrepeat = 1
     else:
         noriginal = int(365.25 * 100)
@@ -1078,45 +1098,37 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
     hclim = hclim.interpolate().iloc[:, :2]
     assert hclim.shape == (noriginal, 2)
     hclim = np.tile(hclim, (nrepeat, 1))
-
-    #hclim = hclim[:30]
+    hclim[:, -1] *= -1
 
     # Basic gr4j model
+    errors = "ignore" if debug_mode else "raise"
     mod = gradients.MultiReservoirModel(3,
                                         nalphas=50,
                                         nsubsteps=nsubsteps,
-                                        errors="raise")
+                                        errors=errors)
     mod.add_link_bypass_shortfall(0, 1)
     mod.add_link_outflow(1, 2)
+
+    if demand > 0:
+        mod.set_alphas(2, 0., 2.)
 
     mod.set_coefs_linear(0, "openwater")
     mod.set_coefs_linear(1, "gr4jprod")
     mod.set_coefs_linear(2, "gr4jroute")
-    mod.gammas = [1e-1, 400., 50.]
 
     nvs = np.arange(gradients.VARTYPE_NUMBER)
-    #vspecs = [[res, i] for res in range(mod.nreservoirs) for i in nvs]
     vspecs = [[res, i] for res in range(1, mod.nreservoirs) for i in nvs]
     mod.allocate(ntimesteps_agg=len(hclim),
                  variables_specs=vspecs,
                  timestep_agg=timestep_agg)
     x0 = 0.5
-    mod.x0 = x0
-    Qst0 = hclim
-    Qst0[:, 1] *= -1
-    mod.set_Qstars_one_reservoir(0, Qst0)
+    mod.set_Qstars_one_reservoir(0, hclim)
+    mod.gammas = [1e-1, 400., 50.]
 
-    fxs = np.ones((mod.nreservoirs, gradients.NFLUXES_INPUTS))
-    fxs[0] = flux_scalings
     if mod.nreservoirs > 2:
-        Qst2 = np.ones((mod.ntimesteps_agg, 2))
-        Qst2[:, 0] = np.nan
-        mod.set_Qstars_one_reservoir(2, Qst2)
-
         # Set demand for routing reservoir
-        fxs[2, 1] = demand
-
-    mod.flux_scalings = fxs
+        mod.set_Qstars_one_flux(2, 1, 1)
+        mod.flux_scalings[2, 1] = demand
 
     # Run model
     t0 = time.time()
@@ -1172,10 +1184,9 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         dtn += time.time() - t0
 
         # Reset models
-        if vid == 0:
-            modp.gammas[rid] = mod.gammas[rid]
-            modm.gammas[rid] = mod.gammas[rid]
-        else:
+        modp.gammas[rid] = mod.gammas[rid]
+        modm.gammas[rid] = mod.gammas[rid]
+        for inp in range(3):
             modm.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
             modp.flux_scalings[rid, inp] = mod.flux_scalings[rid, inp]
 
@@ -1184,8 +1195,8 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
         dfxa_c = dfxa[:, ivar, :, :]
 
         if debug_mode:
-            plot_it = False
-            atol = 5e-4
+            plot_it = True
+            atol = 1e-6
             emax = {}
             for res in range(mod.nreservoirs):
                 fx = mod.fluxes_agg[:, res]
@@ -1212,6 +1223,14 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                 title = f"Res#{res} x"
                 ax.set(title=title)
 
+                def flux_denom(fx, eps1=1e-4, eps2=1e-3):
+                    afx = np.abs(fx)
+                    means = np.mean(afx, axis=0)[None, :]
+                    maxs = np.max(afx, axis=0)[None, :]
+                    shift = eps1 + eps2 * means
+                    shift[maxs < eps1] = np.nan
+                    return afx + shift
+
                 denom = flux_denom(mod.fluxes[:, res])
                 for ifx in range(gradients.NFLUXES_INPUTS):
                     ax = axs[res, 1 + ifx]
@@ -1228,8 +1247,7 @@ def test_grad_model_tangent(siteid, timestep_agg, nsubsteps,
                     tax = ax.twinx()
                     tax.plot(np.abs(dc - dn), color="0.5", lw=0.5)
 
-                    err = emax[res][ifx]
-                    title = f"Res#{res} Flux#{ifx} err={err:0.2e}"
+                    title = f"Res#{res} Flux#{ifx}"
                     ax.set(title=title)
 
                     if res == 0 and ifx == 0:
@@ -1828,3 +1846,142 @@ def test_elasticity(siteid, X1, X3, allclose):
     assert allclose(elast, expected)
 
 
+def test_grad_parallel_allocate(allclose):
+    nsubsteps = 10
+    ncatch = 3
+    nval = 100
+    nres = 2
+    nalphas = 50
+
+    modp = gradients.MultiReservoirModelParallel(ncatch, nres,
+                                                 nalphas=nalphas,
+                                                 nsubsteps=nsubsteps,
+                                                 errors="raise")
+    modp.add_link_outflow(0, 1)
+    modp.set_coefs_linear(0, "gr4jprod")
+    funs = gradients.FLUX_FUNCTIONS["gr4jroute"]
+    modp.set_coefs_linear(1, "gr4jroute")
+    vspecs = [[rid, vid] for rid in [0, 1] for vid in [0, 1, 2]]
+    modp.allocate(nval,
+                  timestep_agg=1,
+                  variables_specs=vspecs)
+
+    assert modp.gammas.shape == (ncatch, nres)
+    assert modp.flux_scalings.shape == (ncatch, nres, 3)
+
+    v = modp.variables_specs
+    assert len(v) == len(vspecs)
+
+    nfxo = gradients.NFLUXES_OUTPUTS
+    nfxp = gradients.NFLUXES_POTENTIAL
+    nvars = len(vspecs)
+    assert modp.fluxes_agg.shape == (ncatch, nval, nres, nfxo)
+    assert modp.fluxes.shape == (ncatch, nval * nsubsteps, nres, nfxo)
+    assert modp.dfluxes_agg.shape == (ncatch, nval, nvars, nres, nfxo)
+    assert modp.dfluxes.shape == (ncatch, nval * nsubsteps, nvars, nres, nfxo)
+    assert modp.Qstars.shape == (ncatch, nval * nsubsteps, nres, nfxp)
+
+    with pytest.raises(ValueError, match="Expected gammas"):
+        modp.gammas = [400, 50, 3]
+
+    modp.gammas = [400, 50]
+    expected = np.repeat([[400, 50]], ncatch, axis=0)
+    assert allclose(modp.gammas, expected)
+
+    for icatch in range(ncatch):
+        Qst = np.random.uniform(0, 10, size=(nval, 2))
+        Qst[:, 1] *= -1
+        modp.set_Qstars_one_reservoir(icatch, 0, Qst)
+        modp.set_Qstars_one_flux(icatch, 1, 1, 1.)
+
+    modp.check_positive_fluxes()
+    modp.fix_negative_fluxes()
+    modp.run()
+    modp.aggregate()
+
+    for ires in range(modp.nreservoirs):
+        plt.close("all")
+        fig, ax = plt.subplots()
+        modp.plot_fluxes(ires, ax)
+        fp = FTEST / "flux_plot.png"
+        fig.savefig(fp)
+
+
+@pytest.mark.parametrize("nsubsteps", [1, 10])
+def test_grad_parallel(nsubsteps, allclose):
+    nval = 10000
+    # Basic GR3J model with no intercept
+    mod0 = gradients.MultiReservoirModel(2,
+                                         nalphas=50,
+                                         nsubsteps=nsubsteps,
+                                         errors="raise")
+    mod0.add_link_outflow(0, 1)
+    mod0.set_coefs_linear(0, "gr4jprod")
+    mod0.set_coefs_linear(1, "gr4jroute")
+    vspecs = [[rid, vid] for rid in [0, 1] for vid in [0, 1, 2]]
+    mod0.allocate(nval,
+                 timestep_agg=1,
+                 variables_specs=vspecs)
+    inputs = np.ones((nval, 2))
+    inputs[:, 0] = np.nan
+    mod0.set_Qstars_one_reservoir(1, inputs)
+
+    # Set parallel model
+    modp = gradients.MultiReservoirModelParallel(2, 2,
+                                                 nalphas=50,
+                                                 nsubsteps=nsubsteps,
+                                                 errors="raise")
+    modp.add_link_outflow(0, 1)
+    modp.set_coefs_linear(0, "gr4jprod")
+    modp.set_coefs_linear(1, "gr4jroute")
+    modp.allocate(nval,
+                  timestep_agg=1,
+                  variables_specs=vspecs)
+
+    # Set two independent models
+    mods = []
+    for isite, siteid in enumerate(SITEIDS):
+        hclim = data_reader.get_data(siteid, "daily", 0)
+        hclim = hclim.interpolate().iloc[-nval:, :2].values
+        hclim[:, 1] *= -1
+
+        mod = mod0.clone()
+        mod.set_Qstars_one_reservoir(0, hclim)
+
+        # Parameters
+        mod.gammas = [400, 50] if isite == 0 else [200, 10]
+        mod.flux_scalings[1, 1] = -2. if isite == 0 else -5
+
+        # Run and store model outputs
+        mod.run()
+        mod.aggregate()
+        mods.append(mod)
+
+        # Configure parallel model
+        modp.gammas[isite, :] = mod.gammas
+        modp.flux_scalings[isite, :] = mod.flux_scalings
+        for ires in range(2):
+            modp.set_Qstars_one_reservoir(isite, 0, hclim)
+            modp.set_Qstars_one_reservoir(isite, 1, inputs)
+
+    # Clone
+    modpc = modp.clone()
+
+    # Run model
+    modp.run()
+    modp.aggregate()
+
+    modpc.run()
+    modpc.aggregate()
+
+    # Compare with one-site models
+    for isite in range(len(SITEIDS)):
+        assert allclose(modp.fluxes[isite], mods[isite].fluxes)
+        assert allclose(modp.dfluxes[isite], mods[isite].dfluxes)
+        assert allclose(modp.fluxes_agg[isite], mods[isite].fluxes_agg)
+        assert allclose(modp.dfluxes_agg[isite], mods[isite].dfluxes_agg)
+
+        assert allclose(modpc.fluxes[isite], mods[isite].fluxes)
+        assert allclose(modpc.dfluxes[isite], mods[isite].dfluxes)
+        assert allclose(modpc.fluxes_agg[isite], mods[isite].fluxes_agg)
+        assert allclose(modpc.dfluxes_agg[isite], mods[isite].dfluxes_agg)

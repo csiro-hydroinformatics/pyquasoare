@@ -489,9 +489,11 @@ def process(config, script_paths, logger, data):
         # Set random model inputs
         set_qstars(config, logger, modref, hclim)
         k = np.arange(0, modref.ntimesteps, modref.nsubsteps)
-        modneutral.set_Qstars(modref.Qstars[k])
-        for e, mod in modeps.items():
-            mod.set_Qstars(modref.Qstars[k])
+        for res in range(mod.nreservoirs):
+            Qst = modref.Qstars[k, res]
+            modneutral.set_Qstars_one_reservoir(res, Qst)
+            for e, mod in modeps.items():
+                mod.set_Qstars_one_reservoir(res, Qst)
 
         # Set parameters
         set_parameters(config, logger, modref)
