@@ -1176,15 +1176,16 @@ class MultiReservoirModel:
                 np.copyto(dfx_agg, dfx)
 
     def plot_fluxes(self, reservoir_id, ax, plot_alphas=True,
-                    dx_extrapolation=0.2):
+                    dx_extrapolation=0.2, npoints=200):
         alphas = self.alphas[reservoir_id]
         coefs = np.zeros((3, len(alphas) - 1, 3))
         coefs[:, :, 1:] = self.coefs_linear[reservoir_id]
         a0, a1 = alphas[[0, -1]]
-        xx1 = np.linspace(a0, a1, 200)
+        xx1 = np.linspace(a0, a1, npoints)
         dx = dx_extrapolation
-        xx2 = np.linspace(a0 - dx, a1 + dx, 200)
+        xx2 = np.linspace(a0 - dx, a1 + dx, npoints)
         nms = ["Inflow", "Demand", "Drainage"]
+        yy = np.empty((len(xx2), 3))
         for fx in range(3):
             nm = nms[fx]
             lab = f"Input flux #{fx} ({nm})"
@@ -1197,11 +1198,12 @@ class MultiReservoirModel:
             ax.plot(xx1, yy1, label=lab, lw=2)
             col = ax.get_lines()[-1].get_color()
 
+            # Add extrapolation
+            yy2 = sc * approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx2)
+            isin = (xx2 > a0) & (xx2 < a1)
+            yy[:, fx] = yy2[:, 0].copy()
+            yy2[isin] = np.nan
             if dx > 0:
-                # Add extrapolation
-                yy2 = sc * approx.quad_fun_from_matrix(alphas, coefs[[fx]], xx2)
-                isin = (xx2 > a0) & (xx2 < a1)
-                yy2[isin] = np.nan
                 ax.plot(xx2, yy2, "--", label=f"{lab} - extrapolation",
                         color=col)
 
@@ -1209,6 +1211,8 @@ class MultiReservoirModel:
                 # Add interpolation points
                 y = sc * approx.quad_fun_from_matrix(alphas, coefs[[fx]], alphas)
                 ax.plot(alphas, y, "+", color=col)
+
+        return xx2, yy
 
 
 class MultiReservoirModelParallel:
@@ -1610,6 +1614,6 @@ class MultiReservoirModelParallel:
                 np.copyto(dfx_agg, dfx)
 
     def plot_fluxes(self, reservoir_id, ax, plot_alphas=True,
-                    dx_extrapolation=0.2):
-        self._mresmod.plot_fluxes(reservoir_id, ax, plot_alphas,
-                                  dx_extrapolation)
+                    dx_extrapolation=0.2, npoints=200):
+        return self._mresmod.plot_fluxes(reservoir_id, ax, plot_alphas,
+                                         dx_extrapolation, npoints)

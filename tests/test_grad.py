@@ -948,7 +948,9 @@ def test_grad_model(siteid, timestep_agg, flux_scalings, nsubsteps,
 
     plt.close("all")
     fig, ax = plt.subplots()
-    mod.plot_fluxes(2, ax)
+    xx, yy = mod.plot_fluxes(2, ax)
+    assert xx.shape[0] == yy.shape[0]
+    assert yy.shape[1] == 3
     fp = FTEST / "flux_plot.png"
     fig.savefig(fp)
 
