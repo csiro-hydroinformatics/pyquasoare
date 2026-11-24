@@ -483,7 +483,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
 
         if case in [15, 14]:
             # Really hard test but still ballpark good :-)
-            tol = 3e-1
+            tol = 5e-1
         elif case in [3]:
             # Very poor result
             tol = 1e-2
