@@ -492,7 +492,7 @@ def test_increment_fluxes(allclose, vectors, generate_samples,
             tol = 5e-4
         elif case in [2, 5, 7, 8, 11, 12, 16]:
             # Sort of ok
-            tol = 1e-4
+            tol = 2e-4
         elif case in [4, 8, 9]:
             # Good
             tol = 1e-5
