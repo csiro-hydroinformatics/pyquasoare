@@ -1306,7 +1306,7 @@ class MultiReservoirModelParallel:
 
     @property
     def variables_specs(self):
-        return self._mresmod.variable_specs
+        return self._mresmod.variables_specs
 
     @property
     def alphas(self):

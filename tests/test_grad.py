@@ -1866,6 +1866,12 @@ def test_grad_parallel_allocate(allclose):
                   timestep_agg=1,
                   variables_specs=vspecs)
 
+    assert modp.gammas.shape == (ncatch, nres)
+    assert modp.flux_scalings.shape == (ncatch, nres, 3)
+
+    v = modp.variables_specs
+    assert len(v) == len(vspecs)
+
     nfxo = gradients.NFLUXES_OUTPUTS
     nfxp = gradients.NFLUXES_POTENTIAL
     nvars = len(vspecs)
