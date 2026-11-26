@@ -398,7 +398,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int niter_max = nalphas < 5 ? 10 : 2*nalphas;
 
     /* Initial band */
-    int jalpha = c_find_alpha(&jalpha_ini, nalphas, alphas, s0);
+    int jalpha = c_find_alpha(*jalpha_ini, nalphas, alphas, s0);
 
     /* Inialise variables */
     int extrapolating = 0;
@@ -619,7 +619,9 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
     int ierr, t, j;
     double store = s0;
     double t0 = 0.;
-    int * jalpha_ini = (int)(nalphas * (s0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
+
+    int *jalpha_ini;
+    *jalpha_ini = (int)(nalphas * (s0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
 
     for(t=0; t<nval; t++) {
         store += perturb[t];

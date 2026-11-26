@@ -677,7 +677,8 @@ unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
     double dQstars_ext[ QUASOARE_GRAD_VARTYPE_NUMBER*QUASOARE_GRAD_NFLUXES_INPUTS ];
 
     /* initialise derivatives of state and inputs */
-    int *jalpha_ini = (int)(nalphas * (x0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
+    int *jalpha_ini;
+    *jalpha_ini = (int)(nalphas * (x0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
     x[0] = x0;
 
     for(dvar = 0; dvar < nvariables; dvar++){
