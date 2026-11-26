@@ -534,10 +534,12 @@ def test_integrate_doc():
     t_start = 0.
     s_start = 0.
     timestep = 1.
+    jalpha_ini = np.zeros(1, dtype=np.int32)
     for i in range(P):
-        n, s_end, fluxes = integrate.quad_integrate(alphas, scalings[i],
-                                                    coefs, t_start,
-                                                    s_start, timestep)
+        ja, n, s_end, fluxes = integrate.quad_integrate(alphas, scalings[i],
+                                                        coefs, t_start,
+                                                        jalpha_ini,
+                                                        s_start, timestep)
         s_start = s_end
         assert np.all(~np.isnan(fluxes))
 
@@ -584,17 +586,22 @@ def test_reservoir_equation_extrapolation(allclose, ntry, reservoir_function,
         # Solve
         sims = [s0]
         s_start = s0
+        jalpha_slow = 0
+        jalpha_ini = np.zeros(1, dtype=np.int32)
+
         for i in range(len(t1)-1):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # integrate - C code
-            _, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
-                                                        coefs, t_start,
-                                                        s_start, timestep)
+            _, _, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                           coefs, t_start,
+                                                           jalpha_ini,
+                                                           s_start, timestep)
             # integrate - python code
-            _, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
-                                                             coefs, t_start,
-                                                             s_start, timestep)
+            jalpha_slow, _, s_end_slow, fluxes_slow = slow.quad_integrate(jalpha_slow,
+                                                                          alphas, scalings,
+                                                                          coefs, t_start,
+                                                                          s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert np.allclose(fluxes, fluxes_slow)
@@ -712,13 +719,17 @@ def test_reservoir_equation(allclose, ntry, reservoir_function, debug_mode):
         niter, sims = [0], [s0]
         s_start = s0
         start_exec = time.time()
+        jalpha_slow = 0
+        jalpha_ini = np.zeros(1, dtype=np.int32)
+
         for i in range(len(t1)-1):
             t_start = t1[i]
             timestep = t1[i+1]-t_start
             # C code
-            n, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
-                                                        coefs, t_start,
-                                                        s_start, timestep)
+            _, n, s_end, fluxes = integrate.quad_integrate(alphas, scalings,
+                                                           coefs, t_start,
+                                                           jalpha_ini,
+                                                           s_start, timestep)
 
             # Check mass balance
             if fname != "stiff":
@@ -726,9 +737,10 @@ def test_reservoir_equation(allclose, ntry, reservoir_function, debug_mode):
 
 
             # Python code
-            n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(alphas, scalings,
-                                                                  coefs, t_start,
-                                                                  s_start, timestep)
+            jalpha_slow, n_slow, s_end_slow, fluxes_slow = slow.quad_integrate(jalpha_slow,
+                                                                               alphas, scalings,
+                                                                               coefs, t_start,
+                                                                               s_start, timestep)
             if fname != "stiff":
                 assert allclose(s_end, s_end_slow)
                 assert allclose(fluxes, fluxes_slow)
@@ -815,6 +827,7 @@ def test_reservoir_equation_gr4j(siteid, X1, debug_mode, allclose):
 
     # Run solution based on quadratic function
     sims = np.zeros_like(expected)
+    jalpha_ini = np.zeros(1, dtype=np.int32)
     for t in range(nval):
         P, E = inputs[t]
 
@@ -824,9 +837,10 @@ def test_reservoir_equation_gr4j(siteid, X1, debug_mode, allclose):
         scalings[:2] = pi, ei
 
         # Integate equation
-        n, s_end, fx = integrate.quad_integrate(alphas, scalings,
-                                                coefs, 0.,
-                                                s_start, 1.)
+        _, n, s_end, fx = integrate.quad_integrate(alphas, scalings,
+                                                   coefs, 0.,
+                                                   jalpha_ini,
+                                                   s_start, 1.)
         sims[t, 0] = s_end*X1
         sims[t, 1] = fx[0]*X1
         sims[t, 2] = -fx[1]*X1
@@ -859,12 +873,14 @@ def test_reservoir_interception(siteid, allclose):
     coefs = approx.quad_coefficient_matrix([fP, fE], alphas)
 
     s_start = 0.5
+    jalpha_ini = np.zeros(1, dtype=np.int32)
     niters = []
     intfun = integrate.quad_integrate
     for t in range(len(scalings)):
-        niter, s_end, sim = intfun(alphas, scalings[t],
-                                   coefs, 0.,
-                                   s_start, 1.)
+        _, niter, s_end, sim = intfun(alphas, scalings[t],
+                                      coefs, 0.,
+                                      jalpha_ini,
+                                      s_start, 1.)
         s_start = s_end
 
         pc = (scalings[t][0] - sim[0]) * theta

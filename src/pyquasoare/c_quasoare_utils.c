@@ -99,20 +99,31 @@ double c_omega_fun(double x, double Delta){
 }
 
 
+int c_find_alpha(int jalpha, int nalphas, double * alphas, double s0){
+    int i, m;
+    double al, au;
 
-int c_find_alpha(int nalphas, double * alphas, double s0){
-    int i=0;
-
-    if(s0<alphas[0])
+    if(s0 < alphas[0])
         return -1;
 
-    if(s0>alphas[nalphas-1])
-        return nalphas-1;
+    if(s0 > alphas[nalphas-1])
+        return nalphas - 1;
 
-    while(s0>=alphas[i] && i<=nalphas-2){
-        i++;
+    i = jalpha < 0 ? 0 : jalpha > nalphas - 2 ? nalphas - 2 : jalpha;
+    al = alphas[i];
+    au = alphas[i + 1];
+
+    if(s0 >= al && s0 <= au)
+        return i;
+
+    m = s0 > al ? 1 : -1;
+    while (s0 < al || s0 > au) {
+        i += m;
+        al = alphas[i];
+        au = alphas[i + 1];
     }
-    return i>0 ? i-1 : 0;
+
+    return i;
 }
 
 

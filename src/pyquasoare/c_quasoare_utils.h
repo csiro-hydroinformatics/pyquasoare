@@ -79,7 +79,7 @@ double diff_of_products(double a, double b, double c, double d);
 int c_quad_constants(double a, double b, double c, double values[3]);
 double c_eta_fun(double x, double Delta);
 double c_omega_fun(double x, double Delta);
-int c_find_alpha(int nalphas, double * alphas, double s0);
+int c_find_alpha(int jalpha, int nalphas, double * alphas, double s0);
 
 int c_get_error_message(int err_code, char message[100]);
 

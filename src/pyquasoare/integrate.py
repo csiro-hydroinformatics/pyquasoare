@@ -9,12 +9,12 @@ else:
                       + " Please compile C code.")
 
 
-def __find_alpha(alphas, u0):
+def __find_alpha(jalpha, alphas, u0):
     """ -- Function defined for test purposes --
     Finds location of u0 within interpolation bands defined by
     the interpolation nodes alphas.
     """
-    return c_pyquasoare.find_alpha(alphas, u0)
+    return c_pyquasoare.find_alpha(jalpha, alphas, u0)
 
 
 def __eta_fun(x, Delta):
@@ -246,7 +246,7 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
 
 
 def quad_integrate(alphas, flux_scalings, coefs_noscaling,
-                   t0, s0, timestep):
+                   t0, jalpha_ini, s0, timestep):
     """ Integrate the approximate reservoir equation with initial time t0
     and initial condition s(t0)=s0 over a single timestep.
 
@@ -317,11 +317,19 @@ def quad_integrate(alphas, flux_scalings, coefs_noscaling,
     s1 = np.zeros(1, dtype=np.float64)
 
     # run
-    ierr = c_pyquasoare.quad_integrate(alphas, flux_scalings, coefs_noscaling,
-                                       t0, s0, timestep, niter, s1, fluxes)
+    ierr = c_pyquasoare.quad_integrate(alphas,
+                                       flux_scalings,
+                                       coefs_noscaling,
+                                       t0,
+                                       jalpha_ini,
+                                       s0,
+                                       timestep,
+                                       niter,
+                                       s1,
+                                       fluxes)
     if ierr > 0:
         mess = c_pyquasoare.get_error_message(ierr).decode()
         raise ValueError("c_pyquasoare.quad_integrate"
                          + f" returns {ierr} ({mess}).")
 
-    return niter[0], s1[0], fluxes
+    return jalpha_ini[0], niter[0], s1[0], fluxes

@@ -61,6 +61,7 @@ cdef extern from 'c_quasoare_grad.h':
                          unsigned int *variables_reservoir_id,
                          unsigned int *variables_type_id,
                          unsigned int *niter,
+                         int *jalpha_ini,
                          double *x,
                          double *dx,
                          double *fluxes,
@@ -306,6 +307,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                    np.ndarray[int, ndim=1, mode='c'] variables_reservoir_id not None,
                    np.ndarray[int, ndim=1, mode='c'] variables_type_id not None,
                    np.ndarray[int, ndim=1, mode='c'] niter not None,
+                   np.ndarray[int, ndim=1, mode='c'] jalpha_ini not None,
                    np.ndarray[double, ndim=1, mode='c'] x not None,
                    np.ndarray[double, ndim=1, mode='c'] dx not None,
                    np.ndarray[double, ndim=1, mode='c'] fluxes not None,
@@ -340,6 +342,9 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
     if niter.shape[0] != 1:
         raise ValueError("niter.shape[0] != 1")
 
+    if jalpha_ini.shape[0] != 1:
+        raise ValueError("jalpha_ini.shape[0] != 1")
+
     if x.shape[0] != 1:
         raise ValueError("x.shape[0] != 1")
 
@@ -371,6 +376,7 @@ def grad_integrate(int nreservoirs, unsigned int current_reservoir_id,
                            <unsigned int*> np.PyArray_DATA(variables_reservoir_id),
                            <unsigned int*> np.PyArray_DATA(variables_type_id),
                            <unsigned int*> np.PyArray_DATA(niter),
+                           <int*> np.PyArray_DATA(jalpha_ini),
                            <double*> np.PyArray_DATA(x),
                            <double*> np.PyArray_DATA(dx),
                            <double*> np.PyArray_DATA(fluxes),

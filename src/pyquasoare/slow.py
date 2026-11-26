@@ -276,8 +276,33 @@ def quad_fluxes_increment(aj_vector, bj_vector, cj_vector,
     fluxes += deltaf
 
 
+def find_alpha(jalpha, alphas, s0):
+    nalphas = len(alphas)
+
+    if s0 < alphas[0]:
+        return -1
+
+    if s0 > alphas[nalphas-1]:
+        return nalphas - 1
+
+    i = max(0, min(nalphas - 2, jalpha))
+    al = alphas[i]
+    au = alphas[i + 1]
+
+    if s0 >= au and s0 <= al:
+        return i
+
+    m = 1 if s0 > al else -1
+    while s0 < al or s0 > au:
+        i += m
+        al = alphas[i]
+        au = alphas[i + 1]
+
+    return i
+
+
 # Integrate reservoir equation over 1 time step and compute associated fluxes
-def quad_integrate(alphas, scalings, coefs,
+def quad_integrate(jalpha, alphas, scalings, coefs,
                    t0, s0, timestep, debug=False):
 
     nalphas = len(alphas)
@@ -289,15 +314,7 @@ def quad_integrate(alphas, scalings, coefs,
     c_matrix_noscaling = coefs[:, :, 2].T
 
     # Initial interval
-    jmax = nalphas-2
-    if s0 < alpha_min:
-        jalpha = -1
-    elif s0 >= alpha_min and s0 < alpha_max:
-        jalpha = np.sum(s0-alphas >= 0) - 1
-    elif s0 == alpha_max:
-        jalpha = jmax
-    else:
-        jalpha = jmax+1
+    jalpha = find_alpha(jalpha, alphas, s0)
 
     # Initialise iteration
     nfluxes = a_matrix_noscaling.shape[1]
@@ -438,8 +455,9 @@ def quad_integrate(alphas, scalings, coefs,
 
         # Increment fluxes during the last interval
         quad_fluxes_increment(a_vect, b_vect, c_vect,
-                    Aj, Bj, Cj, Delta, qD, sbar,
-                    t_start, t_end, s_start, s_end, fluxes)
+                              Aj, Bj, Cj, Delta, qD, sbar,
+                              t_start, t_end, s_start,
+                              s_end, fluxes)
 
         # Loop for next band
         funval_prev = quad_fun(Aj, Bj, Cj, s_end)
@@ -461,7 +479,7 @@ def quad_integrate(alphas, scalings, coefs,
     if debug:
         print(f"End integrate s1={s_end:5.5e} j={jalpha}")
 
-    return nit, s_end, fluxes
+    return jalpha, nit, s_end, fluxes
 
 
 def quad_model(alphas, scalings, coefs,
@@ -474,12 +492,16 @@ def quad_model(alphas, scalings, coefs,
     s1 = np.zeros(nval, dtype=np.float64)
     t0 = 0.
 
+    # Estimate jalpha ini
+    jalpha = int(len(alphas) * (s0 - alphas[0]) / (alpha[-1] - alphas[0]))
+
     for t in range(nval):
         try:
-            niter[t], s1[t], fluxes[t] = quad_integrate(alphas, scalings[t],
-                                                        coefs, t0, s0,
-                                                        timestep,
-                                                        debug=debug)
+            jalpha, niter[t], s1[t], fluxes[t] = quad_integrate(jalpha,
+                                                                alphas, scalings[t],
+                                                                coefs, t0, s0,
+                                                                timestep,
+                                                                debug=debug)
         except ValueError as err:
             niter[t] = -1
             if errors == "raise":

@@ -22,7 +22,7 @@ cdef extern from 'c_quasoare_utils.h':
 
     double c_eta_fun(double x, double Delta);
 
-    int c_find_alpha(int nalphas, double * alphas, double s0)
+    int c_find_alpha(int jalpha, int nalphas, double * alphas, double s0)
 
     int c_get_error_message(int err_code, char message[100])
 
@@ -68,6 +68,7 @@ cdef extern from 'c_quasoare_core.h':
                          double * alphas, double * flux_scalings,
                          double * coefs_noscaling,
                          double t0,
+                         int * jalpha_ini,
                          double s0,
                          double timestep,
                          int *niter, double * s1, double * fluxes)
@@ -365,10 +366,10 @@ def quad_inverse_vect(double a, double b, double c,
     return 0
 
 
-def find_alpha(np.ndarray[double, ndim=1, mode='c'] alphas not None,
+def find_alpha(int jalpha, np.ndarray[double, ndim=1, mode='c'] alphas not None,
                 double s0):
     cdef int nalphas = alphas.shape[0]
-    return c_find_alpha(nalphas, <double*> np.PyArray_DATA(alphas), s0)
+    return c_find_alpha(jalpha, nalphas, <double*> np.PyArray_DATA(alphas), s0)
 
 
 def quad_fluxes_increment(np.ndarray[double, ndim=1, mode='c'] aj_vector not None,
@@ -404,13 +405,18 @@ def quad_fluxes_increment(np.ndarray[double, ndim=1, mode='c'] aj_vector not Non
 def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
                    np.ndarray[double, ndim=1, mode='c'] flux_scalings not None,
                    np.ndarray[double, ndim=3, mode='c'] coefs_noscaling not None,
-                   double t0, double s0, double timestep,
+                   double t0,
+                   np.ndarray[int, ndim=1, mode='c'] jalpha_ini not None,
+                   double s0, double timestep,
                    np.ndarray[int, ndim=1, mode='c'] niter not None,
                    np.ndarray[double, ndim=1, mode='c'] s1 not None,
                    np.ndarray[double, ndim=1, mode='c'] fluxes not None):
     # Check dimensions
     cdef int nalphas = alphas.shape[0]
     cdef int nfluxes = coefs_noscaling.shape[0]
+
+    if jalpha_ini.shape[0] != 1:
+        raise ValueError("jalpha_ini.shape[0] != 1")
 
     if flux_scalings.shape[0] != nfluxes:
         raise ValueError("flux_scalings.shape[0] != nfluxes")
@@ -435,7 +441,9 @@ def quad_integrate(np.ndarray[double, ndim=1, mode='c'] alphas not None,
                                 <double*> np.PyArray_DATA(alphas),
                                 <double*> np.PyArray_DATA(flux_scalings),
                                 <double*> np.PyArray_DATA(coefs_noscaling),
-                                t0, s0, timestep,
+                                t0,
+                                <int*> np.PyArray_DATA(jalpha_ini),
+                                s0, timestep,
                                 <int*> np.PyArray_DATA(niter),
                                 <double*> np.PyArray_DATA(s1),
                                 <double*> np.PyArray_DATA(fluxes))

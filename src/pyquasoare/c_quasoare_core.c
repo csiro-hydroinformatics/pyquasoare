@@ -372,6 +372,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
                             double * coefs_noscaling,
                             double t0,
+                            int *jalpha_ini,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes) {
@@ -397,7 +398,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     int niter_max = nalphas < 5 ? 10 : 2*nalphas;
 
     /* Initial band */
-    int jalpha = c_find_alpha(nalphas, alphas, s0);
+    int jalpha = c_find_alpha(&jalpha_ini, nalphas, alphas, s0);
 
     /* Inialise variables */
     int extrapolating = 0;
@@ -589,6 +590,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
     /* Store results */
     *s1 = s_end;
     *niter = nit;
+    *jalpha_ini = jalpha;
 
     /* Convergence problem */
     if(notequal(t_final, t_end, QUASOARE_ATOL, QUASOARE_RTOL) && fabs(funval)>QUASOARE_EPS)
@@ -617,6 +619,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
     int ierr, t, j;
     double store = s0;
     double t0 = 0.;
+    int * jalpha_ini = (int)(nalphas * (s0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
 
     for(t=0; t<nval; t++) {
         store += perturb[t];
@@ -625,7 +628,7 @@ int c_quad_model(int nalphas, int nfluxes, int nval, int errors, double timestep
         ierr = c_quad_integrate(nalphas, nfluxes, alphas,
                                 &(scalings[nfluxes * t]),
                                 coefs_noscaling,
-                                t0, store, timestep,
+                                t0, jalpha_ini, store, timestep,
                                 &(niter[t]),
                                 &(s1[t]),
                                 &(fluxes[nfluxes * t]));

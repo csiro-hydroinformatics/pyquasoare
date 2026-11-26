@@ -74,6 +74,7 @@ unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned in
                               unsigned int *variables_reservoir_id,
                               unsigned int *variables_type_id,
                               unsigned int *niter,
+                              int *jalpha_ini,
                               double * x,
                               double * dx,
                               double * fluxes,

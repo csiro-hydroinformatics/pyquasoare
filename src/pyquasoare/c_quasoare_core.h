@@ -52,6 +52,7 @@ int c_quad_integrate(int nalphas, int nfluxes,
                             double * alphas, double * scalings,
                             double * coefs_noscaling,
                             double t0,
+                            int * jalpha_ini,
                             double s0,
                             double timestep,
                             int *niter, double * s1, double * fluxes);

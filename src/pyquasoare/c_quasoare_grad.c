@@ -195,6 +195,7 @@ unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned in
                               unsigned int *variables_reservoir_id,
                               unsigned int *variables_type_id,
                               unsigned int *niter,
+                              int *jalpha_ini,
                               double * x,
                               double * dx,
                               double * fluxes,
@@ -281,7 +282,7 @@ unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned in
     double x_end = x[0];
 
     /* Initial band */
-    int jalpha = c_find_alpha(nalphas, alphas, x_start);
+    int jalpha = c_find_alpha(*jalpha_ini, nalphas, alphas, x_start);
 
     /* Check data */
     qi = Qstars[0];
@@ -627,6 +628,7 @@ unsigned int c_grad_integrate(int nalphas, unsigned int nreservoirs, unsigned in
     /* Store results */
     *x = x_end;
     *niter = nit;
+    *jalpha_ini = jalpha;
 
     /* Convergence problem */
     if(notequal(t_final, t_end, QUASOARE_ATOL, QUASOARE_RTOL) && fabs(funval)>QUASOARE_EPS)
@@ -675,6 +677,7 @@ unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
     double dQstars_ext[ QUASOARE_GRAD_VARTYPE_NUMBER*QUASOARE_GRAD_NFLUXES_INPUTS ];
 
     /* initialise derivatives of state and inputs */
+    int *jalpha_ini = (int)(nalphas * (x0 - alphas[0]) / (alphas[nalphas - 1] - alphas[0]));
     x[0] = x0;
 
     for(dvar = 0; dvar < nvariables; dvar++){
@@ -705,6 +708,7 @@ unsigned int c_grad_reservoir(int nalphas, unsigned int nval,
                                 variables_reservoir_id,
                                 variables_type_id,
                                 &(niter[t]),
+                                jalpha_ini,
                                 &(x[t]),
                                 &(dx[idx_dx]),
                                 &(fluxes[idx_f]),
@@ -784,6 +788,8 @@ unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nv
     unsigned int current_reservoir_id;
     double gamma;
     double Qstars_timestep[QUASOARE_GRAD_NFLUXES_POTENTIAL];
+    double x0_tmp;
+    double a0, a1;
 
     /* Variables related to upstream input mapping */
     unsigned int ulink, resup_id, resup_ofx_id, resdown_pfx_id;
@@ -811,6 +817,8 @@ unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nv
             dx[idx_dx + dvar] = 0.;
     }
 
+    int *jalpha_ini;
+
     /* timestep loop */
     for(t = 0; t < nval; t++) {
 
@@ -823,25 +831,7 @@ unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nv
         /* loop through reservoirs */
         for(res = 0; res < nreservoirs; res++) {
             //fprintf(stdout, "\n\n\n--- t=%d res=%d ---\n", t, res);
-
             current_reservoir_id = res;
-
-            /* initialise the derivatives of the 3 inputs */
-            for(dvar = 0; dvar < nvariables; dvar ++) {
-                dvar_res_id = variables_reservoir_id[dvar];
-                dvar_type_id = variables_type_id[dvar];
-
-                if(dvar_res_id >= nreservoirs || dvar_res_id < 0)
-                   return QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS;
-
-                for(inp = 0; inp < nfxi; inp++) {
-                    idx_dq = nfxi * dvar + inp;
-                    dQstars_ext[idx_dq] = 0;
-                }
-            }
-
-            /* Get reservoir capacity */
-            gamma = gammas[res];
 
             /* Data indexes */
             idx_q = (nres_times_t + res) * nfxp;
@@ -870,6 +860,30 @@ unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nv
             //fprintf(stdout, "\tidx_xn  = %d\n", idx_xn);
             //fprintf(stdout, "\tidx_dxn = %d\n", idx_dxn);
             //fprintf(stdout, "\tidx_df  = %d\n", idx_df);
+
+            /* Initialise jalpha_ini */
+            if(t == 0) {
+                a0 = alphas[idx_a];
+                a1 = alphas[idx_a + nalphas - 1];
+                *jalpha_ini = (int)(nalphas * (x0[res] - a0) / (a1 - a0));
+            }
+
+            /* initialise the derivatives of the 3 inputs */
+            for(dvar = 0; dvar < nvariables; dvar ++) {
+                dvar_res_id = variables_reservoir_id[dvar];
+                dvar_type_id = variables_type_id[dvar];
+
+                if(dvar_res_id >= nreservoirs || dvar_res_id < 0)
+                   return QUASOARE_GRAD_RESERVOIRID_OUTOFBOUNDS;
+
+                for(inp = 0; inp < nfxi; inp++) {
+                    idx_dq = nfxi * dvar + inp;
+                    dQstars_ext[idx_dq] = 0;
+                }
+            }
+
+            /* Get reservoir capacity */
+            gamma = gammas[res];
 
             /* Input data. Initialise to 0 if nan */
             Qstars_timestep[0] = Qstars[idx_q];
@@ -965,6 +979,7 @@ unsigned int c_grad_model(int nalphas, unsigned int nreservoirs, unsigned int nv
                                     variables_reservoir_id,
                                     variables_type_id,
                                     niter,
+                                    jalpha_ini,
                                     &(x[idx_x]),
                                     &(dx[idx_dx]),
                                     &(fluxes[idx_f]),

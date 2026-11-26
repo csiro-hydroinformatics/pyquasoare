@@ -421,6 +421,7 @@ def test_grad_integrate_error():
                     dtype=np.float64)
 
     nvars = 2
+    jini = np.zeros(1, dtype=np.int32)
     x = np.array([0.5])
     dx = np.zeros(nvars, dtype=np.float64)
 
@@ -449,14 +450,14 @@ def test_grad_integrate_error():
     # .. error due to negative potential inflow
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
-                                            vrid, vtid, niter, x, dx, fx, dfx)
+                                            vrid, vtid, niter, jini, x, dx, fx, dfx)
     assert ierr == 112
 
     # .. disables the previous error
     posinf = 0
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
-                                            vrid, vtid, niter, x, dx, fx, dfx)
+                                            vrid, vtid, niter, jini, x, dx, fx, dfx)
     assert ierr == 0
 
     # .. error due to negative flux function
@@ -464,7 +465,7 @@ def test_grad_integrate_error():
     coefs_lin[0] *= -1
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
-                                            vrid, vtid, niter, x, dx, fx, dfx)
+                                            vrid, vtid, niter, jini, x, dx, fx, dfx)
     assert ierr == 111
 
     # .. error due to zero reservoir capacity
@@ -472,7 +473,7 @@ def test_grad_integrate_error():
     gamma = 0
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
-                                            vrid, vtid, niter, x, dx, fx, dfx)
+                                            vrid, vtid, niter, jini, x, dx, fx, dfx)
     assert ierr == 113
 
     # .. no error due to zero flux scaling
@@ -481,7 +482,7 @@ def test_grad_integrate_error():
     fxs = np.zeros(gradients.NFLUXES_INPUTS)
     ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                             ipm, ipmw, qst, dqst, fxs, coefs_lin,
-                                            vrid, vtid, niter, x, dx, fx, dfx)
+                                            vrid, vtid, niter, jini, x, dx, fx, dfx)
     assert ierr == 0
 
 
@@ -520,6 +521,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
     fx = np.zeros(nfxo, dtype=np.float64)
     dfx = np.zeros((nvars, nres, nfxo), dtype=np.float64)
     fxs = np.ones(gradients.NFLUXES_INPUTS, dtype=np.float64)
+    jini = np.zeros(1, dtype=np.int32)
 
     nval = len(Qstars)
     for i in range(nval):
@@ -527,9 +529,9 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         scalings[0] = Qstars[i, 0] / gamma
         scalings[1] = Qstars[i, 1] / gamma
         scalings[2] = - 1. / timestep
-        niter1, x1, fx1 = integrate.quad_integrate(alphas, scalings,
-                                                   coefs, 0.,
-                                                   x_start, timestep)
+        _, niter1, x1, fx1 = integrate.quad_integrate(alphas, scalings,
+                                                      coefs, 0., jini,
+                                                      x_start, timestep)
         fx1 *= gamma / timestep
 
         # Lin
@@ -537,7 +539,7 @@ def test_grad_integrate(siteid, reservoir, gamma, timestep, demand, allclose):
         ierr = c_pyquasoare_grad.grad_integrate(nres, rid, posinf, alphas, timestep, gamma,
                                                 ipm, ipmw, qst, dqst, fxs, coefs_lin,
                                                 vrid, vtid,
-                                                niter2, x, dx, fx, dfx)
+                                                niter2, jini, x, dx, fx, dfx)
         name = "c_pyquasoare_grad.grad_integrate"
         error_management("raise", ierr, name)
 
