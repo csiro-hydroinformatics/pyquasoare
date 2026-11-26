@@ -493,7 +493,7 @@ def quad_model(alphas, scalings, coefs,
     t0 = 0.
 
     # Estimate jalpha ini
-    jalpha = int(len(alphas) * (s0 - alphas[0]) / (alpha[-1] - alphas[0]))
+    jalpha = int(len(alphas) * (s0 - alphas[0]) / (alphas[-1] - alphas[0]))
 
     for t in range(nval):
         try:
